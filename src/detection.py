@@ -196,6 +196,11 @@ class DepthEstimator:
             model = torch.hub.load("intel-isl/MiDaS", "MiDaS_small")
             model.to(self.device)
             model.eval()
+
+            # Load transform ONCE during initialization
+            midas_transforms = torch.hub.load("intel-isl/MiDaS", "transforms")
+            self.transform = midas_transforms.small_transform
+
             return model
         except Exception as e:
             logging.error(f"Failed to load MiDaS: {e}")
@@ -220,11 +225,8 @@ class DepthEstimator:
 
             # Prepare input for MiDaS
             if self.model_type == "midas":
-                # MiDaS requires specific transform
-                midas_transforms = torch.hub.load("intel-isl/MiDaS", "transforms")
-                transform = midas_transforms.small_transform
-
-                input_batch = transform(rgb).to(self.device)
+                # Use pre-loaded transform (loaded once during init)
+                input_batch = self.transform(rgb).to(self.device)
 
                 with torch.no_grad():
                     prediction = self.model(input_batch)
