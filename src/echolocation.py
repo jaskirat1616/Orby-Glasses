@@ -178,7 +178,7 @@ class EcholocationEngine:
             self.room.sources = []
 
             # Add listener (microphone array for binaural)
-            if len(self.room.mic_array.R) == 0:
+            if not hasattr(self.room, 'mic_array') or self.room.mic_array is None:
                 # Create binaural microphone (two mics separated by head width)
                 mic_locs = np.array([
                     [self.listener_pos[0] - 0.1, self.listener_pos[0] + 0.1],  # Left/right
