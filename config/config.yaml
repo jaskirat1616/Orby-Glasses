@@ -1,0 +1,75 @@
+# OrbyGlasses Configuration File
+# Bio-Mimetic Navigation System for Visually Impaired Users
+
+# Camera/Video Source Settings
+camera:
+  # Source: 0 for built-in webcam, or URL for IP camera (e.g., "http://192.168.1.100:8080/video")
+  source: 0
+  width: 640
+  height: 480
+  fps: 30
+
+# Model Settings
+models:
+  # YOLO Object Detection
+  yolo:
+    path: "models/yolo/yolo11n.pt"
+    confidence: 0.5        # Minimum detection confidence (0-1)
+    iou_threshold: 0.45    # IoU threshold for NMS
+    device: "mps"          # Device: 'mps' (Apple Silicon), 'cuda', or 'cpu'
+
+  # Depth Estimation
+  depth:
+    path: "models/depth/depth_pro.pt"
+    device: "mps"
+
+  # LLM for Narrative Generation
+  llm:
+    primary: "gemma2:2b"        # Primary model for narrative
+    vision: "moondream"         # Vision model for scene understanding
+    temperature: 0.7            # Sampling temperature (0-1)
+    max_tokens: 150             # Maximum tokens to generate
+
+# Audio Settings
+audio:
+  # Text-to-Speech
+  tts_engine: "pyttsx3"
+  tts_rate: 175              # Words per minute
+  tts_volume: 1.0            # Volume (0-1)
+
+  # Echolocation/Spatial Audio
+  echolocation_enabled: true
+  spatial_audio: true
+
+# Echolocation Simulation Settings
+echolocation:
+  # Virtual room dimensions [x, y, z] in meters
+  room_dimensions: [10, 10, 3]
+  sample_rate: 16000         # Audio sample rate in Hz
+  duration: 0.1              # Duration of each beep in seconds
+
+# Reinforcement Learning Prediction
+prediction:
+  enabled: true
+  model_path: "models/rl/ppo_navigation.zip"
+  training_steps: 10000      # Steps for initial training
+  save_interval: 1000        # Save checkpoint every N steps
+
+# Safety Settings
+safety:
+  min_safe_distance: 1.5     # Minimum safe distance in meters
+  emergency_stop_key: "q"    # Key to emergency stop
+  max_obstacle_alerts: 5     # Maximum simultaneous obstacle alerts
+
+# Logging Settings
+logging:
+  level: "INFO"              # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  log_file: "data/logs/orbyglass.log"
+  save_detections: true      # Log detection data for analysis
+  save_frames: false         # Save frames (uses lots of space)
+
+# Performance Tuning
+performance:
+  audio_update_interval: 2.0  # Seconds between audio updates
+  stats_interval: 100         # Log stats every N frames
+  max_detections: 10          # Maximum detections to process per frame

@@ -1,0 +1,44 @@
+# Core Computer Vision and ML
+opencv-python==4.9.0.80
+ultralytics==8.1.20
+torch==2.2.0
+torchvision==0.17.0
+coremltools==7.1
+
+# Depth Estimation
+timm==0.9.16
+pillow==10.2.0
+
+# Audio Processing
+pyroomacoustics==0.7.3
+pydub==0.25.1
+pyaudio==0.2.14
+pyttsx3==2.90
+soundfile==0.12.1
+scipy==1.12.0
+
+# Reinforcement Learning
+stable-baselines3==2.2.1
+gymnasium==0.29.1
+
+# LLM Integration
+ollama==0.1.6
+requests==2.31.0
+
+# Utilities
+pyyaml==6.0.1
+numpy==1.26.3
+pandas==2.2.0
+matplotlib==3.8.2
+
+# Federated Learning (Optional)
+flwr==1.7.0
+
+# Testing
+pytest==8.0.0
+pytest-cov==4.1.0
+pytest-mock==3.12.0
+
+# Logging and Monitoring
+tqdm==4.66.1
+colorlog==6.8.2

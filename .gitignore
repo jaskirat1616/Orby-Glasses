@@ -1,0 +1,51 @@
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Models (large files)
+models/yolo/*.pt
+models/depth/*.pt
+models/depth/*.mlmodel
+models/rl/*.zip
+
+# Data
+data/logs/*.log
+data/test_videos/*.mp4
+data/test_videos/*.avi
+data/logs/rl_experiences/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Ollama (managed separately)
+models/ollama/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Keep directory structure
+!data/logs/.gitkeep
+!data/test_videos/.gitkeep
+!models/yolo/.gitkeep
+!models/depth/.gitkeep
+!models/rl/.gitkeep
