@@ -42,11 +42,26 @@ class NarrativeGenerator:
         self.context_history = []
         self.max_context_length = 5
 
+    def _is_model_available(self, model_name: str) -> bool:
+        """Check if a model is available in Ollama."""
+        if not self.available_models:
+            return False
+        # Check exact match or partial match (e.g., "gemma3:4b" matches "gemma3:4b")
+        for available_model in self.available_models:
+            if model_name in available_model or available_model in model_name:
+                return True
+        return False
+
     def _check_available_models(self) -> List[str]:
         """Check which Ollama models are available."""
         try:
             models = ollama.list()
-            available = [m['name'] for m in models.get('models', [])]
+            # Handle both dict and object response types
+            if isinstance(models, dict):
+                available = [m.get('name', m.get('model', '')) for m in models.get('models', [])]
+            else:
+                # If it's an object with models attribute
+                available = [m.name if hasattr(m, 'name') else m.model for m in getattr(models, 'models', [])]
             logging.info(f"Available Ollama models: {available}")
             return available
         except Exception as e:
@@ -86,7 +101,7 @@ class NarrativeGenerator:
         """
         try:
             # Check if vision model is available
-            if self.vision_model not in str(self.available_models):
+            if not self._is_model_available(self.vision_model):
                 logging.warning(f"Vision model {self.vision_model} not available")
                 return ""
 
@@ -213,7 +228,7 @@ class NarrativeGenerator:
             prompt = self._build_prompt(context, vision_context)
 
             # Check if model is available
-            if self.primary_model not in str(self.available_models):
+            if not self._is_model_available(self.primary_model):
                 logging.warning(f"Primary model {self.primary_model} not available, using fallback")
                 return self._fallback_narrative(context)
 
