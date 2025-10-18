@@ -5,9 +5,9 @@
 camera:
   # Source: 0 for built-in webcam, or URL for IP camera (e.g., "http://192.168.1.100:8080/video")
   source: 0
-  width: 416  # Reduced for better performance
-  height: 416  # Reduced for better performance
-  fps: 15  # Lower FPS for better performance
+  width: 320  # Optimized for speed
+  height: 320  # Optimized for speed
+  fps: 10  # Lower FPS for much better performance
 
 # Model Settings
 models:
@@ -34,12 +34,12 @@ models:
 audio:
   # Text-to-Speech
   tts_engine: "pyttsx3"
-  tts_rate: 175              # Words per minute
+  tts_rate: 200              # Words per minute (faster)
   tts_volume: 1.0            # Volume (0-1)
 
   # Echolocation/Spatial Audio
-  echolocation_enabled: true
-  spatial_audio: true
+  echolocation_enabled: false  # Disabled for maximum speed
+  spatial_audio: false
 
 # Echolocation Simulation Settings
 echolocation:
@@ -70,6 +70,6 @@ logging:
 
 # Performance Tuning
 performance:
-  audio_update_interval: 3.0  # Seconds between audio updates (increased for performance)
-  stats_interval: 30          # Log stats every N frames (reduced for performance)
-  max_detections: 5           # Maximum detections to process per frame (reduced for performance)
+  audio_update_interval: 5.0  # Seconds between audio updates (max performance)
+  stats_interval: 50          # Log stats every N frames (max performance)
+  max_detections: 3           # Maximum detections to process per frame (max performance)

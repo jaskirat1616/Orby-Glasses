@@ -77,7 +77,8 @@ class OrbyGlasses:
         self.running = False
         self.frame_count = 0
         self.last_audio_time = 0
-        self.audio_interval = 2.0  # seconds between audio updates
+        self.audio_interval = self.config.get('performance.audio_update_interval', 5.0)
+        self.skip_depth_frames = 2  # Skip depth on N out of N+1 frames for speed
 
         self.logger.info("Initialization complete!")
 
