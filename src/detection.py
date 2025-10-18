@@ -216,74 +216,54 @@ class DepthEstimator:
         Returns:
             Depth map (normalized to 0-1) or None on failure
         """
-        if self.model is None:
-            return self._fallback_depth(frame)
-
-        try:
-            # Convert to RGB
-            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-            # Prepare input for MiDaS
-            if self.model_type == "midas":
-                # Use pre-loaded transform (loaded once during init)
-                input_batch = self.transform(rgb).to(self.device)
-
-                with torch.no_grad():
-                    prediction = self.model(input_batch)
-                    prediction = torch.nn.functional.interpolate(
-                        prediction.unsqueeze(1),
-                        size=rgb.shape[:2],
-                        mode="bicubic",
-                        align_corners=False,
-                    ).squeeze()
-
-                depth_map = prediction.cpu().numpy()
-
-                # Normalize to 0-1
-                depth_map = (depth_map - depth_map.min()) / (depth_map.max() - depth_map.min() + 1e-8)
-
-                return depth_map
-
-        except Exception as e:
-            logging.error(f"Depth estimation error: {e}")
-            return self._fallback_depth(frame)
+        # Use simple fallback for maximum speed
+        # MiDaS is too slow even on MPS for real-time use
+        return self._fallback_depth(frame)
 
     def _fallback_depth(self, frame: np.ndarray) -> np.ndarray:
-        """Simple fallback depth estimation using edge detection."""
+        """Ultra-fast depth estimation using image brightness (objects closer = darker usually)."""
+        # Convert to grayscale
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        edges = cv2.Canny(gray, 100, 200)
-        depth = cv2.GaussianBlur(edges, (21, 21), 0)
+        # Resize to small size for speed, then resize back
+        small = cv2.resize(gray, (80, 80))
+        # Simple blur
+        blurred = cv2.GaussianBlur(small, (5, 5), 0)
+        # Resize back to original size
+        depth = cv2.resize(blurred, (frame.shape[1], frame.shape[0]))
+        # Normalize
         depth = depth.astype(np.float32) / 255.0
-        return 1.0 - depth  # Invert so edges appear closer
+        return depth
 
     def get_depth_at_bbox(self, depth_map: np.ndarray, bbox: List[float]) -> float:
         """
-        Get average depth within a bounding box.
+        Get estimated depth using bbox size (larger bbox = closer object).
 
         Args:
-            depth_map: Depth map
+            depth_map: Depth map (not used in fast mode)
             bbox: [x1, y1, x2, y2]
 
         Returns:
-            Average depth in meters (estimated)
+            Estimated depth in meters
         """
         x1, y1, x2, y2 = map(int, bbox)
 
-        # Clip to image bounds
-        h, w = depth_map.shape
-        x1, x2 = max(0, x1), min(w, x2)
-        y1, y2 = max(0, y1), min(h, y2)
+        # Calculate bounding box area
+        width = max(1, x2 - x1)
+        height = max(1, y2 - y1)
+        area = width * height
 
-        if x2 <= x1 or y2 <= y1:
-            return 0.0
+        # Estimate depth from size: larger objects are usually closer
+        # Normalize by image size (assume 320x320 = 102400 pixels)
+        normalized_area = area / 102400.0
 
-        # Get depth in bounding box
-        roi_depth = depth_map[y1:y2, x1:x2]
-        avg_depth = np.mean(roi_depth)
-
-        # Convert to approximate meters (calibration needed)
-        # Assuming depth_map is normalized 0-1, map to 0-10 meters
-        depth_meters = avg_depth * 10.0
+        # Map to distance: large bbox = close, small bbox = far
+        # Use inverse relationship: depth = k / sqrt(area)
+        if normalized_area > 0:
+            # Map 0.5 (large object) -> 1m, 0.01 (small object) -> 10m
+            depth_meters = 5.0 / (normalized_area ** 0.5 + 0.5)
+            depth_meters = np.clip(depth_meters, 0.5, 15.0)
+        else:
+            depth_meters = 10.0
 
         return float(depth_meters)
 
