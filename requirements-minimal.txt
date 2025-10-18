@@ -3,7 +3,6 @@ opencv-python>=4.8.0
 ultralytics>=8.0.0
 torch>=2.0.0
 torchvision>=0.15.0
-coremltools>=8.0; python_version >= "3.11"
 
 # Depth Estimation
 timm>=0.9.0
@@ -28,11 +27,6 @@ requests>=2.31.0
 # Utilities
 pyyaml>=6.0.0
 numpy>=1.24.0
-pandas>=2.0.0
-matplotlib>=3.7.0
-
-# Federated Learning (Optional)
-flwr>=1.7.0
 
 # Testing
 pytest>=8.0.0
