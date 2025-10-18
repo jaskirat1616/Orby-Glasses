@@ -174,47 +174,66 @@ class EcholocationEngine:
             return np.zeros((2, samples))
 
         try:
-            # Clear previous sources
-            self.room.sources = []
-
-            # Add listener (microphone array for binaural)
-            if not hasattr(self.room, 'mic_array') or self.room.mic_array is None:
-                # Create binaural microphone (two mics separated by head width)
-                mic_locs = np.array([
-                    [self.listener_pos[0] - 0.1, self.listener_pos[0] + 0.1],  # Left/right
-                    [self.listener_pos[1], self.listener_pos[1]],
-                    [self.listener_pos[2], self.listener_pos[2]]
-                ])
-                self.room.add_microphone_array(mic_locs)
-
-            # Add sound sources for each detection
-            for det in detections[:5]:  # Limit to 5 objects to avoid clutter
-                depth = det.get('depth', 5.0)
-                position = self.position_from_detection(det, frame_shape)
-
-                # Generate beep based on distance
-                frequency = self.distance_to_frequency(depth)
-                volume = self.distance_to_volume(depth)
-                beep = self.generate_beep(frequency) * volume
-
-                # Add source to room
-                self.room.add_source(position, signal=beep)
-
-            # Simulate acoustics
-            self.room.simulate()
-
-            # Get binaural signal
-            audio = self.room.mic_array.signals
-
-            # Normalize
-            audio = audio / (np.max(np.abs(audio)) + 1e-8)
-
-            return audio
+            # Use simple stereo method instead of complex room simulation
+            # This is more reliable and still provides spatial cues
+            return self._create_mixed_stereo(detections, frame_shape)
 
         except Exception as e:
             logging.error(f"Spatial audio generation error: {e}")
             samples = int(self.sample_rate * self.beep_duration)
             return np.zeros((2, samples))
+
+    def _create_mixed_stereo(self, detections: List[Dict], frame_shape: Tuple[int, int]) -> np.ndarray:
+        """
+        Create mixed stereo audio from multiple detections (simpler, more reliable).
+
+        Args:
+            detections: List of detections
+            frame_shape: (height, width)
+
+        Returns:
+            Stereo audio [2, samples]
+        """
+        # Start with silence
+        samples = int(self.sample_rate * self.beep_duration)
+        left_channel = np.zeros(samples)
+        right_channel = np.zeros(samples)
+
+        # Mix in beeps for each detection (up to 5)
+        for det in detections[:5]:
+            try:
+                center = det.get('center', [frame_shape[1] / 2, frame_shape[0] / 2])
+                depth = det.get('depth', 5.0)
+
+                # Pan based on horizontal position (-1 = left, 1 = right)
+                pan = (center[0] / frame_shape[1]) * 2 - 1
+
+                # Generate beep
+                frequency = self.distance_to_frequency(depth)
+                volume = self.distance_to_volume(depth) * 0.3  # Reduce volume to avoid clipping
+
+                beep = self.generate_beep(frequency) * volume
+
+                # Apply panning
+                left_gain = (1 - pan) / 2
+                right_gain = (1 + pan) / 2
+
+                # Mix into channels
+                left_channel += beep * left_gain
+                right_channel += beep * right_gain
+
+            except Exception as e:
+                logging.debug(f"Skipping detection due to error: {e}")
+                continue
+
+        # Normalize to prevent clipping
+        max_val = max(np.max(np.abs(left_channel)), np.max(np.abs(right_channel)))
+        if max_val > 0:
+            left_channel = left_channel / max_val
+            right_channel = right_channel / max_val
+
+        stereo = np.vstack([left_channel, right_channel])
+        return stereo
 
     def create_simple_stereo_beep(self, detection: Dict, frame_shape: Tuple[int, int]) -> np.ndarray:
         """
