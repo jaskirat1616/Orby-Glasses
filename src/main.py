@@ -136,19 +136,14 @@ class OrbyGlasses:
         # Get navigation summary
         nav_summary = self.detection_pipeline.get_navigation_summary(detections)
 
-        # Path planning (RL prediction)
+        # Path planning (RL prediction) - DISABLED for speed
         self.perf_monitor.start_timer('prediction')
-        path_plan = self.path_planner.plan_path(detections, nav_summary)
+        path_plan = None  # Disabled
         pred_time = self.perf_monitor.stop_timer('prediction')
 
-        # Generate narrative guidance
+        # Generate narrative guidance - ONLY on audio update frames
         self.perf_monitor.start_timer('narrative')
-        guidance = self.contextual_assistant.get_guidance(
-            detections,
-            frame=frame,
-            navigation_summary=nav_summary,
-            predicted_path=path_plan
-        )
+        guidance = {'narrative': '', 'predictive': '', 'combined': ''}  # Default empty
         narr_time = self.perf_monitor.stop_timer('narrative')
 
         # Generate audio cues
@@ -168,9 +163,11 @@ class OrbyGlasses:
 
         cv2.putText(annotated_frame, f"FPS: {fps:.1f}", (10, 30),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        cv2.putText(annotated_frame, f"Det: {det_time:.1f}ms", (10, 60),
+        cv2.putText(annotated_frame, f"Det: {det_time:.0f}ms", (10, 60),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        cv2.putText(annotated_frame, f"Objects: {len(detections)}", (10, 85),
+        cv2.putText(annotated_frame, f"Narr: {narr_time:.0f}ms", (10, 85),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        cv2.putText(annotated_frame, f"Total: {total_time:.0f}ms", (10, 110),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
         # Log frame time
@@ -225,21 +222,17 @@ class OrbyGlasses:
                 # Audio output (rate-limited)
                 current_time = time.time()
                 if current_time - self.last_audio_time > self.audio_interval:
-                    # Play echolocation audio
-                    if self.config.get('audio.echolocation_enabled', True):
-                        self.audio_manager.play_sound(audio_signal.T)
+                    # Generate simple audio message from detections
+                    if len(detections) > 0:
+                        closest = min(detections, key=lambda x: x.get('depth', 10))
+                        msg = f"{len(detections)} objects. Closest: {closest['label']} at {closest['depth']:.1f} meters"
+                    else:
+                        msg = "Path clear"
 
-                    # Speak guidance
-                    if guidance['combined']:
-                        self.audio_manager.speak(guidance['combined'])
+                    # Speak simple message
+                    self.audio_manager.speak(msg)
 
                     self.last_audio_time = current_time
-
-                    # Log this frame
-                    self.data_logger.log_detection(
-                        self.frame_count,
-                        detections
-                    )
 
                 # Display
                 if display:
