@@ -10,6 +10,7 @@ import numpy as np
 import argparse
 import time
 from typing import Optional
+import queue
 
 # Add src to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -370,17 +371,22 @@ class OrbyGlasses:
 
                         # Only listen if voice input is actually enabled
                         if self.conversation_manager.voice_input:
-                            # Listen for activation with longer timeout
+                            # Start listening for activation with longer timeout (non-blocking)
                             self.logger.info("🎤 Listening for wake phrase...")
-                            if self.conversation_manager.listen_for_activation(timeout=2.0):
-                                self.logger.info("💬 Conversation activated!")
-                                # Handle conversation interaction
-                                scene_context = {
-                                    'detected_objects': detections,
-                                    'obstacles': nav_summary.get('danger_objects', []),
-                                    'path_clear': nav_summary.get('path_clear', True)
-                                }
-                                self.conversation_manager.handle_conversation_interaction(scene_context)
+                            # This starts the non-blocking listening in the background
+                            self.conversation_manager.listen_for_activation(timeout=2.0)
+
+                    # Check if activation was detected (non-blocking check)
+                    activation_result = self.conversation_manager.check_activation_result()
+                    if activation_result:
+                        self.logger.info("💬 Conversation activated!")
+                        # Handle conversation interaction
+                        scene_context = {
+                            'detected_objects': detections,
+                            'obstacles': nav_summary.get('danger_objects', []),
+                            'path_clear': nav_summary.get('path_clear', True)
+                        }
+                        self.conversation_manager.handle_conversation_interaction(scene_context)
 
                 # Smart Audio System - Priority-based alerts
                 time_since_last = current_time - self.last_audio_time

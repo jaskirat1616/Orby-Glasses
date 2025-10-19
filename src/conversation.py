@@ -9,6 +9,8 @@ from typing import Optional, Dict, List
 import time
 import json
 from datetime import datetime
+import threading
+import queue
 
 # Try to import speech_recognition
 try:
@@ -83,6 +85,14 @@ class ConversationManager:
             'path_clear': True,
             'last_instruction': None
         }
+        
+        # For non-blocking voice recognition
+        self.listening_thread = None
+        self.is_listening = False
+        self.activation_queue = queue.Queue()
+        self.input_queue = queue.Queue()
+        self.listening_result = None
+        self.listening_error = None
 
         # Social Navigation AI
         self.social_navigation = None
@@ -116,88 +126,174 @@ class ConversationManager:
 
     def listen_for_activation(self, timeout: float = 1.0) -> bool:
         """
-        Listen for activation phrase.
+        Start listening for activation phrase in non-blocking mode.
 
         Args:
-            timeout: Listening timeout in seconds
+            timeout: Listening timeout for the initial call
 
         Returns:
-            True if activation phrase detected
+            True if activation phrase detected in a previous call
         """
         if not self.voice_input:
             return False
 
+        # Check if there's already a result in the queue
         try:
-            with self.microphone as source:
-                # Quick listen for activation
-                audio = self.recognizer.listen(source, timeout=timeout, phrase_time_limit=3)
+            result = self.activation_queue.get_nowait()
+            return result
+        except queue.Empty:
+            # No result ready, start listening if not already listening
+            if not self.is_listening:
+                self._start_listening_for_activation(timeout)
+            return False
 
-            # Recognize speech
-            text = self.recognizer.recognize_google(audio).lower()
-            logging.info(f"🎤 Heard: '{text}'")
+    def check_activation_result(self) -> Optional[bool]:
+        """
+        Check if there's an activation result available without starting a new listen.
+        
+        Returns:
+            True if activation phrase was detected, False if not, None if no result yet
+        """
+        try:
+            return self.activation_queue.get_nowait()
+        except queue.Empty:
+            return None
 
-            # Check for activation phrase (also check common misrecognitions)
-            activation_variations = [
-                self.activation_phrase,
-                self.activation_phrase.replace("hello", "hallo"),
-                self.activation_phrase.replace("hello", "helo"),
-            ]
+    def _start_listening_for_activation(self, timeout: float = 1.0):
+        """
+        Start listening for activation phrase in a separate thread.
+        """
+        if self.is_listening:
+            return
+            
+        self.is_listening = True
+        self.listening_error = None
+        
+        def listen_worker():
+            try:
+                with self.microphone as source:
+                    # Adjust timeout to be very short to prevent blocking main thread
+                    audio = self.recognizer.listen(source, timeout=timeout, phrase_time_limit=3)
 
-            for variation in activation_variations:
-                if variation in text:
-                    logging.info(f"✓ Activation phrase detected: '{text}'")
-                    return True
+                # Recognize speech
+                text = self.recognizer.recognize_google(audio).lower()
+                logging.info(f"🎤 Heard: '{text}'")
 
-        except sr.WaitTimeoutError:
-            # No speech detected, normal behavior
-            pass
-        except sr.UnknownValueError:
-            logging.debug("Could not understand speech")
-        except sr.RequestError as e:
-            logging.error(f"Speech recognition service error: {e}")
-        except Exception as e:
-            logging.debug(f"Listening error: {e}")
+                # Check for activation phrase (also check common misrecognitions)
+                activation_variations = [
+                    self.activation_phrase,
+                    self.activation_phrase.replace("hello", "hallo"),
+                    self.activation_phrase.replace("hello", "helo"),
+                ]
 
-        return False
+                activation_detected = False
+                for variation in activation_variations:
+                    if variation in text:
+                        logging.info(f"✓ Activation phrase detected: '{text}'")
+                        activation_detected = True
+                        break
+
+                # Add result to queue
+                self.activation_queue.put(activation_detected)
+                
+            except sr.WaitTimeoutError:
+                # No speech detected, normal behavior
+                self.activation_queue.put(False)
+            except sr.UnknownValueError:
+                logging.debug("Could not understand speech")
+                self.activation_queue.put(False)
+            except sr.RequestError as e:
+                logging.error(f"Speech recognition service error: {e}")
+                self.activation_queue.put(False)
+            except Exception as e:
+                logging.debug(f"Listening error: {e}")
+                self.activation_queue.put(False)
+            finally:
+                self.is_listening = False
+
+        # Start the listening thread
+        self.listening_thread = threading.Thread(target=listen_worker, daemon=True)
+        self.listening_thread.start()
 
     def listen_for_input(self, timeout: float = 5.0, prompt: str = None) -> Optional[str]:
         """
-        Listen for user voice input.
+        Start listening for user voice input in non-blocking mode.
 
         Args:
             timeout: Listening timeout
             prompt: Optional prompt to speak before listening
 
         Returns:
-            Recognized text or None
+            Recognized text if available from a previous call, None otherwise
         """
         if not self.voice_input:
             return None
 
-        if prompt and self.tts:
-            self.tts.speak_priority(prompt)
-
+        # Check if there's already a result in the input queue
         try:
-            with self.microphone as source:
-                logging.info("Listening for input...")
-                audio = self.recognizer.listen(source, timeout=timeout, phrase_time_limit=10)
+            result = self.input_queue.get_nowait()
+            return result
+        except queue.Empty:
+            # No result ready, start listening if not already listening
+            if not self.is_listening:
+                self._start_listening_for_input(timeout, prompt)
+            return None
 
-            # Recognize speech
-            text = self.recognizer.recognize_google(audio)
-            logging.info(f"User said: {text}")
-            return text
+    def check_input_result(self) -> Optional[str]:
+        """
+        Check if there's an input result available without starting a new listen.
+        
+        Returns:
+            Recognized text if available, None if no result yet
+        """
+        try:
+            return self.input_queue.get_nowait()
+        except queue.Empty:
+            return None
 
-        except sr.WaitTimeoutError:
-            if self.tts:
-                self.tts.speak_priority("I didn't hear anything. Say 'hey glasses' to try again.")
-            return None
-        except sr.UnknownValueError:
-            if self.tts:
-                self.tts.speak_priority("Sorry, I didn't understand that.")
-            return None
-        except Exception as e:
-            logging.error(f"Voice input error: {e}")
-            return None
+    def _start_listening_for_input(self, timeout: float = 5.0, prompt: str = None):
+        """
+        Start listening for user input in a separate thread.
+        """
+        if self.is_listening:
+            return
+            
+        self.is_listening = True
+        self.listening_error = None
+        
+        def listen_input_worker():
+            try:
+                if prompt and self.tts:
+                    self.tts.speak_priority(prompt)
+
+                with self.microphone as source:
+                    logging.info("Listening for input...")
+                    audio = self.recognizer.listen(source, timeout=timeout, phrase_time_limit=10)
+
+                # Recognize speech
+                text = self.recognizer.recognize_google(audio)
+                logging.info(f"User said: {text}")
+                
+                # Add result to queue
+                self.input_queue.put(text)
+                
+            except sr.WaitTimeoutError:
+                if self.tts:
+                    self.tts.speak_priority("I didn't hear anything. Say 'hey glasses' to try again.")
+                self.input_queue.put(None)
+            except sr.UnknownValueError:
+                if self.tts:
+                    self.tts.speak_priority("Sorry, I didn't understand that.")
+                self.input_queue.put(None)
+            except Exception as e:
+                logging.error(f"Voice input error: {e}")
+                self.input_queue.put(None)
+            finally:
+                self.is_listening = False
+
+        # Start the listening thread
+        self.listening_thread = threading.Thread(target=listen_input_worker, daemon=True)
+        self.listening_thread.start()
 
     def process_conversation(self, user_input: str, scene_context: Dict = None) -> str:
         """
@@ -472,7 +568,9 @@ Respond naturally and helpfully."""
         Returns:
             AI response or None
         """
-        # Listen for user input
+        # This method is now used differently in the main loop
+        # It will be called when input is detected via the non-blocking approach
+        # For now, we'll keep this for compatibility but it won't be used in the main loop
         user_input = self.listen_for_input(
             prompt="I'm listening. How can I help?",
             timeout=7.0
