@@ -232,7 +232,15 @@ class OrbyGlasses:
         # Welcome message
         self.audio_manager.speak("OrbyGlasses navigation system activated", priority=True)
 
-        self.logger.info("Starting main loop... Press 'q' to quit")
+        self.logger.info("=" * 70)
+        self.logger.info("ORBYGGLASSES NAVIGATION SYSTEM STARTED")
+        self.logger.info("=" * 70)
+        self.logger.info(f"Camera resolution: {self.frame_width}x{self.frame_height}")
+        self.logger.info(f"Target FPS: {self.config.get('camera.fps', 30)}")
+        self.logger.info(f"Audio update interval: {self.audio_interval}s")
+        self.logger.info(f"Depth calculation: Every {self.skip_depth_frames + 1} frames")
+        self.logger.info(f"Press '{self.config.get('safety.emergency_stop_key', 'q')}' to quit")
+        self.logger.info("=" * 70)
 
         try:
             while self.running:
@@ -255,17 +263,21 @@ class OrbyGlasses:
                     # Use Ollama-generated narrative if available
                     if guidance.get('combined'):
                         msg = guidance['combined']
+                        self.logger.info(f"🔊 Audio output (Ollama): \"{msg}\"")
                     elif len(detections) > 0:
                         # Fallback to simple message if Ollama fails
                         closest = min(detections, key=lambda x: x.get('depth', 10))
                         msg = f"{len(detections)} objects. Closest: {closest['label']} at {closest['depth']:.1f} meters"
+                        self.logger.warning(f"🔊 Audio output (fallback): \"{msg}\"")
                     else:
                         msg = "Path clear"
+                        self.logger.info(f"🔊 Audio output: \"{msg}\"")
 
                     # Speak message
                     self.audio_manager.speak(msg)
 
                     self.last_audio_time = current_time
+                    self.logger.debug(f"Next audio update in {self.audio_interval}s")
 
                 # Display
                 if display:
@@ -306,10 +318,19 @@ class OrbyGlasses:
                     self.audio_manager.speak("Navigation stopped", priority=True)
                     break
 
-                # Performance stats every 100 frames
+                # Performance stats and detailed logging
                 if self.frame_count % 100 == 0:
                     stats = self.perf_monitor.get_stats()
-                    self.logger.info(f"Performance: {stats}")
+                    self.logger.info("=" * 70)
+                    self.logger.info(f"PERFORMANCE STATS (Frame {self.frame_count})")
+                    self.logger.info(f"  FPS: {fps:.1f}")
+                    self.logger.info(f"  Avg frame time: {stats.get('avg_frame_time', 0):.1f}ms")
+                    self.logger.info(f"  Detections: {len(detections)} objects")
+                    self.logger.info(f"  Audio interval: {self.audio_interval}s")
+                    if detections:
+                        closest = min(detections, key=lambda x: x.get('depth', 10))
+                        self.logger.info(f"  Closest object: {closest['label']} at {closest['depth']:.1f}m")
+                    self.logger.info("=" * 70)
 
         except KeyboardInterrupt:
             self.logger.info("Interrupted by user")

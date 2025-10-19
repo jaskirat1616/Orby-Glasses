@@ -10,6 +10,7 @@ import logging
 import ollama
 from typing import List, Dict, Optional
 import json
+import time
 
 
 class NarrativeGenerator:
@@ -105,27 +106,45 @@ class NarrativeGenerator:
                 logging.warning(f"Vision model {self.vision_model} not available")
                 return ""
 
+            logging.debug("Starting vision model scene description...")
+            start_time = time.time()
+
             # Encode frame
             image_base64 = self._encode_image(frame)
+            logging.debug(f"Frame encoded to base64 ({len(image_base64)} chars)")
+
+            # Improved prompt for better scene understanding
+            vision_prompt = """Analyze this image for a visually impaired person navigating.
+
+Focus on:
+1. Obstacles in the path (people, objects, furniture)
+2. Clear pathways or directions to move
+3. Potential hazards (stairs, edges, obstacles at foot level)
+4. Spatial layout (left, right, ahead)
+
+Provide 1-2 concise sentences. Be specific about distances and directions when possible."""
 
             # Query vision model
             response = ollama.generate(
                 model=self.vision_model,
-                prompt="Describe this scene for navigation purposes. Focus on obstacles, paths, and safety. Be concise.",
+                prompt=vision_prompt,
                 images=[image_base64],
                 options={
-                    'temperature': 0.5,
-                    'num_predict': 100
+                    'temperature': 0.3,  # Lower temperature for more focused responses
+                    'num_predict': 120
                 }
             )
 
             description = response.get('response', '').strip()
-            logging.debug(f"Vision description: {description}")
+            elapsed = time.time() - start_time
+
+            logging.info(f"Vision description generated in {elapsed:.2f}s: {description[:100]}...")
+            logging.debug(f"Full vision description: {description}")
 
             return description
 
         except Exception as e:
-            logging.error(f"Vision model error: {e}")
+            logging.error(f"Vision model error: {e}", exc_info=True)
             return ""
 
     def generate_narrative(self, detections: List[Dict],
@@ -142,19 +161,35 @@ class NarrativeGenerator:
         Returns:
             Narrative guidance text
         """
+        logging.debug("=" * 60)
+        logging.debug("NARRATIVE GENERATION STARTED")
+        start_time = time.time()
+
         # Build context from detections
+        logging.debug(f"Building context from {len(detections)} detections...")
         context = self._build_context(detections, navigation_summary)
+        logging.info(f"Context built: {context}")
 
         # Get vision description if frame is provided
         vision_context = ""
         if frame is not None:
+            logging.debug("Vision model available, analyzing scene...")
             vision_context = self.describe_scene_with_vision(frame)
+            if vision_context:
+                logging.info(f"Vision context: {vision_context[:100]}...")
+        else:
+            logging.debug("No frame provided, skipping vision analysis")
 
         # Generate narrative using primary LLM
+        logging.debug("Generating narrative with LLM...")
         narrative = self._generate_with_llm(context, vision_context)
 
         # Update context history
         self._update_context_history(detections)
+
+        elapsed = time.time() - start_time
+        logging.info(f"✓ Narrative generated in {elapsed:.2f}s: \"{narrative}\"")
+        logging.debug("=" * 60)
 
         return narrative
 
@@ -226,6 +261,7 @@ class NarrativeGenerator:
         try:
             # Build prompt
             prompt = self._build_prompt(context, vision_context)
+            logging.debug(f"LLM Prompt:\n{prompt}")
 
             # Check if model is available
             if not self._is_model_available(self.primary_model):
@@ -233,45 +269,102 @@ class NarrativeGenerator:
                 return self._fallback_narrative(context)
 
             # Generate with Ollama
+            logging.debug(f"Calling Ollama {self.primary_model}...")
+            start_time = time.time()
+
             response = ollama.generate(
                 model=self.primary_model,
                 prompt=prompt,
                 options={
                     'temperature': self.temperature,
-                    'num_predict': self.max_tokens
+                    'num_predict': self.max_tokens,
+                    'top_p': 0.9,  # Nucleus sampling for better quality
+                    'top_k': 40     # Limit vocabulary for more focused output
                 }
             )
 
+            elapsed = time.time() - start_time
             narrative = response.get('response', '').strip()
+
+            logging.debug(f"Raw LLM response ({elapsed:.2f}s): {narrative}")
 
             # Clean up and validate
             narrative = self._clean_narrative(narrative)
+            logging.debug(f"Cleaned narrative: {narrative}")
 
-            if not narrative:
+            if not narrative or len(narrative) < 10:
+                logging.warning(f"Narrative too short ({len(narrative)} chars), using fallback")
                 return self._fallback_narrative(context)
 
+            logging.info(f"✓ LLM narrative generated successfully in {elapsed:.2f}s")
             return narrative
 
         except Exception as e:
-            logging.error(f"LLM generation error: {e}")
+            logging.error(f"LLM generation error: {e}", exc_info=True)
             return self._fallback_narrative(context)
 
     def _build_prompt(self, context: str, vision_context: str = "") -> str:
-        """Build prompt for LLM."""
-        base_prompt = """You are a navigation assistant for visually impaired users.
-Provide clear, concise, and actionable navigation guidance.
+        """Build prompt for LLM with enhanced engineering for better outputs."""
 
-Current situation:
+        # Enhanced prompt with specific instructions and examples
+        if vision_context:
+            # Vision-enhanced prompt
+            base_prompt = """You are an expert navigation assistant for visually impaired users using assistive technology.
+
+DETECTION DATA:
 {context}
 
-{vision_info}
+VISUAL SCENE ANALYSIS:
+{vision_context}
 
-Provide brief guidance (1-2 sentences). Focus on safety and next steps.
-Guidance:"""
+TASK: Provide clear, actionable navigation guidance.
 
-        vision_info = f"\nScene description: {vision_context}" if vision_context else ""
+GUIDELINES:
+- Be specific about object positions (left, right, ahead, behind)
+- Always mention distances when available
+- Prioritize safety (warn about close obstacles first)
+- Give directional advice (move left/right, slow down, stop, safe to proceed)
+- Use natural, calm language
+- Keep it brief (1-2 sentences maximum)
+- Focus on immediate navigation needs
 
-        prompt = base_prompt.format(context=context, vision_info=vision_info)
+EXAMPLES:
+- "Person 2 meters ahead on your right. Chair 3 meters to your left - path ahead is clear."
+- "Caution: obstacle directly ahead at 1.5 meters. Recommend moving slightly left."
+- "Path is clear. Three objects detected but all beyond safe distance."
+
+YOUR GUIDANCE:"""
+
+            prompt = base_prompt.format(
+                context=context,
+                vision_context=vision_context
+            )
+        else:
+            # Detection-only prompt
+            base_prompt = """You are an expert navigation assistant for visually impaired users.
+
+DETECTED OBJECTS AND DISTANCES:
+{context}
+
+TASK: Provide clear, actionable navigation guidance.
+
+GUIDELINES:
+- State object type, position (left/right/ahead), and distance
+- Warn about objects closer than 2 meters
+- Suggest safe movement direction if obstacles detected
+- Confirm when path is clear
+- Be concise (1-2 sentences)
+- Use calm, confident tone
+
+EXAMPLES:
+- "Person ahead at 2.5 meters, moving right. Chair on left at 3 meters - path ahead clear."
+- "Obstacle 1.2 meters directly ahead - stop and move left to navigate safely."
+- "Clear path detected. Nearest object is 5 meters away."
+
+YOUR GUIDANCE:"""
+
+            prompt = base_prompt.format(context=context)
+
         return prompt
 
     def _clean_narrative(self, narrative: str) -> str:
