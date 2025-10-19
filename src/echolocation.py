@@ -30,6 +30,11 @@ class EcholocationEngine:
         self.sample_rate = config.get('echolocation.sample_rate', 16000)
         self.beep_duration = config.get('echolocation.duration', 0.1)
 
+        # Adaptive audio beaconing frequencies
+        self.safe_path_frequency = config.get('audio.beacon_safe_frequency', 440)  # 440Hz for safe path
+        self.obstacle_frequency = config.get('audio.beacon_obstacle_frequency', 880)  # 880Hz for obstacles
+        self.warning_pulse_rate = config.get('audio.warning_pulse_rate', 0.2)  # seconds for warning pulse
+
         # Create virtual room for spatial audio
         self._initialize_room()
 
@@ -41,6 +46,7 @@ class EcholocationEngine:
         ])
 
         logging.info(f"Echolocation engine initialized: Room {self.room_dims}m")
+        logging.info(f"Adaptive audio beaconing: Safe path {self.safe_path_frequency}Hz, Obstacle {self.obstacle_frequency}Hz")
 
     def _initialize_room(self):
         """Create virtual room for acoustic simulation."""
@@ -328,6 +334,143 @@ class EcholocationEngine:
                     return self.create_simple_stereo_beep(detections[0], frame_shape)
                 return np.zeros((2, int(self.sample_rate * 0.1)))
 
+    def generate_safe_path_beacon(self, frame_shape: Tuple[int, int], direction: str = 'center') -> np.ndarray:
+        """
+        Generate a safe path beacon (440Hz chime) in a specific direction.
+        
+        Args:
+            frame_shape: (height, width) of frame
+            direction: Direction for the beacon ('left', 'center', 'right', or 'custom')
+            
+        Returns:
+            Stereo audio signal for safe path
+        """
+        # Generate chime at 440Hz
+        chime = self.generate_beep(self.safe_path_frequency, duration=0.15)
+        volume = 0.3  # Moderate volume for safe path indicator
+        
+        # Apply direction-based panning
+        if direction == 'left':
+            pan = -0.7  # Left channel emphasis
+        elif direction == 'right':
+            pan = 0.7   # Right channel emphasis
+        elif direction == 'center':
+            pan = 0.0   # Balanced
+        else:
+            pan = 0.0   # Default to center
+        
+        # Calculate gains based on pan
+        left_gain = (1 - pan) / 2
+        right_gain = (1 + pan) / 2
+        
+        # Apply volume and panning
+        left_channel = chime * volume * left_gain
+        right_channel = chime * volume * right_gain
+        
+        stereo = np.vstack([left_channel, right_channel])
+        return stereo
+
+    def generate_obstacle_warning(self, detection: Dict, frame_shape: Tuple[int, int]) -> np.ndarray:
+        """
+        Generate an obstacle warning tone (880Hz) with direction-specific panning.
+        
+        Args:
+            detection: Detection dictionary with 'center' and 'depth'
+            frame_shape: (height, width) of frame
+            
+        Returns:
+            Stereo audio signal for obstacle warning
+        """
+        center = detection.get('center', [frame_shape[1] / 2, frame_shape[0] / 2])
+        
+        # Calculate horizontal position for panning (-1 to 1)
+        pan = (center[0] / frame_shape[1]) * 2 - 1
+        
+        # Generate warning tone at 880Hz
+        warning = self.generate_beep(self.obstacle_frequency, duration=0.08)
+        volume = self.distance_to_volume(detection.get('depth', 5.0)) * 0.5  # Adjust volume based on distance
+        
+        # Calculate gains based on pan
+        left_gain = (1 - pan) / 2
+        right_gain = (1 + pan) / 2
+        
+        # Apply volume and panning
+        left_channel = warning * volume * left_gain
+        right_channel = warning * volume * right_gain
+        
+        stereo = np.vstack([left_channel, right_channel])
+        return stereo
+
+    def generate_adaptive_beaconing_audio(self, detections: List[Dict], frame_shape: Tuple[int, int]) -> np.ndarray:
+        """
+        Generate adaptive beaconing audio: safe path chimes and obstacle warnings.
+        
+        Args:
+            detections: List of detections with depth information
+            frame_shape: (height, width) of frame
+            
+        Returns:
+            Stereo audio signal for adaptive beaconing
+        """
+        # Start with silence - longer duration for more noticeable beacons
+        samples = int(self.sample_rate * 0.3)  # Increased duration to 0.3 seconds for better audibility
+        left_channel = np.zeros(samples)
+        right_channel = np.zeros(samples)
+        
+        # Separate safe and danger zones
+        danger_objects = [d for d in detections if d.get('is_danger', False)]
+        
+        if danger_objects:
+            # Generate more prominent warning tones for obstacles (880Hz)
+            for det in danger_objects[:3]:  # Limit to 3 danger objects to avoid audio clutter
+                warning_audio = self.generate_obstacle_warning(det, frame_shape)
+                
+                # Boost volume for warnings
+                warning_audio *= 1.5  # 50% volume boost for warnings
+                
+                # Mix into channels
+                if warning_audio.shape[1] <= len(left_channel):
+                    left_channel[:warning_audio.shape[1]] += warning_audio[0, :]
+                    right_channel[:warning_audio.shape[1]] += warning_audio[1, :]
+                else:
+                    # If warning is longer, truncate it
+                    left_channel += warning_audio[0, :len(left_channel)]
+                    right_channel += warning_audio[1, :len(right_channel)]
+        else:
+            # If no immediate danger, generate safe path beacons
+            # Create a sequence of safe path chimes to be more noticeable
+            safe_chime = self.generate_safe_path_beacon(frame_shape, direction='center')
+            
+            # Add multiple safe path chimes with slight timing difference
+            if safe_chime.shape[1] <= len(left_channel):
+                # Add 2-3 chimes in sequence for more noticeable safe path indication
+                chime_duration = safe_chime.shape[1]
+                for i in range(min(2, len(left_channel) // (chime_duration * 2))):  # Up to 2 chimes
+                    start_idx = i * chime_duration * 2
+                    end_idx = start_idx + chime_duration
+                    if end_idx <= len(left_channel):
+                        left_channel[start_idx:end_idx] += safe_chime[0, :min(chime_duration, safe_chime.shape[1])] * 0.6
+                        right_channel[start_idx:end_idx] += safe_chime[1, :min(chime_duration, safe_chime.shape[1])] * 0.6
+            else:
+                left_channel += safe_chime[0, :len(left_channel)] * 0.6
+                right_channel += safe_chime[1, :len(right_channel)] * 0.6
+        
+        # Normalize to prevent clipping but maintain audibility
+        max_val = max(np.max(np.abs(left_channel)), np.max(np.abs(right_channel)))
+        if max_val > 0 and max_val < 0.1:  # Boost if too quiet
+            left_channel = left_channel * (0.3 / max_val) if max_val > 0 else left_channel * 0.3
+            right_channel = right_channel * (0.3 / max_val) if max_val > 0 else right_channel * 0.3
+        elif max_val > 1.0:
+            left_channel = left_channel / max_val
+            right_channel = right_channel / max_val
+        elif max_val > 0:
+            # Boost slightly if in a reasonable range
+            left_channel = left_channel * 1.5  # Boost by 50% to make more noticeable
+            right_channel = right_channel * 1.5
+        
+        stereo = np.vstack([left_channel, right_channel])
+        return stereo
+
 
 class AudioCueGenerator:
     """
@@ -339,6 +482,7 @@ class AudioCueGenerator:
         self.config = config
         self.echolocation = EcholocationEngine(config)
         self.enabled = config.get('audio.echolocation_enabled', True)
+        self.adaptive_beaconing_enabled = config.get('audio.adaptive_beaconing_enabled', True)
 
     def generate_cues(self, detections: List[Dict], frame_shape: Tuple[int, int]) -> Tuple[np.ndarray, str]:
         """
@@ -354,8 +498,13 @@ class AudioCueGenerator:
         if not self.enabled or len(detections) == 0:
             return np.zeros((2, 1000)), "Path clear"
 
-        # Generate spatial audio
-        audio = self.echolocation.generate_navigation_audio(detections, frame_shape)
+        # Generate audio based on adaptive beaconing setting
+        if self.adaptive_beaconing_enabled:
+            # Use adaptive beaconing: 440Hz for safe path, 880Hz for obstacles
+            audio = self.echolocation.generate_adaptive_beaconing_audio(detections, frame_shape)
+        else:
+            # Use traditional spatial audio
+            audio = self.echolocation.generate_navigation_audio(detections, frame_shape)
 
         # Generate voice message
         danger_objects = [d for d in detections if d.get('is_danger', False)]

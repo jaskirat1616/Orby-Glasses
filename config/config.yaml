@@ -36,7 +36,7 @@ conversation:
   model: "gemma3:4b"                 # LLM model for conversations
   temperature: 0.7                   # Response creativity (0-1)
   max_tokens: 200                    # Maximum response length
-  voice_input: true                  # Enable voice input (requires microphone)
+  voice_input: false                  # Enable voice input (requires microphone)
   activation_phrase: "hello"      # Wake phrase to start conversation
   check_interval: 1.0                # How often to check for activation (seconds)
 
@@ -48,8 +48,14 @@ audio:
   tts_volume: 0.9            # Volume (0-1)
 
   # Echolocation/Spatial Audio
-  echolocation_enabled: false  # Disabled for maximum speed
+  echolocation_enabled: true   # Enabled for audio beaconing
   spatial_audio: false
+  
+  # Adaptive Audio Beaconing
+  adaptive_beaconing_enabled: true  # Enable adaptive audio beaconing (440Hz for safe paths, 880Hz for obstacles)
+  beacon_safe_frequency: 440        # Frequency for safe path beacons (Hz)
+  beacon_obstacle_frequency: 880    # Frequency for obstacle warnings (Hz)
+  warning_pulse_rate: 0.2           # Warning pulse rate in seconds
 
 # Echolocation Simulation Settings
 echolocation:
@@ -90,7 +96,7 @@ performance:
 
 # 3D Mapping Settings
 mapping3d:
-  enabled: true                   # Enable 3D real-time mapping visualization (set to true to enable)
+  enabled: false                   # Enable 3D real-time mapping visualization (set to true to enable)
   max_depth: 10.0                 # Maximum depth in meters to visualize
   voxel_size: 0.1                 # Voxel size for downsampling (larger = faster, less detail)
   subsample_step: 8               # Subsample every Nth point (higher = faster, less detail)

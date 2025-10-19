@@ -326,6 +326,33 @@ class OrbyGlasses:
                 annotated_frame, detections, guidance, audio_signal, audio_message, depth_map = \
                     self.process_frame(frame)
 
+                # Play adaptive audio beaconing (if available and not speaking)
+                # Play beacons with higher priority, separate from voice guidance
+                current_time = time.time()
+                # Play audio beacons more frequently (every 0.2 seconds) but with logic to avoid conflicts
+                if hasattr(self, 'last_beacon_time'):
+                    time_since_beacon = current_time - self.last_beacon_time
+                else:
+                    self.last_beacon_time = current_time - 0.3
+                    time_since_beacon = 0.3
+                
+                # Play beacons more frequently for better user experience
+                if time_since_beacon > 0.3:  # Play every 0.3 seconds instead of 0.5
+                    # Check if audio signal has content (non-zero)
+                    if np.any(audio_signal):
+                        try:
+                            # Only play if not already speaking
+                            if not self.audio_manager.is_speaking:
+                                self.audio_manager.play_sound(audio_signal, sample_rate=16000)  # Fixed sample rate matching echolocation
+                        except Exception as e:
+                            print(f"Audio playback error: {e}")
+                            # Fallback to system beep if play_sound fails
+                            import sys
+                            sys.stdout.write('\a')
+                            sys.stdout.flush()
+                    
+                    self.last_beacon_time = current_time
+
                 # Update 3D map
                 if depth_map is not None:
                     self.mapper_3d.update(frame, depth_map, detections)
