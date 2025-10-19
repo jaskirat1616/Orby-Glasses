@@ -5,7 +5,7 @@ OrbyGlasses now includes an advanced conversational navigation system that allow
 ## Features
 
 ### 🎤 Voice-Activated Conversations
-- **Wake Phrase**: Say "**hey glasses**" to activate the conversation mode
+- **Wake Phrase**: Say "**hey orby**" to activate the conversation mode
 - **Natural Language**: Talk to OrbyGlasses like you would to a friend
 - **Context-Aware**: The AI understands your current surroundings and navigation state
 
@@ -49,7 +49,7 @@ The feature is enabled by default. Check your `config/config.yaml`:
 conversation:
   enabled: true
   voice_input: true
-  activation_phrase: "hey glasses"
+  activation_phrase: "hey orby"
 ```
 
 ### 2. Install Required Dependencies
@@ -65,13 +65,13 @@ This installs `SpeechRecognition` for voice input.
 python src/main.py
 ```
 
-You'll see: `💬 Conversational mode: Say 'hey glasses' to start`
+You'll see: `💬 Conversational mode: Say 'hey orby' to start`
 
 ### 4. Interact with OrbyGlasses
 
 **Step 1:** Say the wake phrase
 ```
-You: "Hey glasses"
+You: "Hey orby"
 OrbyGlasses: "I'm listening. How can I help?"
 ```
 
@@ -90,7 +90,7 @@ OrbyGlasses: "I'll help you navigate to the kitchen. Based on what I see..."
 
 ### Scenario 1: Finding a Destination
 ```
-User: "Hey glasses"
+User: "Hey orby"
 OrbyGlasses: "I'm listening. How can I help?"
 
 User: "I need to find a chair"
@@ -102,7 +102,7 @@ OrbyGlasses: "Yes, path is clear. Continue forward 2 meters then turn right."
 
 ### Scenario 2: Obstacle Avoidance
 ```
-User: "Hey glasses"
+User: "Hey orby"
 OrbyGlasses: "I'm listening. How can I help?"
 
 User: "What's in my way?"
@@ -114,7 +114,7 @@ OrbyGlasses: "Yes, path ahead is clear for the next 5 meters."
 
 ### Scenario 3: Navigation to Room
 ```
-User: "Hey glasses"
+User: "Hey orby"
 OrbyGlasses: "I'm listening. How can I help?"
 
 User: "Take me to the bathroom"
@@ -135,7 +135,7 @@ conversation:
   temperature: 0.7                   # Response creativity (0-1)
   max_tokens: 200                    # Maximum response length
   voice_input: true                  # Enable microphone input
-  activation_phrase: "hey glasses"   # Custom wake phrase
+  activation_phrase: "hey orby"      # Custom wake phrase
   check_interval: 2.0                # Seconds between activation checks
 ```
 
@@ -201,7 +201,7 @@ pip install SpeechRecognition
 
 ### Use Case 1: Morning Routine
 ```
-User: "Hey glasses, help me get ready for the day"
+User: "Hey orby, help me get ready for the day"
 OrbyGlasses: "I can guide you. What do you need to find first?"
 
 User: "Take me to the bathroom"
@@ -213,7 +213,7 @@ OrbyGlasses: "Yes, I see a door directly in front of you at arm's length."
 
 ### Use Case 2: Kitchen Navigation
 ```
-User: "Hey glasses, I want to make coffee"
+User: "Hey orby, I want to make coffee"
 OrbyGlasses: "I'll help. Let's navigate to the kitchen."
 
 User: "Where's the coffee maker?"
@@ -225,7 +225,7 @@ OrbyGlasses: "There's a chair on your left. Stay to the right as you walk forwar
 
 ### Use Case 3: Finding Lost Items
 ```
-User: "Hey glasses, help me find my phone"
+User: "Hey orby, help me find my phone"
 OrbyGlasses: "I'll look for it. Where did you last see it?"
 
 User: "On the table"

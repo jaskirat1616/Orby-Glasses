@@ -35,7 +35,7 @@ class ConversationManager:
         self.temperature = config.get('conversation.temperature', 0.7)
         self.max_tokens = config.get('conversation.max_tokens', 200)
         self.voice_input = config.get('conversation.voice_input', True)
-        self.activation_phrase = config.get('conversation.activation_phrase', 'hey glasses')
+        self.activation_phrase = config.get('conversation.activation_phrase', 'hey orby')
 
         # Voice recognition
         if self.voice_input:
