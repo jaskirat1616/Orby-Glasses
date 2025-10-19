@@ -172,8 +172,21 @@ class AudioManager:
                     self.tts_queue.get_nowait()
                 except queue.Empty:
                     break
+        else:
+            # If currently speaking and not priority, skip this message to avoid queue buildup
+            if self.is_speaking:
+                logging.debug(f"Skipping audio (already speaking): {text[:50]}...")
+                return
+
+            # Clear queue to only speak latest message (prevents sentence cutoff)
+            while not self.tts_queue.empty():
+                try:
+                    self.tts_queue.get_nowait()
+                except queue.Empty:
+                    break
 
         self.tts_queue.put(text)
+        logging.debug(f"Queued audio: {text[:50]}...")
 
     def play_sound(self, audio_data: np.ndarray, sample_rate: int = 16000):
         """

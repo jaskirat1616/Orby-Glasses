@@ -272,7 +272,9 @@ class OrbyGlasses:
 
                 # Audio output (rate-limited) - Use Ollama guidance
                 current_time = time.time()
-                if current_time - self.last_audio_time > self.audio_interval:
+                time_since_last = current_time - self.last_audio_time
+
+                if time_since_last > self.audio_interval:
                     # Use Ollama-generated narrative if available
                     if guidance.get('combined'):
                         msg = guidance['combined']
@@ -286,11 +288,12 @@ class OrbyGlasses:
                         msg = "Path clear"
                         self.logger.info(f"🔊 Audio output: \"{msg}\"")
 
-                    # Speak message
+                    # Speak message (will skip if already speaking)
                     self.audio_manager.speak(msg)
 
+                    # Update timer
                     self.last_audio_time = current_time
-                    self.logger.debug(f"Next audio update in {self.audio_interval}s")
+                    self.logger.debug(f"Next audio update in {self.audio_interval:.1f}s (last was {time_since_last:.1f}s ago)")
 
                 # Display
                 if display:
