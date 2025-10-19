@@ -5,9 +5,9 @@
 camera:
   # Source: 0 for built-in webcam, or URL for IP camera (e.g., "http://192.168.1.100:8080/video")
   source: 0
-  width: 416  # Optimized for speed (YOLO-friendly resolution)
-  height: 416  # Optimized for speed (YOLO-friendly resolution)
-  fps: 15  # Balanced FPS for good performance
+  width: 320  # Smaller size for better performance
+  height: 320  # Smaller size for better performance
+  fps: 20  # Target FPS
 
 # Model Settings
 models:
@@ -34,8 +34,8 @@ models:
 audio:
   # Text-to-Speech
   tts_engine: "pyttsx3"
-  tts_rate: 200              # Words per minute (faster)
-  tts_volume: 1.0            # Volume (0-1)
+  tts_rate: 180              # Words per minute (clear and understandable)
+  tts_volume: 0.9            # Volume (0-1)
 
   # Echolocation/Spatial Audio
   echolocation_enabled: false  # Disabled for maximum speed
@@ -71,5 +71,6 @@ logging:
 # Performance Tuning
 performance:
   audio_update_interval: 2.0  # Seconds between audio updates (more frequent feedback)
-  stats_interval: 50          # Log stats every N frames (max performance)
-  max_detections: 3           # Maximum detections to process per frame (max performance)
+  stats_interval: 100         # Log stats every N frames
+  max_detections: 5           # Maximum detections to process per frame
+  depth_skip_frames: 3        # Calculate depth every Nth frame (3 = every 4th frame)

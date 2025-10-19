@@ -72,6 +72,12 @@ class Logger:
         self.logger = logging.getLogger(name)
         self.logger.setLevel(logging.INFO)
 
+        # Clear existing handlers to prevent duplicates
+        self.logger.handlers.clear()
+
+        # Prevent propagation to root logger (stops duplicate messages)
+        self.logger.propagate = False
+
         # Create logs directory if it doesn't exist
         os.makedirs(os.path.dirname(log_file), exist_ok=True)
 
@@ -79,7 +85,7 @@ class Logger:
         console_handler = logging.StreamHandler()
         console_handler.setLevel(logging.INFO)
         console_formatter = colorlog.ColoredFormatter(
-            '%(log_color)s%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            '%(log_color)s%(asctime)s - %(levelname)s - %(message)s',
             datefmt='%H:%M:%S',
             log_colors={
                 'DEBUG': 'cyan',

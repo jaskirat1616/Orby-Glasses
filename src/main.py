@@ -191,14 +191,27 @@ class OrbyGlasses:
         total_time = self.perf_monitor.stop_timer('total')
         fps = self.perf_monitor.get_avg_fps()
 
+        # Performance overlay with semi-transparent background
+        overlay = annotated_frame.copy()
+        cv2.rectangle(overlay, (5, 5), (250, 120), (0, 0, 0), -1)
+        cv2.addWeighted(overlay, 0.5, annotated_frame, 0.5, 0, annotated_frame)
+
+        # FPS in large, visible text
+        fps_color = (0, 255, 0) if fps > 10 else (0, 165, 255) if fps > 5 else (0, 0, 255)
         cv2.putText(annotated_frame, f"FPS: {fps:.1f}", (10, 30),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        cv2.putText(annotated_frame, f"Det: {det_time:.0f}ms | Depth: {depth_time:.0f}ms", (10, 60),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.8, fps_color, 2)
+
+        # Compact performance stats
+        cv2.putText(annotated_frame, f"Objects: {len(detections)}", (10, 55),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        cv2.putText(annotated_frame, f"Narr: {narr_time:.0f}ms | Audio: {audio_time:.0f}ms", (10, 85),
+        cv2.putText(annotated_frame, f"Process: {total_time:.0f}ms", (10, 75),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        cv2.putText(annotated_frame, f"Total: {total_time:.0f}ms", (10, 110),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+
+        # Status indicator
+        status_text = "ACTIVE" if len(detections) > 0 else "CLEAR"
+        status_color = (0, 165, 255) if len(detections) > 0 else (0, 255, 0)
+        cv2.putText(annotated_frame, status_text, (10, 100),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, status_color, 2)
 
         # Log frame time
         self.perf_monitor.log_frame_time(total_time)
@@ -294,16 +307,19 @@ class OrbyGlasses:
                     cv2.putText(annotated_frame, text, (10, y_offset + 20),
                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
+                    # Show main window at reasonable size
                     cv2.imshow('OrbyGlasses', annotated_frame)
 
-                    # Show depth map in separate window (only when freshly calculated)
+                    # Show depth map in separate smaller window (only when freshly calculated)
                     if depth_map is not None and self.frame_count % (self.skip_depth_frames + 1) == 0:
                         # Convert depth map to colormap for visualization
                         depth_colored = cv2.applyColorMap(
                             (depth_map * 255).astype(np.uint8),
                             cv2.COLORMAP_MAGMA
                         )
-                        cv2.imshow('Depth Map', depth_colored)
+                        # Resize depth map to smaller size for display
+                        depth_display = cv2.resize(depth_colored, (256, 256))
+                        cv2.imshow('Depth Map', depth_display)
 
                 # Save video
                 if video_writer:
@@ -321,10 +337,11 @@ class OrbyGlasses:
                 # Performance stats and detailed logging
                 if self.frame_count % 100 == 0:
                     stats = self.perf_monitor.get_stats()
+                    current_fps = stats.get('fps', 0)
                     self.logger.info("=" * 70)
                     self.logger.info(f"PERFORMANCE STATS (Frame {self.frame_count})")
-                    self.logger.info(f"  FPS: {fps:.1f}")
-                    self.logger.info(f"  Avg frame time: {stats.get('avg_frame_time', 0):.1f}ms")
+                    self.logger.info(f"  FPS: {current_fps:.1f}")
+                    self.logger.info(f"  Avg frame time: {stats.get('avg_frame_time_ms', 0):.1f}ms")
                     self.logger.info(f"  Detections: {len(detections)} objects")
                     self.logger.info(f"  Audio interval: {self.audio_interval}s")
                     if detections:
