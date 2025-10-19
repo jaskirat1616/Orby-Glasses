@@ -216,9 +216,38 @@ class DepthEstimator:
         Returns:
             Depth map (normalized to 0-1) or None on failure
         """
-        # Use simple fallback for maximum speed
-        # MiDaS is too slow even on MPS for real-time use
-        return self._fallback_depth(frame)
+        # Always use MiDaS for proper depth estimation
+        if self.model is None:
+            return self._fallback_depth(frame)
+
+        try:
+            # Convert to RGB
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+            # Prepare input for MiDaS
+            if self.model_type == "midas":
+                # Use pre-loaded transform (loaded once during init)
+                input_batch = self.transform(rgb).to(self.device)
+
+                with torch.no_grad():
+                    prediction = self.model(input_batch)
+                    prediction = torch.nn.functional.interpolate(
+                        prediction.unsqueeze(1),
+                        size=rgb.shape[:2],
+                        mode="bicubic",
+                        align_corners=False,
+                    ).squeeze()
+
+                depth_map = prediction.cpu().numpy()
+
+                # Normalize to 0-1
+                depth_map = (depth_map - depth_map.min()) / (depth_map.max() - depth_map.min() + 1e-8)
+
+                return depth_map
+
+        except Exception as e:
+            logging.error(f"Depth estimation error: {e}")
+            return self._fallback_depth(frame)
 
     def _fallback_depth(self, frame: np.ndarray) -> np.ndarray:
         """Ultra-fast depth estimation using image brightness (objects closer = darker usually)."""
@@ -236,36 +265,45 @@ class DepthEstimator:
 
     def get_depth_at_bbox(self, depth_map: np.ndarray, bbox: List[float]) -> float:
         """
-        Get estimated depth using bbox size (larger bbox = closer object).
+        Get estimated depth from depth map at bbox location.
 
         Args:
-            depth_map: Depth map (not used in fast mode)
+            depth_map: Depth map (normalized 0-1, where lower = closer)
             bbox: [x1, y1, x2, y2]
 
         Returns:
             Estimated depth in meters
         """
+        if depth_map is None:
+            return 10.0
+
         x1, y1, x2, y2 = map(int, bbox)
 
-        # Calculate bounding box area
-        width = max(1, x2 - x1)
-        height = max(1, y2 - y1)
-        area = width * height
+        # Ensure coordinates are within bounds
+        h, w = depth_map.shape
+        x1 = max(0, min(x1, w-1))
+        x2 = max(0, min(x2, w-1))
+        y1 = max(0, min(y1, h-1))
+        y2 = max(0, min(y2, h-1))
 
-        # Estimate depth from size: larger objects are usually closer
-        # Normalize by image size (assume 320x320 = 102400 pixels)
-        normalized_area = area / 102400.0
+        # Extract depth in bbox region
+        depth_region = depth_map[y1:y2, x1:x2]
 
-        # Map to distance: large bbox = close, small bbox = far
-        # Use inverse relationship: depth = k / sqrt(area)
-        if normalized_area > 0:
-            # Map 0.5 (large object) -> 1m, 0.01 (small object) -> 10m
-            depth_meters = 5.0 / (normalized_area ** 0.5 + 0.5)
-            depth_meters = np.clip(depth_meters, 0.5, 15.0)
-        else:
-            depth_meters = 10.0
+        if depth_region.size == 0:
+            return 10.0
 
-        return float(depth_meters)
+        # Get median depth in the region (more robust than mean)
+        median_depth = np.median(depth_region)
+
+        # Convert normalized depth (0-1) to meters
+        # MiDaS gives inverse depth, so lower values = closer
+        # Map 0 (very close) -> 0.5m, 1 (far) -> 15m
+        depth_meters = 0.5 + (median_depth * 14.5)
+
+        # Invert because MiDaS gives inverse depth
+        depth_meters = 15.5 - depth_meters
+
+        return float(np.clip(depth_meters, 0.5, 15.0))
 
 
 class DetectionPipeline:
