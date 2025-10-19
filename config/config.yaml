@@ -40,6 +40,12 @@ conversation:
   activation_phrase: "hello"      # Wake phrase to start conversation
   check_interval: 1.0                # How often to check for activation (seconds)
 
+# Social Navigation
+social_navigation:
+  enabled: true                      # Enable social navigation features
+  region: "us"                       # Regional social norm ('us', 'uk', 'japan', etc.)
+  voice_announce: true               # Announce social navigation advice through voice
+
 # Audio Settings
 audio:
   # Text-to-Speech

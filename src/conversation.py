@@ -18,6 +18,14 @@ except ImportError:
     SPEECH_RECOGNITION_AVAILABLE = False
     logging.warning("SpeechRecognition not available. Voice input will be disabled.")
 
+# Import social navigation module
+try:
+    from social_navigation import SocialNavigationAI
+    SOCIAL_NAVIGATION_AVAILABLE = True
+except ImportError:
+    SOCIAL_NAVIGATION_AVAILABLE = False
+    logging.warning("SocialNavigation module not available. Social navigation features will be disabled.")
+
 
 class ConversationManager:
     """
@@ -75,6 +83,20 @@ class ConversationManager:
             'path_clear': True,
             'last_instruction': None
         }
+
+        # Social Navigation AI
+        self.social_navigation = None
+        if SOCIAL_NAVIGATION_AVAILABLE:
+            try:
+                self.social_navigation = SocialNavigationAI()
+                logging.info("Social Navigation AI initialized")
+                # Set region from config if available
+                region = config.get('social_navigation.region', 'us')
+                self.social_navigation.set_region(region)
+            except Exception as e:
+                logging.error(f"Failed to initialize Social Navigation AI: {e}")
+        else:
+            logging.info("Social Navigation AI is not available")
 
         logging.info(f"Conversation manager initialized (model: {self.model})")
 
@@ -191,6 +213,24 @@ class ConversationManager:
         if scene_context:
             self.context.update(scene_context)
 
+        # Check if this is a social navigation query
+        social_nav_response = self._handle_social_navigation_query(user_input, scene_context)
+        if social_nav_response:
+            # Add to conversation history
+            self.conversation_history.append({
+                'role': 'user',
+                'content': user_input,
+                'timestamp': datetime.now().isoformat()
+            })
+            
+            self.conversation_history.append({
+                'role': 'assistant',
+                'content': social_nav_response,
+                'timestamp': datetime.now().isoformat()
+            })
+            
+            return social_nav_response
+
         # Add to conversation history
         self.conversation_history.append({
             'role': 'user',
@@ -234,6 +274,73 @@ class ConversationManager:
         except Exception as e:
             logging.error(f"Conversation error: {e}")
             return "I'm having trouble processing that. Could you repeat?"
+
+    def _handle_social_navigation_query(self, user_input: str, scene_context: Dict = None) -> Optional[str]:
+        """
+        Handle social navigation specific queries.
+        
+        Args:
+            user_input: User's message
+            scene_context: Current scene information
+            
+        Returns:
+            Social navigation response if applicable, None otherwise
+        """
+        if not scene_context or not SOCIAL_NAVIGATION_AVAILABLE or not self.social_navigation:
+            return None
+            
+        # Keywords that indicate social navigation queries
+        social_keywords = [
+            'crowd', 'crowded', 'people', 'hallway', 'walk', 'navigate', 'move',
+            'gap', 'space', 'yield', 'right', 'left', 'sidewalk', 'hall', 
+            'pass', 'around', 'through', 'between', 'avoid', 'social'
+        ]
+        
+        user_lower = user_input.lower()
+        has_social_keyword = any(keyword in user_lower for keyword in social_keywords)
+        
+        # Check for specific social navigation requests
+        is_social_query = (
+            has_social_keyword and (
+                'how do I' in user_lower or 
+                'how can I' in user_lower or 
+                'where do I' in user_lower or 
+                'which way' in user_lower or 
+                'can I' in user_lower or 
+                'should I' in user_lower or 
+                'navigate' in user_lower or 
+                'through' in user_lower or
+                'between' in user_lower
+            )
+        )
+        
+        # Also handle direct queries about social conventions
+        if not is_social_query:
+            is_social_query = any(phrase in user_lower for phrase in [
+                'stay to the right',
+                'stay to the left',
+                'what do i do in a crowd',
+                'how to navigate crowds',
+                'social norms',
+                'people around',
+                'space opening'
+            ])
+        
+        if is_social_query and 'detected_objects' in scene_context:
+            # Generate social navigation guidance
+            detections = scene_context['detected_objects']
+            social_guidance = self.social_navigation.get_social_navigation_guidance(detections, user_input)
+            return social_guidance
+        
+        # Check for specific social navigation commands without explicit questions
+        if has_social_keyword and ('right' in user_lower or 'left' in user_lower):
+            # Even if not phrased as a question, if social navigation is relevant
+            if 'detected_objects' in scene_context:
+                detections = scene_context['detected_objects']
+                social_guidance = self.social_navigation.get_social_navigation_guidance(detections, user_input)
+                return social_guidance
+        
+        return None
 
     def _build_system_prompt(self) -> str:
         """Build system prompt with current context."""
@@ -318,6 +425,11 @@ Respond naturally and helpfully."""
         closest = navigation_summary.get('closest_object')
         if closest:
             self.context['closest_object'] = f"{closest['label']} at {closest['depth']:.1f}m"
+        
+        # Update social navigation context if available
+        if SOCIAL_NAVIGATION_AVAILABLE and self.social_navigation:
+            social_context = self.social_navigation.update_social_context(detections)
+            self.context['social_navigation'] = social_context
 
     def generate_contextual_guidance(self) -> Optional[str]:
         """
