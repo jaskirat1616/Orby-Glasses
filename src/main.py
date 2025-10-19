@@ -23,6 +23,7 @@ from echolocation import AudioCueGenerator
 from narrative import ContextualAssistant
 from prediction import PathPlanner
 from mapping3d import Mapper3D
+from conversation import ConversationManager
 
 
 class OrbyGlasses:
@@ -63,6 +64,14 @@ class OrbyGlasses:
         self.contextual_assistant = ContextualAssistant(self.config)
         self.path_planner = PathPlanner(self.config)
 
+        # Conversational Navigation
+        self.conversation_enabled = self.config.get('conversation.enabled', False)
+        if self.conversation_enabled:
+            self.conversation_manager = ConversationManager(self.config, self.audio_manager)
+            self.logger.info("✓ Conversational navigation enabled")
+        else:
+            self.conversation_manager = None
+
         # 3D Mapping
         self.mapper_3d = Mapper3D(self.config)
 
@@ -85,6 +94,10 @@ class OrbyGlasses:
         self.danger_audio_interval = self.config.get('performance.danger_audio_interval', 2.0)
         self.skip_depth_frames = 3  # Process depth every 4th frame for speed
         self.last_depth_map = None  # Cache last depth map
+
+        # Conversation state
+        self.last_conversation_check = 0
+        self.conversation_check_interval = self.config.get('conversation.check_interval', 2.0)
 
         # Safety thresholds
         self.danger_distance = self.config.get('safety.danger_distance', 1.0)
@@ -287,6 +300,9 @@ class OrbyGlasses:
         self.logger.info(f"Target FPS: {self.config.get('camera.fps', 30)}")
         self.logger.info(f"Audio update interval: {self.audio_interval}s")
         self.logger.info(f"Depth calculation: Every {self.skip_depth_frames + 1} frames")
+        if self.conversation_enabled:
+            activation = self.config.get('conversation.activation_phrase', 'hey glasses')
+            self.logger.info(f"💬 Conversational mode: Say '{activation}' to start")
         self.logger.info(f"Press '{self.config.get('safety.emergency_stop_key', 'q')}' to quit")
         self.logger.info("=" * 70)
 
@@ -309,8 +325,28 @@ class OrbyGlasses:
                 if depth_map is not None:
                     self.mapper_3d.update(frame, depth_map, detections)
 
-                # Smart Audio System - Priority-based alerts
+                # Conversational Navigation - Check for activation
                 current_time = time.time()
+                if self.conversation_enabled and self.conversation_manager:
+                    # Update conversation context
+                    nav_summary = self.detection_pipeline.get_navigation_summary(detections)
+                    self.conversation_manager.update_scene_context(detections, nav_summary)
+
+                    # Check for activation phrase periodically
+                    if (current_time - self.last_conversation_check) > self.conversation_check_interval:
+                        self.last_conversation_check = current_time
+
+                        if self.conversation_manager.listen_for_activation(timeout=0.5):
+                            self.logger.info("💬 Conversation activated")
+                            # Handle conversation interaction
+                            scene_context = {
+                                'detected_objects': detections,
+                                'obstacles': nav_summary.get('danger_objects', []),
+                                'path_clear': nav_summary.get('path_clear', True)
+                            }
+                            self.conversation_manager.handle_conversation_interaction(scene_context)
+
+                # Smart Audio System - Priority-based alerts
                 time_since_last = current_time - self.last_audio_time
 
                 # Check for danger zone objects (< 1m) - PRIORITY ALERT
