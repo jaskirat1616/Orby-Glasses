@@ -43,6 +43,11 @@ models/ollama/
 *.tmp
 *.temp
 
+# Files to exclude
+*.jsonl
+debug.log
+yolo12n.pt
+
 # Keep directory structure
 !data/logs/.gitkeep
 !data/test_videos/.gitkeep
