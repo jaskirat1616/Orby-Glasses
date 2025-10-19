@@ -11,16 +11,16 @@ camera:
 
 # Model Settings
 models:
-  # YOLO Object Detection
+  # YOLOv12 Object Detection
   yolo:
-    path: "models/yolo/yolo11n.pt"
+    path: "models/yolo/yolo12n.pt"
     confidence: 0.65       # High confidence = fewer false positives
     iou_threshold: 0.45    # IoU threshold for NMS
     device: "mps"          # Device: 'mps' (Apple Silicon), 'cuda', or 'cpu'
 
-  # Depth Estimation
+  # Depth Estimation (Depth Anything V2)
   depth:
-    path: "models/depth/depth_pro.pt"
+    path: "depth-anything/Depth-Anything-V2-Small-hf"  # Hugging Face model name
     device: "mps"
 
   # LLM for Narrative Generation

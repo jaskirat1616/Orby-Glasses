@@ -1,6 +1,6 @@
 """
 OrbyGlasses - Object Detection and Depth Estimation
-Implements YOLOv11 for object detection and Depth Pro for depth estimation.
+Implements YOLOv12 for object detection and Depth Anything V2 for depth estimation.
 """
 
 import os
@@ -13,14 +13,14 @@ import logging
 
 
 class ObjectDetector:
-    """YOLOv11-based object detector optimized for Apple Silicon."""
+    """YOLOv12-based object detector optimized for Apple Silicon."""
 
-    def __init__(self, model_path: str = "models/yolo/yolo11n.pt",
+    def __init__(self, model_path: str = "models/yolo/yolo12n.pt",
                  confidence: float = 0.5,
                  iou_threshold: float = 0.45,
                  device: str = "mps"):
         """
-        Initialize YOLO detector.
+        Initialize YOLOv12 detector.
 
         Args:
             model_path: Path to YOLO model weights
@@ -33,19 +33,19 @@ class ObjectDetector:
         self.iou_threshold = iou_threshold
         self.device = self._validate_device(device)
 
-        logging.info(f"Initializing YOLO on device: {self.device}")
+        logging.info(f"Initializing YOLOv12 on device: {self.device}")
 
-        # Load YOLO model
+        # Load YOLOv12 model
         try:
             if os.path.exists(model_path):
                 self.model = YOLO(model_path)
             else:
-                logging.warning(f"Model not found at {model_path}, downloading YOLOv11n...")
-                self.model = YOLO('yolo11n.pt')
+                logging.warning(f"Model not found at {model_path}, downloading YOLOv12n...")
+                self.model = YOLO('yolo12n.pt')
 
             # Set device
             self.model.to(self.device)
-            logging.info("YOLO model loaded successfully")
+            logging.info("YOLOv12 model loaded successfully")
 
         except Exception as e:
             logging.error(f"Failed to load YOLO model: {e}")
@@ -140,15 +140,15 @@ class ObjectDetector:
 
 
 class DepthEstimator:
-    """Depth estimation using Apple's Depth Pro or MiDaS."""
+    """Depth estimation using Depth Anything V2."""
 
-    def __init__(self, model_path: str = "models/depth/depth_pro.pt",
+    def __init__(self, model_path: str = "depth-anything/Depth-Anything-V2-Small-hf",
                  device: str = "mps"):
         """
         Initialize depth estimator.
 
         Args:
-            model_path: Path to depth model
+            model_path: Hugging Face model name or path (e.g., "depth-anything/Depth-Anything-V2-Small-hf")
             device: Device to run on
         """
         self.model_path = model_path
@@ -156,20 +156,24 @@ class DepthEstimator:
 
         logging.info(f"Initializing Depth Estimator on device: {self.device}")
 
-        # Try to load Depth Pro, fall back to MiDaS if unavailable
+        # Load Depth Anything V2 via transformers
         try:
-            if os.path.exists(model_path):
-                self.model = self._load_depth_pro(model_path)
-                self.model_type = "depth_pro"
-            else:
-                logging.warning("Depth Pro not found, using MiDaS")
-                self.model = self._load_midas()
-                self.model_type = "midas"
+            from transformers import pipeline
 
-            logging.info(f"Depth estimator loaded: {self.model_type}")
+            # Map device names to transformers format
+            device_id = 0 if self.device in ["mps", "cuda"] else -1
+
+            self.model = pipeline(
+                task="depth-estimation",
+                model=model_path,
+                device=device_id
+            )
+            self.model_type = "depth_anything_v2"
+
+            logging.info(f"Depth Anything V2 loaded successfully: {model_path}")
 
         except Exception as e:
-            logging.error(f"Failed to load depth model: {e}")
+            logging.error(f"Failed to load Depth Anything V2: {e}")
             # Fallback to simple depth estimation
             self.model = None
             self.model_type = "fallback"
@@ -182,33 +186,9 @@ class DepthEstimator:
             return "cuda"
         return "cpu"
 
-    def _load_depth_pro(self, model_path: str):
-        """Load Apple Depth Pro model."""
-        # Placeholder for Depth Pro loading
-        # In practice, this would load the actual Depth Pro model
-        logging.warning("Depth Pro loading is placeholder, using MiDaS instead")
-        return self._load_midas()
-
-    def _load_midas(self):
-        """Load MiDaS depth estimation model."""
-        try:
-            # Using MiDaS small for speed on M2
-            model = torch.hub.load("intel-isl/MiDaS", "MiDaS_small")
-            model.to(self.device)
-            model.eval()
-
-            # Load transform ONCE during initialization
-            midas_transforms = torch.hub.load("intel-isl/MiDaS", "transforms")
-            self.transform = midas_transforms.small_transform
-
-            return model
-        except Exception as e:
-            logging.error(f"Failed to load MiDaS: {e}")
-            return None
-
     def estimate_depth(self, frame: np.ndarray) -> Optional[np.ndarray]:
         """
-        Estimate depth map from RGB frame.
+        Estimate depth map from RGB frame using Depth Anything V2.
 
         Args:
             frame: Input frame (BGR format)
@@ -216,34 +196,25 @@ class DepthEstimator:
         Returns:
             Depth map (normalized to 0-1) or None on failure
         """
-        # Always use MiDaS for proper depth estimation
         if self.model is None:
             return self._fallback_depth(frame)
 
         try:
-            # Convert to RGB
+            # Convert BGR to RGB for Depth Anything V2
+            from PIL import Image
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            pil_image = Image.fromarray(rgb)
 
-            # Prepare input for MiDaS
-            if self.model_type == "midas":
-                # Use pre-loaded transform (loaded once during init)
-                input_batch = self.transform(rgb).to(self.device)
+            # Run Depth Anything V2 inference
+            result = self.model(pil_image)
 
-                with torch.no_grad():
-                    prediction = self.model(input_batch)
-                    prediction = torch.nn.functional.interpolate(
-                        prediction.unsqueeze(1),
-                        size=rgb.shape[:2],
-                        mode="bicubic",
-                        align_corners=False,
-                    ).squeeze()
+            # Extract depth map from result
+            depth_map = np.array(result["depth"])
 
-                depth_map = prediction.cpu().numpy()
+            # Normalize to 0-1 range
+            depth_map = (depth_map - depth_map.min()) / (depth_map.max() - depth_map.min() + 1e-8)
 
-                # Normalize to 0-1
-                depth_map = (depth_map - depth_map.min()) / (depth_map.max() - depth_map.min() + 1e-8)
-
-                return depth_map
+            return depth_map
 
         except Exception as e:
             logging.error(f"Depth estimation error: {e}")
@@ -268,7 +239,7 @@ class DepthEstimator:
         Get estimated depth from depth map at bbox location.
 
         Args:
-            depth_map: Depth map (normalized 0-1, where lower = closer)
+            depth_map: Depth map (normalized 0-1, where higher values = farther)
             bbox: [x1, y1, x2, y2]
 
         Returns:
@@ -296,14 +267,11 @@ class DepthEstimator:
         median_depth = np.median(depth_region)
 
         # Convert normalized depth (0-1) to meters
-        # MiDaS gives inverse depth, so lower values = closer
-        # Map 0 (very close) -> 0.5m, 1 (far) -> 15m
-        depth_meters = 0.5 + (median_depth * 14.5)
+        # Depth Anything V2 gives relative depth (higher = farther)
+        # Map 0 (very close) -> 0.3m, 1 (far) -> 15m
+        depth_meters = 0.3 + (median_depth * 14.7)
 
-        # Invert because MiDaS gives inverse depth
-        depth_meters = 15.5 - depth_meters
-
-        return float(np.clip(depth_meters, 0.5, 15.0))
+        return float(np.clip(depth_meters, 0.3, 15.0))
 
 
 class DetectionPipeline:
@@ -318,17 +286,17 @@ class DetectionPipeline:
         """
         self.config = config
 
-        # Initialize detector
+        # Initialize YOLOv12 detector
         self.detector = ObjectDetector(
-            model_path=config.get('models.yolo.path', 'models/yolo/yolo11n.pt'),
+            model_path=config.get('models.yolo.path', 'models/yolo/yolo12n.pt'),
             confidence=config.get('models.yolo.confidence', 0.5),
             iou_threshold=config.get('models.yolo.iou_threshold', 0.45),
             device=config.get('models.yolo.device', 'mps')
         )
 
-        # Initialize depth estimator
+        # Initialize Depth Anything V2 estimator
         self.depth_estimator = DepthEstimator(
-            model_path=config.get('models.depth.path', 'models/depth/depth_pro.pt'),
+            model_path=config.get('models.depth.path', 'depth-anything/Depth-Anything-V2-Small-hf'),
             device=config.get('models.depth.device', 'mps')
         )
 

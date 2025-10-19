@@ -5,7 +5,9 @@ torch>=2.0.0
 torchvision>=0.15.0
 coremltools>=8.0; python_version >= "3.11"
 
-# Depth Estimation
+# Depth Estimation (Depth Anything V2)
+transformers>=4.36.0
+huggingface_hub>=0.20.0
 timm>=0.9.0
 pillow>=10.0.0
 
