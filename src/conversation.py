@@ -47,16 +47,19 @@ class ConversationManager:
         # Voice recognition
         if self.voice_input and SPEECH_RECOGNITION_AVAILABLE:
             try:
+                logging.info("Initializing voice input...")
                 self.recognizer = sr.Recognizer()
                 self.microphone = sr.Microphone()
                 self._calibrate_microphone()
-                logging.info("✓ Voice input initialized successfully")
+                logging.info(f"✓ Voice input initialized successfully (activation: '{self.activation_phrase}')")
             except Exception as e:
-                logging.error(f"Failed to initialize voice input: {e}")
+                logging.error(f"✗ Failed to initialize voice input: {e}")
                 self.voice_input = False
         else:
             if not SPEECH_RECOGNITION_AVAILABLE:
-                logging.warning("SpeechRecognition not installed. Install with: pip install SpeechRecognition")
+                logging.warning("✗ SpeechRecognition not installed. Install with: pip install SpeechRecognition")
+            else:
+                logging.info("Voice input is disabled in config")
             self.voice_input = False
 
         # Conversation state

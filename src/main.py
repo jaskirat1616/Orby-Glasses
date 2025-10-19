@@ -68,7 +68,12 @@ class OrbyGlasses:
         self.conversation_enabled = self.config.get('conversation.enabled', False)
         if self.conversation_enabled:
             self.conversation_manager = ConversationManager(self.config, self.audio_manager)
-            self.logger.info("✓ Conversational navigation enabled")
+            if self.conversation_manager.voice_input:
+                activation = self.config.get('conversation.activation_phrase', 'hello')
+                self.logger.info(f"✓ Conversational navigation enabled (wake phrase: '{activation}')")
+            else:
+                self.logger.warning("✗ Conversational navigation enabled but voice input is disabled")
+                self.logger.warning("   Check if SpeechRecognition is installed in your Python environment")
         else:
             self.conversation_manager = None
 
@@ -336,17 +341,19 @@ class OrbyGlasses:
                     if (current_time - self.last_conversation_check) > self.conversation_check_interval:
                         self.last_conversation_check = current_time
 
-                        # Listen for activation with longer timeout
-                        self.logger.debug("🎤 Listening for wake phrase...")
-                        if self.conversation_manager.listen_for_activation(timeout=2.0):
-                            self.logger.info("💬 Conversation activated!")
-                            # Handle conversation interaction
-                            scene_context = {
-                                'detected_objects': detections,
-                                'obstacles': nav_summary.get('danger_objects', []),
-                                'path_clear': nav_summary.get('path_clear', True)
-                            }
-                            self.conversation_manager.handle_conversation_interaction(scene_context)
+                        # Only listen if voice input is actually enabled
+                        if self.conversation_manager.voice_input:
+                            # Listen for activation with longer timeout
+                            self.logger.info("🎤 Listening for wake phrase...")
+                            if self.conversation_manager.listen_for_activation(timeout=2.0):
+                                self.logger.info("💬 Conversation activated!")
+                                # Handle conversation interaction
+                                scene_context = {
+                                    'detected_objects': detections,
+                                    'obstacles': nav_summary.get('danger_objects', []),
+                                    'path_clear': nav_summary.get('path_clear', True)
+                                }
+                                self.conversation_manager.handle_conversation_interaction(scene_context)
 
                 # Smart Audio System - Priority-based alerts
                 time_since_last = current_time - self.last_audio_time
