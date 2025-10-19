@@ -5,11 +5,18 @@ Natural language conversation for goal-oriented navigation with voice input/outp
 
 import logging
 import ollama
-import speech_recognition as sr
 from typing import Optional, Dict, List
 import time
 import json
 from datetime import datetime
+
+# Try to import speech_recognition
+try:
+    import speech_recognition as sr
+    SPEECH_RECOGNITION_AVAILABLE = True
+except ImportError:
+    SPEECH_RECOGNITION_AVAILABLE = False
+    logging.warning("SpeechRecognition not available. Voice input will be disabled.")
 
 
 class ConversationManager:
@@ -38,10 +45,19 @@ class ConversationManager:
         self.activation_phrase = config.get('conversation.activation_phrase', 'hey orby')
 
         # Voice recognition
-        if self.voice_input:
-            self.recognizer = sr.Recognizer()
-            self.microphone = sr.Microphone()
-            self._calibrate_microphone()
+        if self.voice_input and SPEECH_RECOGNITION_AVAILABLE:
+            try:
+                self.recognizer = sr.Recognizer()
+                self.microphone = sr.Microphone()
+                self._calibrate_microphone()
+                logging.info("✓ Voice input initialized successfully")
+            except Exception as e:
+                logging.error(f"Failed to initialize voice input: {e}")
+                self.voice_input = False
+        else:
+            if not SPEECH_RECOGNITION_AVAILABLE:
+                logging.warning("SpeechRecognition not installed. Install with: pip install SpeechRecognition")
+            self.voice_input = False
 
         # Conversation state
         self.active = False
