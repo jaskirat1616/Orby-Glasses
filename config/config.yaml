@@ -37,8 +37,8 @@ conversation:
   temperature: 0.7                   # Response creativity (0-1)
   max_tokens: 200                    # Maximum response length
   voice_input: true                  # Enable voice input (requires microphone)
-  activation_phrase: "hey orby"      # Wake phrase to start conversation
-  check_interval: 2.0                # How often to check for activation (seconds)
+  activation_phrase: "hello"      # Wake phrase to start conversation
+  check_interval: 1.0                # How often to check for activation (seconds)
 
 # Audio Settings
 audio:

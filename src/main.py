@@ -336,8 +336,10 @@ class OrbyGlasses:
                     if (current_time - self.last_conversation_check) > self.conversation_check_interval:
                         self.last_conversation_check = current_time
 
-                        if self.conversation_manager.listen_for_activation(timeout=0.5):
-                            self.logger.info("💬 Conversation activated")
+                        # Listen for activation with longer timeout
+                        self.logger.debug("🎤 Listening for wake phrase...")
+                        if self.conversation_manager.listen_for_activation(timeout=2.0):
+                            self.logger.info("💬 Conversation activated!")
                             # Handle conversation interaction
                             scene_context = {
                                 'detected_objects': detections,

@@ -109,16 +109,27 @@ class ConversationManager:
 
             # Recognize speech
             text = self.recognizer.recognize_google(audio).lower()
-            logging.debug(f"Heard: {text}")
+            logging.info(f"🎤 Heard: '{text}'")
 
-            # Check for activation phrase
-            if self.activation_phrase in text:
-                logging.info(f"Activation phrase detected: '{text}'")
-                return True
+            # Check for activation phrase (also check common misrecognitions)
+            activation_variations = [
+                self.activation_phrase,
+                self.activation_phrase.replace("hello", "hallo"),
+                self.activation_phrase.replace("hello", "helo"),
+            ]
+
+            for variation in activation_variations:
+                if variation in text:
+                    logging.info(f"✓ Activation phrase detected: '{text}'")
+                    return True
 
         except sr.WaitTimeoutError:
             # No speech detected, normal behavior
             pass
+        except sr.UnknownValueError:
+            logging.debug("Could not understand speech")
+        except sr.RequestError as e:
+            logging.error(f"Speech recognition service error: {e}")
         except Exception as e:
             logging.debug(f"Listening error: {e}")
 
