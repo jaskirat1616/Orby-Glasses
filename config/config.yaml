@@ -14,7 +14,7 @@ models:
   # YOLO Object Detection
   yolo:
     path: "models/yolo/yolo11n.pt"
-    confidence: 0.5        # Minimum detection confidence (0-1)
+    confidence: 0.6        # Higher confidence = more accurate detections
     iou_threshold: 0.45    # IoU threshold for NMS
     device: "mps"          # Device: 'mps' (Apple Silicon), 'cuda', or 'cpu'
 
@@ -58,8 +58,10 @@ prediction:
 # Safety Settings
 safety:
   min_safe_distance: 1.5     # Minimum safe distance in meters
+  danger_distance: 1.0       # Immediate danger zone (<1m)
+  caution_distance: 2.5      # Caution zone (1-2.5m)
   emergency_stop_key: "q"    # Key to emergency stop
-  max_obstacle_alerts: 5     # Maximum simultaneous obstacle alerts
+  max_obstacle_alerts: 3     # Maximum simultaneous obstacle alerts
 
 # Logging Settings
 logging:
@@ -70,7 +72,8 @@ logging:
 
 # Performance Tuning
 performance:
-  audio_update_interval: 5.0  # Seconds between audio updates (ensures sentences complete)
-  stats_interval: 100         # Log stats every N frames
-  max_detections: 5           # Maximum detections to process per frame
-  depth_skip_frames: 3        # Calculate depth every Nth frame (3 = every 4th frame)
+  audio_update_interval: 5.0      # Seconds between audio updates (ensures sentences complete)
+  danger_audio_interval: 2.0      # Faster alerts for danger zone objects
+  stats_interval: 100             # Log stats every N frames
+  max_detections: 3               # Focus on top 3 most relevant objects
+  depth_skip_frames: 3            # Calculate depth every Nth frame (3 = every 4th frame)

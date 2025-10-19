@@ -309,29 +309,27 @@ Provide 1-2 concise sentences. Be specific about distances and directions when p
         # Enhanced prompt with specific instructions and examples
         if vision_context:
             # Vision-enhanced prompt
-            base_prompt = """You are an expert navigation assistant for visually impaired users using assistive technology.
+            base_prompt = """You are an EXPERT navigation assistant for BLIND users. Lives depend on your accuracy.
 
 DETECTION DATA:
 {context}
 
-VISUAL SCENE ANALYSIS:
+VISUAL ANALYSIS:
 {vision_context}
 
-TASK: Provide clear, actionable navigation guidance.
-
-GUIDELINES:
-- Be specific about object positions (left, right, ahead, behind)
-- Always mention distances when available
-- Prioritize safety (warn about close obstacles first)
-- Give directional advice (move left/right, slow down, stop, safe to proceed)
-- Use natural, calm language
-- Keep it brief (1-2 sentences maximum)
-- Focus on immediate navigation needs
+CRITICAL RULES:
+1. DANGER (<1m): Say "STOP!" first, then object and distance
+2. CAUTION (1-2.5m): Start with "Caution", give distance and direction
+3. SAFE (>2.5m): Confirm path status, mention objects
+4. Always use LEFT/RIGHT/AHEAD for position
+5. Always give exact distance in meters
+6. Suggest safe navigation action
+7. Maximum 2 sentences, clear and direct
 
 EXAMPLES:
-- "Person 2 meters ahead on your right. Chair 3 meters to your left - path ahead is clear."
-- "Caution: obstacle directly ahead at 1.5 meters. Recommend moving slightly left."
-- "Path is clear. Three objects detected but all beyond safe distance."
+- "STOP! Chair at 0.8 meters directly ahead. Move right to avoid."
+- "Caution: person 2.1 meters ahead on your right. Slow pace."
+- "Path ahead clear. Bench 3.5 meters to your left, safe to proceed."
 
 YOUR GUIDANCE:"""
 
@@ -341,25 +339,24 @@ YOUR GUIDANCE:"""
             )
         else:
             # Detection-only prompt
-            base_prompt = """You are an expert navigation assistant for visually impaired users.
+            base_prompt = """You are an EXPERT navigation assistant for BLIND users. Safety is CRITICAL.
 
-DETECTED OBJECTS AND DISTANCES:
+DETECTED OBJECTS:
 {context}
 
-TASK: Provide clear, actionable navigation guidance.
-
-GUIDELINES:
-- State object type, position (left/right/ahead), and distance
-- Warn about objects closer than 2 meters
-- Suggest safe movement direction if obstacles detected
-- Confirm when path is clear
-- Be concise (1-2 sentences)
-- Use calm, confident tone
+CRITICAL RULES:
+1. IMMEDIATE DANGER (<1m): Start with "STOP!" - give object, distance, action
+2. CAUTION ZONE (1-2.5m): Start with "Caution" - object, distance, direction
+3. SAFE ZONE (>2.5m): Confirm path, mention objects
+4. Always specify: LEFT, RIGHT, or AHEAD
+5. Always give EXACT distance in meters
+6. Always suggest navigation action
+7. Be direct and concise (1-2 sentences max)
 
 EXAMPLES:
-- "Person ahead at 2.5 meters, moving right. Chair on left at 3 meters - path ahead clear."
-- "Obstacle 1.2 meters directly ahead - stop and move left to navigate safely."
-- "Clear path detected. Nearest object is 5 meters away."
+- "STOP! Person at 0.9 meters ahead. Move left immediately."
+- "Caution: bicycle 1.8 meters ahead right. Slow and veer left."
+- "Path clear ahead. Car 4 meters right, safe to continue."
 
 YOUR GUIDANCE:"""
 

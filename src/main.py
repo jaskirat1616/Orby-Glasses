@@ -78,8 +78,13 @@ class OrbyGlasses:
         self.frame_count = 0
         self.last_audio_time = 0
         self.audio_interval = self.config.get('performance.audio_update_interval', 5.0)
+        self.danger_audio_interval = self.config.get('performance.danger_audio_interval', 2.0)
         self.skip_depth_frames = 3  # Process depth every 4th frame for speed
         self.last_depth_map = None  # Cache last depth map
+
+        # Safety thresholds
+        self.danger_distance = self.config.get('safety.danger_distance', 1.0)
+        self.caution_distance = self.config.get('safety.caution_distance', 2.5)
 
         self.logger.info("Initialization complete!")
 
@@ -191,27 +196,53 @@ class OrbyGlasses:
         total_time = self.perf_monitor.stop_timer('total')
         fps = self.perf_monitor.get_avg_fps()
 
-        # Performance overlay with semi-transparent background
-        overlay = annotated_frame.copy()
-        cv2.rectangle(overlay, (5, 5), (250, 120), (0, 0, 0), -1)
-        cv2.addWeighted(overlay, 0.5, annotated_frame, 0.5, 0, annotated_frame)
+        # Check for danger zone
+        danger_objects = [d for d in detections if d.get('depth', 10) < self.danger_distance]
+        caution_objects = [d for d in detections if self.danger_distance <= d.get('depth', 10) < self.caution_distance]
 
-        # FPS in large, visible text
+        # Performance overlay with danger-aware background
+        overlay = annotated_frame.copy()
+        bg_color = (0, 0, 100) if danger_objects else (0, 0, 0)  # Red tint if danger
+        cv2.rectangle(overlay, (5, 5), (250, 135), bg_color, -1)
+        cv2.addWeighted(overlay, 0.6, annotated_frame, 0.4, 0, annotated_frame)
+
+        # FPS indicator
         fps_color = (0, 255, 0) if fps > 10 else (0, 165, 255) if fps > 5 else (0, 0, 255)
         cv2.putText(annotated_frame, f"FPS: {fps:.1f}", (10, 30),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.8, fps_color, 2)
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, fps_color, 2)
 
-        # Compact performance stats
-        cv2.putText(annotated_frame, f"Objects: {len(detections)}", (10, 55),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        cv2.putText(annotated_frame, f"Process: {total_time:.0f}ms", (10, 75),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        # Danger/Caution/Safe counts
+        cv2.putText(annotated_frame, f"Danger: {len(danger_objects)} | Caution: {len(caution_objects)}", (10, 55),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
+
+        # Closest object with distance
+        if detections:
+            closest = min(detections, key=lambda x: x.get('depth', 10))
+            dist_color = (0, 0, 255) if closest['depth'] < self.danger_distance else \
+                        (0, 165, 255) if closest['depth'] < self.caution_distance else (0, 255, 0)
+            cv2.putText(annotated_frame, f"Closest: {closest['label']} {closest['depth']:.1f}m", (10, 75),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, dist_color, 1)
+
+        # Processing time
+        cv2.putText(annotated_frame, f"Process: {total_time:.0f}ms", (10, 95),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
 
         # Status indicator
-        status_text = "ACTIVE" if len(detections) > 0 else "CLEAR"
-        status_color = (0, 165, 255) if len(detections) > 0 else (0, 255, 0)
-        cv2.putText(annotated_frame, status_text, (10, 100),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, status_color, 2)
+        if danger_objects:
+            status_text = "⚠ DANGER"
+            status_color = (0, 0, 255)
+        elif caution_objects:
+            status_text = "⚠ CAUTION"
+            status_color = (0, 165, 255)
+        elif detections:
+            status_text = "SAFE"
+            status_color = (0, 255, 0)
+        else:
+            status_text = "CLEAR"
+            status_color = (0, 255, 0)
+
+        cv2.putText(annotated_frame, status_text, (10, 120),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, status_color, 2)
 
         # Log frame time
         self.perf_monitor.log_frame_time(total_time)
@@ -270,36 +301,47 @@ class OrbyGlasses:
                 annotated_frame, detections, guidance, audio_signal, audio_message, depth_map = \
                     self.process_frame(frame)
 
-                # Audio output (rate-limited) - Use Ollama guidance
+                # Smart Audio System - Priority-based alerts
                 current_time = time.time()
                 time_since_last = current_time - self.last_audio_time
 
-                # Only generate and queue new audio if:
-                # 1. Interval has passed AND
-                # 2. Not currently speaking (prevents cutoff)
-                if time_since_last > self.audio_interval and not self.audio_manager.is_speaking:
-                    # Use Ollama-generated narrative if available
-                    if guidance.get('combined'):
+                # Check for danger zone objects (< 1m) - PRIORITY ALERT
+                danger_objects = [d for d in detections if d.get('depth', 10) < self.danger_distance]
+                has_danger = len(danger_objects) > 0
+
+                # Determine appropriate interval based on danger level
+                active_interval = self.danger_audio_interval if has_danger else self.audio_interval
+
+                # Only generate and queue new audio if interval passed and not speaking
+                if time_since_last > active_interval and not self.audio_manager.is_speaking:
+                    # DANGER ZONE - Priority alert
+                    if has_danger:
+                        closest_danger = min(danger_objects, key=lambda x: x['depth'])
+                        msg = f"STOP! {closest_danger['label'].upper()} at {closest_danger['depth']:.1f} meters directly ahead!"
+                        self.logger.error(f"🚨 DANGER ALERT: \"{msg}\"")
+                        self.audio_manager.speak(msg, priority=True)
+
+                    # Use Ollama-generated narrative for normal navigation
+                    elif guidance.get('combined'):
                         msg = guidance['combined']
-                        self.logger.info(f"🔊 Audio output (Ollama): \"{msg}\"")
+                        self.logger.info(f"🔊 Audio: \"{msg}\"")
+                        self.audio_manager.speak(msg, priority=False)
+
+                    # Fallback to simple message
                     elif len(detections) > 0:
-                        # Fallback to simple message if Ollama fails
                         closest = min(detections, key=lambda x: x.get('depth', 10))
-                        msg = f"{len(detections)} objects. Closest: {closest['label']} at {closest['depth']:.1f} meters"
-                        self.logger.warning(f"🔊 Audio output (fallback): \"{msg}\"")
+                        msg = f"{closest['label']} at {closest['depth']:.1f} meters"
+                        self.logger.info(f"🔊 Audio: \"{msg}\"")
+                        self.audio_manager.speak(msg, priority=False)
+
+                    # Path clear
                     else:
                         msg = "Path clear"
-                        self.logger.info(f"🔊 Audio output: \"{msg}\"")
+                        self.logger.info(f"🔊 Audio: \"{msg}\"")
+                        self.audio_manager.speak(msg, priority=False)
 
-                    # Speak message
-                    self.audio_manager.speak(msg, priority=False)
-
-                    # Update timer ONLY after queuing (not when speaking starts)
+                    # Update timer
                     self.last_audio_time = current_time
-                    self.logger.info(f"⏰ Next audio in {self.audio_interval:.1f}s (last: {time_since_last:.1f}s ago)")
-                elif time_since_last > self.audio_interval and self.audio_manager.is_speaking:
-                    # Ready to speak but still speaking previous message
-                    self.logger.debug(f"⏸ Audio ready but waiting for current speech to finish...")
 
                 # Display
                 if display:
