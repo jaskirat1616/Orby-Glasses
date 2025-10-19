@@ -378,30 +378,19 @@ If you use OrbyGlasses in your research, please cite:
 ```bibtex
 @software{orbyglass2025,
   title={OrbyGlasses: Bio-Mimetic Navigation Engine for Visually Impaired Users},
-  author={Your Name},
+  author={Jaskirat Singh},
   year={2025},
-  url={https://github.com/yourusername/OrbyGlasses}
+  url={https://github.com/jaskirat1616/OrbyGlasses}
 }
 ```
 
----
 
-## Acknowledgments
-
-- **Ultralytics** for YOLOv11
-- **Intel ISL** for MiDaS depth estimation
-- **Anthropic** for Ollama ecosystem
-- **PyRoomAcoustics** for spatial audio simulation
-- **Stable Baselines3** for RL implementations
-
----
 
 ## Contact
 
 For questions, issues, or collaboration:
 
 - GitHub Issues: [OrbyGlasses Issues](https://github.com/yourusername/OrbyGlasses/issues)
-- Email: your.email@example.com
 
 ---
 

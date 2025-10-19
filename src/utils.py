@@ -206,6 +206,22 @@ class AudioManager:
             self.tts_queue.put(text)
             print(f"🔊 Audio queued ({len(text.split())} words): {text[:60]}...")
 
+    def speak_priority(self, text: str):
+        """
+        Convert text to speech with priority (clears queue and speaks immediately).
+
+        Args:
+            text: Text to speak with priority
+        """
+        # Clear queue for urgent messages
+        while not self.tts_queue.empty():
+            try:
+                self.tts_queue.get_nowait()
+            except queue.Empty:
+                break
+        self.tts_queue.put(text)
+        print(f"🔊 Priority audio queued: {text[:60]}...")
+
     def play_sound(self, audio_data: np.ndarray, sample_rate: int = 16000):
         """
         Play audio from numpy array.

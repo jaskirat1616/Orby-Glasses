@@ -59,7 +59,7 @@ try:
     text = recognizer.recognize_google(audio).lower()
     print(f"\nYou said: '{text}'")
 
-    if "hey orby" in text or "hay orby" in text:
+    if "hello" in text or "hallo" in text:
         print("✓ Wake phrase DETECTED!")
     else:
         print("✗ Wake phrase NOT detected, but speech recognition is working")
