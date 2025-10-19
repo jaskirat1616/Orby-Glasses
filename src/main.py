@@ -325,7 +325,26 @@ class OrbyGlasses:
                     # DANGER ZONE - Priority alert
                     if has_danger:
                         closest_danger = min(danger_objects, key=lambda x: x['depth'])
-                        msg = f"STOP! {closest_danger['label'].upper()} at {closest_danger['depth']:.1f} meters directly ahead!"
+                        depth = closest_danger['depth']
+
+                        # Use relatable distance terms
+                        if depth < 0.3:
+                            distance_term = "immediately ahead"
+                        elif depth < 0.5:
+                            distance_term = "arm's length away"
+                        else:
+                            distance_term = "one step away"
+
+                        # Determine direction
+                        center = closest_danger.get('center', [160, 160])
+                        if center[0] < 106:
+                            direction = "on your left, step right"
+                        elif center[0] > 213:
+                            direction = "on your right, step left"
+                        else:
+                            direction = "straight ahead, step aside"
+
+                        msg = f"{closest_danger['label']} {distance_term} {direction}"
                         self.logger.error(f"🚨 DANGER ALERT: \"{msg}\"")
                         self.audio_manager.speak(msg, priority=True)
 
@@ -366,8 +385,9 @@ class OrbyGlasses:
                     cv2.putText(annotated_frame, text, (10, y_offset + 20),
                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
-                    # Show main window at reasonable size
-                    cv2.imshow('OrbyGlasses', annotated_frame)
+                    # Resize main window to smaller display size (500x500)
+                    display_frame = cv2.resize(annotated_frame, (500, 500))
+                    cv2.imshow('OrbyGlasses', display_frame)
 
                     # Show depth map in separate smaller window (only when freshly calculated)
                     if depth_map is not None and self.frame_count % (self.skip_depth_frames + 1) == 0:

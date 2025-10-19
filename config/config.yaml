@@ -58,8 +58,8 @@ prediction:
 # Safety Settings
 safety:
   min_safe_distance: 1.5     # Minimum safe distance in meters
-  danger_distance: 0.7       # Immediate danger zone (<0.7m) - reduced to avoid false alerts
-  caution_distance: 2.0      # Caution zone (0.7-2m)
+  danger_distance: 0.4       # Immediate danger zone (<0.4m) - very close objects only
+  caution_distance: 1.5      # Caution zone (0.4-1.5m)
   emergency_stop_key: "q"    # Key to emergency stop
   max_obstacle_alerts: 3     # Maximum simultaneous obstacle alerts
 
@@ -73,7 +73,7 @@ logging:
 # Performance Tuning
 performance:
   audio_update_interval: 5.0      # Seconds between audio updates (ensures sentences complete)
-  danger_audio_interval: 2.0      # Faster alerts for danger zone objects
+  danger_audio_interval: 3.0      # Faster alerts for danger zone objects (increased to reduce spam)
   stats_interval: 100             # Log stats every N frames
   max_detections: 3               # Focus on top 3 most relevant objects
   depth_skip_frames: 3            # Calculate depth every Nth frame (3 = every 4th frame)
