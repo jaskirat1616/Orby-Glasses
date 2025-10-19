@@ -129,18 +129,12 @@ class AudioManager:
 
     def __init__(self, config: ConfigManager):
         self.config = config
+        self.rate = config.get('audio.tts_rate', 180)
+        self.volume = config.get('audio.tts_volume', 0.9)
 
-        # Initialize TTS engine
-        try:
-            self.tts_engine = pyttsx3.init()
-            rate = config.get('audio.tts_rate', 180)
-            volume = config.get('audio.tts_volume', 0.9)
-            self.tts_engine.setProperty('rate', rate)
-            self.tts_engine.setProperty('volume', volume)
-            print(f"✓ TTS initialized: {rate} WPM, volume {volume}")
-        except Exception as e:
-            print(f"✗ TTS initialization error: {e}")
-            raise
+        # Use macOS 'say' command (more reliable than pyttsx3)
+        print(f"✓ TTS initialized: {self.rate} WPM, volume {self.volume}")
+        print("✓ Using macOS 'say' command for audio")
 
         # Thread-safe queue for audio messages
         self.tts_queue = queue.Queue()
@@ -151,6 +145,7 @@ class AudioManager:
 
     def _tts_worker(self):
         """Worker thread for TTS to avoid blocking."""
+        import subprocess
         print("TTS worker thread running...")
         while True:
             try:
@@ -161,8 +156,9 @@ class AudioManager:
                     print(f"🎤 Speaking now ({word_count} words): {text[:60]}...")
 
                     try:
-                        self.tts_engine.say(text)
-                        self.tts_engine.runAndWait()
+                        # Use macOS 'say' command with rate
+                        rate_wpm = int(self.rate)
+                        subprocess.run(['say', '-r', str(rate_wpm), text], check=True)
                         print(f"✓ Speech completed ({word_count} words)")
                     except Exception as speak_error:
                         print(f"✗ TTS speak error: {speak_error}")
@@ -238,7 +234,12 @@ class AudioManager:
 
     def stop(self):
         """Stop all audio playback."""
-        self.tts_engine.stop()
+        # Clear queue
+        while not self.tts_queue.empty():
+            try:
+                self.tts_queue.get_nowait()
+            except queue.Empty:
+                break
 
 
 class FrameProcessor:
