@@ -14,7 +14,7 @@ models:
   # YOLO Object Detection
   yolo:
     path: "models/yolo/yolo11n.pt"
-    confidence: 0.6        # Higher confidence = more accurate detections
+    confidence: 0.65       # High confidence = fewer false positives
     iou_threshold: 0.45    # IoU threshold for NMS
     device: "mps"          # Device: 'mps' (Apple Silicon), 'cuda', or 'cpu'
 
@@ -58,8 +58,8 @@ prediction:
 # Safety Settings
 safety:
   min_safe_distance: 1.5     # Minimum safe distance in meters
-  danger_distance: 1.0       # Immediate danger zone (<1m)
-  caution_distance: 2.5      # Caution zone (1-2.5m)
+  danger_distance: 0.7       # Immediate danger zone (<0.7m) - reduced to avoid false alerts
+  caution_distance: 2.0      # Caution zone (0.7-2m)
   emergency_stop_key: "q"    # Key to emergency stop
   max_obstacle_alerts: 3     # Maximum simultaneous obstacle alerts
 
@@ -77,3 +77,14 @@ performance:
   stats_interval: 100             # Log stats every N frames
   max_detections: 3               # Focus on top 3 most relevant objects
   depth_skip_frames: 3            # Calculate depth every Nth frame (3 = every 4th frame)
+
+# 3D Mapping Settings
+mapping3d:
+  enabled: true                   # Enable 3D real-time mapping visualization (set to true to enable)
+  max_depth: 10.0                 # Maximum depth in meters to visualize
+  voxel_size: 0.1                 # Voxel size for downsampling (larger = faster, less detail)
+  subsample_step: 8               # Subsample every Nth point (higher = faster, less detail)
+  update_interval: 0.3            # Update 3D map every N seconds (slower updates = better performance)
+  fx: 500                         # Camera focal length X (pixels)
+  fy: 500                         # Camera focal length Y (pixels)
+  skip_bbox: true                 # Skip bounding boxes for better performance

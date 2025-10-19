@@ -22,6 +22,7 @@ from detection import DetectionPipeline
 from echolocation import AudioCueGenerator
 from narrative import ContextualAssistant
 from prediction import PathPlanner
+from mapping3d import Mapper3D
 
 
 class OrbyGlasses:
@@ -61,6 +62,9 @@ class OrbyGlasses:
         self.audio_cue_generator = AudioCueGenerator(self.config)
         self.contextual_assistant = ContextualAssistant(self.config)
         self.path_planner = PathPlanner(self.config)
+
+        # 3D Mapping
+        self.mapper_3d = Mapper3D(self.config)
 
         # Data logging
         self.data_logger = DataLogger()
@@ -301,6 +305,10 @@ class OrbyGlasses:
                 annotated_frame, detections, guidance, audio_signal, audio_message, depth_map = \
                     self.process_frame(frame)
 
+                # Update 3D map
+                if depth_map is not None:
+                    self.mapper_3d.update(frame, depth_map, detections)
+
                 # Smart Audio System - Priority-based alerts
                 current_time = time.time()
                 time_since_last = current_time - self.last_audio_time
@@ -414,6 +422,9 @@ class OrbyGlasses:
     def cleanup(self, video_writer=None):
         """Clean up resources."""
         self.logger.info("Shutting down...")
+
+        # Stop 3D mapper
+        self.mapper_3d.stop()
 
         if self.camera:
             self.camera.release()
