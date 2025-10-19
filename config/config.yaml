@@ -4,7 +4,7 @@
 # Camera/Video Source Settings
 camera:
   # Source: 0 for built-in webcam, or URL for IP camera (e.g., "http://192.168.1.100:8080/video")
-  source: 0
+  source: 1
   width: 320  # Smaller size for better performance
   height: 320  # Smaller size for better performance
   fps: 20  # Target FPS
@@ -36,8 +36,8 @@ conversation:
   model: "gemma3:4b"                 # LLM model for conversations
   temperature: 0.7                   # Response creativity (0-1)
   max_tokens: 200                    # Maximum response length
-  voice_input: false                  # Enable voice input (requires microphone)
-  activation_phrase: "hello"      # Wake phrase to start conversation
+  voice_input: true                  # Enable voice input (requires microphone)
+  activation_phrase: "hey orby"      # Wake phrase to start conversation
   check_interval: 1.0                # How often to check for activation (seconds)
 
 # Social Navigation

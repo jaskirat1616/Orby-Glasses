@@ -1,0 +1,2 @@
+{"timestamp": "2025-10-18T14:20:42.886525", "frame_id": 1, "detections": [], "action": null, "depth_stats": null}
+{"timestamp": "2025-10-18T14:20:48.075612", "frame_id": 4, "detections": [{"bbox": [183.5164337158203, 346.27886962890625, 1516.8221435546875, 1552.0], "label": "person", "confidence": 0.8682628870010376, "class_id": 0, "center": [850.1693115234375, 949.139404296875], "is_priority": true, "depth": 5.536086559295654, "is_danger": false}], "action": null, "depth_stats": null}

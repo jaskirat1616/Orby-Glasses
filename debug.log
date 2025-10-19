@@ -1,0 +1,44 @@
+[32m15:42:47 - INFO - ==================================================[0m
+[32m15:42:47 - INFO - OrbyGlasses - Bio-Mimetic Navigation System[0m
+[32m15:42:47 - INFO - ==================================================[0m
+[32m15:42:47 - INFO - Running on device: mps[0m
+[32m15:42:47 - INFO - Initializing components...[0m
+WARNING:root:Model not found at models/yolo/yolo12n.pt, downloading YOLOv12n...
+Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. `use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`.
+Device set to use mps:0
+[33m15:42:49 - WARNING - ✗ Conversational navigation enabled but voice input is disabled[0m
+[33m15:42:49 - WARNING -    Check if SpeechRecognition is installed in your Python environment[0m
+[32m15:42:49 - INFO - Initialization complete![0m
+[32m15:42:49 - INFO - Initializing camera: 0[0m
+[32m15:42:50 - INFO - Camera initialized successfully[0m
+[32m15:42:50 - INFO - ======================================================================[0m
+[32m15:42:50 - INFO - ORBYGGLASSES NAVIGATION SYSTEM STARTED[0m
+[32m15:42:50 - INFO - ======================================================================[0m
+[32m15:42:50 - INFO - Camera resolution: 320x320[0m
+[32m15:42:50 - INFO - Target FPS: 20[0m
+[32m15:42:50 - INFO - Audio update interval: 5.0s[0m
+[32m15:42:50 - INFO - Depth calculation: Every 4 frames[0m
+[32m15:42:50 - INFO - 💬 Conversational mode: Say 'hello' to start[0m
+[32m15:42:50 - INFO - Press 'q' to quit[0m
+[32m15:42:50 - INFO - ======================================================================[0m
+2025-10-19 15:42:52.717 Python[85647:2450076] ApplePersistenceIgnoreState: Existing state will not be touched. New state will be written to /var/folders/20/_pzsmx_52ns_n8kd237xsw840000gn/T/org.python.python.savedState
+[31m15:42:55 - ERROR - 🚨 DANGER ALERT: "person immediately ahead on your right, step left"[0m
+[32m15:43:01 - INFO - 🔊 Audio: "Person at 11. 8m, step to your left."[0m
+[32m15:43:04 - INFO - ======================================================================[0m
+[32m15:43:04 - INFO - PERFORMANCE STATS (Frame 100)[0m
+[32m15:43:04 - INFO -   FPS: 10.5[0m
+[32m15:43:04 - INFO -   Avg frame time: 95.2ms[0m
+[32m15:43:04 - INFO -   Detections: 1 objects[0m
+[32m15:43:04 - INFO -   Audio interval: 5.0s[0m
+[32m15:43:04 - INFO -   Closest object: person at 10.3m[0m
+[32m15:43:04 - INFO - ======================================================================[0m
+[32m15:43:08 - INFO - 🔊 Audio: "Person at 11. 9m, step to your left."[0m
+[32m15:43:13 - INFO - 🔊 Audio: "person at 11.3 meters"[0m
+[32m15:43:14 - INFO - ======================================================================[0m
+[32m15:43:14 - INFO - PERFORMANCE STATS (Frame 200)[0m
+[32m15:43:14 - INFO -   FPS: 18.1[0m
+[32m15:43:14 - INFO -   Avg frame time: 55.2ms[0m
+[32m15:43:14 - INFO -   Detections: 1 objects[0m
+[32m15:43:14 - INFO -   Audio interval: 5.0s[0m
+[32m15:43:14 - INFO -   Closest object: person at 11.6m[0m
+[32m15:43:14 - INFO - ======================================================================[0m

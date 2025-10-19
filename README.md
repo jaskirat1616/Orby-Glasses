@@ -16,6 +16,7 @@ OrbyGlasses is an innovative, AI-powered navigation assistance system designed t
 - **AI-Powered Narratives**: Contextual navigation guidance using Ollama (Gemma 3 + Moondream vision models)
 - **Predictive Navigation**: Reinforcement learning (PPO) to learn user patterns and predict optimal paths
 - **Text-to-Speech**: Real-time audio feedback for obstacle alerts and navigation guidance
+- **Non-blocking Voice Input**: Voice commands work without impacting camera feed performance
 - **Privacy-First**: 100% local processing, no cloud dependencies
 
 ### Technical Highlights
@@ -83,6 +84,17 @@ python src/main.py
 ```
 
 Press `q` to stop the system.
+
+### 4. Voice Input Configuration (Optional)
+
+Voice input is enabled by default. You can customize it in `config/config.yaml`:
+
+```yaml
+conversation:
+  enabled: true                      # Enable conversational mode
+  voice_input: true                  # Enable microphone input
+  activation_phrase: "hey orby"      # Wake phrase to start conversation
+```
 
 ---
 
@@ -339,6 +351,10 @@ pip uninstall pyaudio
 pip install pyaudio
 ```
 
+### Voice Input and Camera Performance
+
+In previous versions, enabling voice input would cause the camera feed to hang due to blocking microphone operations. This issue has been fixed with non-blocking voice recognition using background threads, allowing both camera feed and voice input to operate simultaneously without performance impact.
+
 ---
 
 ## Roadmap
@@ -347,7 +363,7 @@ pip install pyaudio
 - [ ] Multi-user federated learning with Flower
 - [ ] GPS integration for outdoor navigation
 - [ ] Obstacle avoidance path planning
-- [ ] Voice command interface
+- [x] Voice command interface (implemented with non-blocking recognition)
 - [ ] Mobile app companion
 - [ ] Cloud-optional model updates
 
