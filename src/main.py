@@ -274,7 +274,10 @@ class OrbyGlasses:
                 current_time = time.time()
                 time_since_last = current_time - self.last_audio_time
 
-                if time_since_last > self.audio_interval:
+                # Only generate and queue new audio if:
+                # 1. Interval has passed AND
+                # 2. Not currently speaking (prevents cutoff)
+                if time_since_last > self.audio_interval and not self.audio_manager.is_speaking:
                     # Use Ollama-generated narrative if available
                     if guidance.get('combined'):
                         msg = guidance['combined']
@@ -288,12 +291,15 @@ class OrbyGlasses:
                         msg = "Path clear"
                         self.logger.info(f"🔊 Audio output: \"{msg}\"")
 
-                    # Speak message (will skip if already speaking)
-                    self.audio_manager.speak(msg)
+                    # Speak message
+                    self.audio_manager.speak(msg, priority=False)
 
-                    # Update timer
+                    # Update timer ONLY after queuing (not when speaking starts)
                     self.last_audio_time = current_time
-                    self.logger.debug(f"Next audio update in {self.audio_interval:.1f}s (last was {time_since_last:.1f}s ago)")
+                    self.logger.info(f"⏰ Next audio in {self.audio_interval:.1f}s (last: {time_since_last:.1f}s ago)")
+                elif time_since_last > self.audio_interval and self.audio_manager.is_speaking:
+                    # Ready to speak but still speaking previous message
+                    self.logger.debug(f"⏸ Audio ready but waiting for current speech to finish...")
 
                 # Display
                 if display:

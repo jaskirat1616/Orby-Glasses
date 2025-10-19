@@ -70,7 +70,7 @@ logging:
 
 # Performance Tuning
 performance:
-  audio_update_interval: 3.0  # Seconds between audio updates (gives time to finish speaking)
+  audio_update_interval: 5.0  # Seconds between audio updates (ensures sentences complete)
   stats_interval: 100         # Log stats every N frames
   max_detections: 5           # Maximum detections to process per frame
   depth_skip_frames: 3        # Calculate depth every Nth frame (3 = every 4th frame)
