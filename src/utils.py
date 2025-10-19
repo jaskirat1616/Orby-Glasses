@@ -68,7 +68,7 @@ class ConfigManager:
 class Logger:
     """Custom logger with color output and file logging."""
 
-    def __init__(self, name: str = "OrbyGlasses", log_file: str = "data/logs/orbyglass.log"):
+    def __init__(self, name: str = "OrbyGlasses", log_file: str = None):
         self.logger = logging.getLogger(name)
         self.logger.setLevel(logging.INFO)
 
@@ -77,9 +77,6 @@ class Logger:
 
         # Prevent propagation to root logger (stops duplicate messages)
         self.logger.propagate = False
-
-        # Create logs directory if it doesn't exist
-        os.makedirs(os.path.dirname(log_file), exist_ok=True)
 
         # Console handler with colors
         console_handler = logging.StreamHandler()
@@ -97,17 +94,19 @@ class Logger:
         )
         console_handler.setFormatter(console_formatter)
 
-        # File handler
-        file_handler = logging.FileHandler(log_file)
-        file_handler.setLevel(logging.DEBUG)
-        file_formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
-        file_handler.setFormatter(file_formatter)
-
-        # Add handlers
+        # Add console handler
         self.logger.addHandler(console_handler)
-        self.logger.addHandler(file_handler)
+
+        # Optionally add file handler (disabled by default to reduce clutter)
+        if log_file:
+            os.makedirs(os.path.dirname(log_file), exist_ok=True)
+            file_handler = logging.FileHandler(log_file)
+            file_handler.setLevel(logging.DEBUG)
+            file_formatter = logging.Formatter(
+                '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+            )
+            file_handler.setFormatter(file_formatter)
+            self.logger.addHandler(file_handler)
 
     def info(self, message: str):
         self.logger.info(message)
@@ -130,36 +129,51 @@ class AudioManager:
 
     def __init__(self, config: ConfigManager):
         self.config = config
-        self.tts_engine = pyttsx3.init()
-        self.tts_engine.setProperty('rate', config.get('audio.tts_rate', 175))
-        self.tts_engine.setProperty('volume', config.get('audio.tts_volume', 1.0))
+
+        # Initialize TTS engine
+        try:
+            self.tts_engine = pyttsx3.init()
+            rate = config.get('audio.tts_rate', 180)
+            volume = config.get('audio.tts_volume', 0.9)
+            self.tts_engine.setProperty('rate', rate)
+            self.tts_engine.setProperty('volume', volume)
+            print(f"✓ TTS initialized: {rate} WPM, volume {volume}")
+        except Exception as e:
+            print(f"✗ TTS initialization error: {e}")
+            raise
 
         # Thread-safe queue for audio messages
         self.tts_queue = queue.Queue()
         self.is_speaking = False
         self.tts_thread = threading.Thread(target=self._tts_worker, daemon=True)
         self.tts_thread.start()
+        print("✓ TTS worker thread started")
 
     def _tts_worker(self):
         """Worker thread for TTS to avoid blocking."""
+        print("TTS worker thread running...")
         while True:
             try:
                 text = self.tts_queue.get(timeout=1)
                 if text:
                     self.is_speaking = True
                     word_count = len(text.split())
-                    logging.info(f"🎤 Speaking now ({word_count} words)...")
+                    print(f"🎤 Speaking now ({word_count} words): {text[:60]}...")
 
-                    self.tts_engine.say(text)
-                    self.tts_engine.runAndWait()
+                    try:
+                        self.tts_engine.say(text)
+                        self.tts_engine.runAndWait()
+                        print(f"✓ Speech completed ({word_count} words)")
+                    except Exception as speak_error:
+                        print(f"✗ TTS speak error: {speak_error}")
+                    finally:
+                        self.is_speaking = False
 
-                    self.is_speaking = False
-                    logging.info(f"✓ Speech completed ({word_count} words)")
                 self.tts_queue.task_done()
             except queue.Empty:
                 continue
             except Exception as e:
-                logging.error(f"TTS error: {e}")
+                print(f"✗ TTS worker error: {e}")
                 self.is_speaking = False
 
     def speak(self, text: str, priority: bool = False):
@@ -178,12 +192,12 @@ class AudioManager:
                 except queue.Empty:
                     break
             self.tts_queue.put(text)
-            logging.info(f"🔊 Priority audio queued: {text[:60]}...")
+            print(f"🔊 Priority audio queued: {text[:60]}...")
         else:
             # For non-priority messages, don't queue if already speaking
             # This is now handled by the caller, but double-check here
             if self.is_speaking:
-                logging.warning(f"⚠️ Attempted to queue while speaking (should be prevented by caller)")
+                print(f"⚠️ Attempted to queue while speaking (should be prevented by caller)")
                 return
 
             # Clear queue to only speak latest message
@@ -194,7 +208,7 @@ class AudioManager:
                     break
 
             self.tts_queue.put(text)
-            logging.info(f"🔊 Audio queued ({len(text.split())} words): {text[:60]}...")
+            print(f"🔊 Audio queued ({len(text.split())} words): {text[:60]}...")
 
     def play_sound(self, audio_data: np.ndarray, sample_rate: int = 16000):
         """

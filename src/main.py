@@ -43,8 +43,8 @@ class OrbyGlasses:
         # Load configuration
         self.config = ConfigManager(config_path)
 
-        # Initialize logger
-        self.logger = Logger(log_file=self.config.get('logging.log_file', 'data/logs/orbyglass.log'))
+        # Initialize logger (console only, no file logging to reduce clutter)
+        self.logger = Logger(log_file=None)
         self.logger.info("=" * 50)
         self.logger.info("OrbyGlasses - Bio-Mimetic Navigation System")
         self.logger.info("=" * 50)
