@@ -78,7 +78,8 @@ class OrbyGlasses:
         self.frame_count = 0
         self.last_audio_time = 0
         self.audio_interval = self.config.get('performance.audio_update_interval', 5.0)
-        self.skip_depth_frames = 2  # Skip depth on N out of N+1 frames for speed
+        self.skip_depth_frames = 3  # Process depth every 4th frame for speed
+        self.last_depth_map = None  # Cache last depth map
 
         self.logger.info("Initialization complete!")
 
@@ -128,10 +129,31 @@ class OrbyGlasses:
         # Start timer
         self.perf_monitor.start_timer('total')
 
-        # Detection and depth
+        # Detection - always run
         self.perf_monitor.start_timer('detection')
-        detections, depth_map = self.detection_pipeline.process_frame(frame)
+        detections = self.detection_pipeline.detector.detect(frame)
         det_time = self.perf_monitor.stop_timer('detection')
+
+        # Depth estimation - run every Nth frame to save performance
+        self.perf_monitor.start_timer('depth')
+        if self.frame_count % (self.skip_depth_frames + 1) == 0:
+            depth_map = self.detection_pipeline.depth_estimator.estimate_depth(frame)
+            self.last_depth_map = depth_map
+        else:
+            depth_map = self.last_depth_map
+        depth_time = self.perf_monitor.stop_timer('depth')
+
+        # Add depth to detections
+        if depth_map is not None:
+            for detection in detections:
+                bbox = detection['bbox']
+                depth = self.detection_pipeline.depth_estimator.get_depth_at_bbox(depth_map, bbox)
+                detection['depth'] = depth
+                detection['is_danger'] = depth < self.detection_pipeline.min_safe_distance
+        else:
+            for detection in detections:
+                detection['depth'] = 0.0
+                detection['is_danger'] = False
 
         # Get navigation summary
         nav_summary = self.detection_pipeline.get_navigation_summary(detections)
@@ -141,9 +163,17 @@ class OrbyGlasses:
         path_plan = None  # Disabled
         pred_time = self.perf_monitor.stop_timer('prediction')
 
-        # Generate narrative guidance - ONLY on audio update frames
+        # Generate narrative guidance - Re-enabled for Ollama
         self.perf_monitor.start_timer('narrative')
-        guidance = {'narrative': '', 'predictive': '', 'combined': ''}  # Default empty
+        current_time = time.time()
+        if current_time - self.last_audio_time > self.audio_interval:
+            # Generate full guidance with Ollama
+            guidance = self.contextual_assistant.get_guidance(
+                detections, frame, nav_summary, path_plan
+            )
+        else:
+            # Skip narrative generation between audio updates
+            guidance = {'narrative': '', 'predictive': '', 'combined': ''}
         narr_time = self.perf_monitor.stop_timer('narrative')
 
         # Generate audio cues
@@ -163,9 +193,9 @@ class OrbyGlasses:
 
         cv2.putText(annotated_frame, f"FPS: {fps:.1f}", (10, 30),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        cv2.putText(annotated_frame, f"Det: {det_time:.0f}ms", (10, 60),
+        cv2.putText(annotated_frame, f"Det: {det_time:.0f}ms | Depth: {depth_time:.0f}ms", (10, 60),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        cv2.putText(annotated_frame, f"Narr: {narr_time:.0f}ms", (10, 85),
+        cv2.putText(annotated_frame, f"Narr: {narr_time:.0f}ms | Audio: {audio_time:.0f}ms", (10, 85),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         cv2.putText(annotated_frame, f"Total: {total_time:.0f}ms", (10, 110),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
@@ -173,7 +203,7 @@ class OrbyGlasses:
         # Log frame time
         self.perf_monitor.log_frame_time(total_time)
 
-        return annotated_frame, detections, guidance, audio_signal, audio_message
+        return annotated_frame, detections, guidance, audio_signal, audio_message, depth_map
 
     def run(self, display: bool = True, save_video: bool = False):
         """
@@ -216,20 +246,23 @@ class OrbyGlasses:
                 self.frame_count += 1
 
                 # Process frame
-                annotated_frame, detections, guidance, audio_signal, audio_message = \
+                annotated_frame, detections, guidance, audio_signal, audio_message, depth_map = \
                     self.process_frame(frame)
 
-                # Audio output (rate-limited)
+                # Audio output (rate-limited) - Use Ollama guidance
                 current_time = time.time()
                 if current_time - self.last_audio_time > self.audio_interval:
-                    # Generate simple audio message from detections
-                    if len(detections) > 0:
+                    # Use Ollama-generated narrative if available
+                    if guidance.get('combined'):
+                        msg = guidance['combined']
+                    elif len(detections) > 0:
+                        # Fallback to simple message if Ollama fails
                         closest = min(detections, key=lambda x: x.get('depth', 10))
                         msg = f"{len(detections)} objects. Closest: {closest['label']} at {closest['depth']:.1f} meters"
                     else:
                         msg = "Path clear"
 
-                    # Speak simple message
+                    # Speak message
                     self.audio_manager.speak(msg)
 
                     self.last_audio_time = current_time
@@ -250,6 +283,15 @@ class OrbyGlasses:
                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
                     cv2.imshow('OrbyGlasses', annotated_frame)
+
+                    # Show depth map in separate window (only when freshly calculated)
+                    if depth_map is not None and self.frame_count % (self.skip_depth_frames + 1) == 0:
+                        # Convert depth map to colormap for visualization
+                        depth_colored = cv2.applyColorMap(
+                            (depth_map * 255).astype(np.uint8),
+                            cv2.COLORMAP_MAGMA
+                        )
+                        cv2.imshow('Depth Map', depth_colored)
 
                 # Save video
                 if video_writer:
