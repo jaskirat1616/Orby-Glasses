@@ -403,25 +403,13 @@ class OrbyGlasses:
                 if depth_map is not None:
                     self.mapper_3d.update(frame, depth_map, detections)
 
-                # Conversational Navigation - Check for activation
-                current_time = time.time()
+                # Conversational Navigation - Check for activation (non-blocking)
                 if self.conversation_enabled and self.conversation_manager:
                     # Update conversation context
                     nav_summary = self.detection_pipeline.get_navigation_summary(detections)
                     self.conversation_manager.update_scene_context(detections, nav_summary)
 
-                    # Check for activation phrase periodically
-                    if (current_time - self.last_conversation_check) > self.conversation_check_interval:
-                        self.last_conversation_check = current_time
-
-                        # Only listen if voice input is actually enabled
-                        if self.conversation_manager.voice_input:
-                            # Start listening for activation with longer timeout (non-blocking)
-                            self.logger.info("🎤 Listening for wake phrase...")
-                            # This starts the non-blocking listening in the background
-                            self.conversation_manager.listen_for_activation(timeout=2.0)
-
-                    # Check if activation was detected (non-blocking check)
+                    # Check if activation was detected (completely non-blocking queue check)
                     activation_result = self.conversation_manager.check_activation_result()
                     if activation_result:
                         self.logger.info("💬 Conversation activated!")
@@ -571,6 +559,10 @@ class OrbyGlasses:
     def cleanup(self, video_writer=None):
         """Clean up resources."""
         self.logger.info("Shutting down...")
+
+        # Stop conversation manager (background voice listener)
+        if self.conversation_manager:
+            self.conversation_manager.stop()
 
         # Stop 3D mapper
         self.mapper_3d.stop()

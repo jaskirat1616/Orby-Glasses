@@ -94,6 +94,11 @@ class ConversationManager:
         self.listening_result = None
         self.listening_error = None
 
+        # Start persistent background listener
+        self.stop_listening = False
+        if self.voice_input:
+            self._start_background_listener()
+
         # Social Navigation AI
         self.social_navigation = None
         if SOCIAL_NAVIGATION_AVAILABLE:
@@ -123,6 +128,56 @@ class ConversationManager:
         except Exception as e:
             logging.error(f"Failed to calibrate microphone: {e}")
             self.voice_input = False
+
+    def _start_background_listener(self):
+        """
+        Start a persistent background thread that continuously listens for activation.
+        This prevents blocking the main thread and avoids creating new threads repeatedly.
+        """
+        def background_listen_worker():
+            """Continuously listen in background without blocking."""
+            logging.info("Starting persistent background voice listener...")
+
+            while not self.stop_listening:
+                try:
+                    with self.microphone as source:
+                        # Very short timeout to avoid blocking
+                        audio = self.recognizer.listen(source, timeout=0.5, phrase_time_limit=2)
+
+                    # Recognize speech in background
+                    try:
+                        text = self.recognizer.recognize_google(audio).lower()
+
+                        # Check for activation phrase
+                        if self.activation_phrase in text:
+                            logging.info(f"✓ Activation detected: '{text}'")
+                            # Clear old results and add new one
+                            while not self.activation_queue.empty():
+                                try:
+                                    self.activation_queue.get_nowait()
+                                except:
+                                    break
+                            self.activation_queue.put(True)
+                    except sr.UnknownValueError:
+                        # Couldn't understand - ignore
+                        pass
+                    except sr.RequestError as e:
+                        logging.error(f"Speech recognition error: {e}")
+                        time.sleep(1)  # Wait before retry
+
+                except sr.WaitTimeoutError:
+                    # No speech - normal, continue listening
+                    pass
+                except Exception as e:
+                    logging.debug(f"Background listener error: {e}")
+                    time.sleep(0.1)  # Brief pause before retry
+
+            logging.info("Background voice listener stopped")
+
+        # Start daemon thread that dies when main program exits
+        self.listening_thread = threading.Thread(target=background_listen_worker, daemon=True)
+        self.listening_thread.start()
+        logging.info("✓ Background voice listener started")
 
     def listen_for_activation(self, timeout: float = 1.0) -> bool:
         """
@@ -557,6 +612,14 @@ Respond naturally and helpfully."""
             'voice_enabled': self.voice_input,
             'history_length': len(self.conversation_history)
         }
+
+    def stop(self):
+        """Stop the conversation manager and background listener."""
+        self.stop_listening = True
+        if self.listening_thread and self.listening_thread.is_alive():
+            logging.info("Stopping background voice listener...")
+            # Give thread time to exit gracefully
+            self.listening_thread.join(timeout=1.0)
 
     def handle_conversation_interaction(self, scene_context: Dict = None) -> Optional[str]:
         """
