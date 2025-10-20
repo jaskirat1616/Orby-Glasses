@@ -72,6 +72,9 @@ class OrbyGlasses:
         self.conversation_enabled = self.config.get('conversation.enabled', False)
         if self.conversation_enabled:
             self.conversation_manager = ConversationManager(self.config, self.audio_manager)
+            # Connect indoor navigator to conversation system for location features
+            if hasattr(self, 'indoor_navigator') and self.indoor_navigator:
+                self.conversation_manager.indoor_navigator = self.indoor_navigator
             if self.conversation_manager.voice_input:
                 activation = self.config.get('conversation.activation_phrase', 'hello')
                 self.logger.info(f"✓ Conversational navigation enabled (wake phrase: '{activation}')")
@@ -439,6 +442,11 @@ class OrbyGlasses:
                 if depth_map is not None:
                     self.mapper_3d.update(frame, depth_map, detections)
 
+                # Get indoor navigation guidance if available
+                indoor_guidance = None
+                if hasattr(self, 'indoor_navigator') and self.indoor_navigator:
+                    indoor_guidance = self.indoor_navigator.get_navigation_guidance()
+
                 # Conversational Navigation - Check for activation (non-blocking)
                 if self.conversation_enabled and self.conversation_manager:
                     # Update conversation context
@@ -455,6 +463,9 @@ class OrbyGlasses:
                             'obstacles': nav_summary.get('danger_objects', []),
                             'path_clear': nav_summary.get('path_clear', True)
                         }
+                        # Add SLAM position if available for location saving
+                        if slam_result:
+                            scene_context['slam_position'] = np.array(slam_result['position'])
                         self.conversation_manager.handle_conversation_interaction(scene_context)
 
                 # Smart Audio System - Priority-based alerts
@@ -495,7 +506,11 @@ class OrbyGlasses:
                         self.logger.error(f"🚨 DANGER ALERT: \"{msg}\"")
                         self.audio_manager.speak(msg, priority=True)
 
-                    # Use Ollama-generated narrative for normal navigation
+                    # Use indoor navigation guidance if available, otherwise use Ollama-generated narrative
+                    elif indoor_guidance:
+                        msg = indoor_guidance
+                        self.logger.info(f"🔊 Indoor Navigation: \"{msg}\"")
+                        self.audio_manager.speak(msg, priority=False)
                     elif guidance.get('combined'):
                         msg = guidance['combined']
                         self.logger.info(f"🔊 Audio: \"{msg}\"")

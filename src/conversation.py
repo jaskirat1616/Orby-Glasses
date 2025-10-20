@@ -5,6 +5,7 @@ Natural language conversation for goal-oriented navigation with voice input/outp
 
 import logging
 import ollama
+import numpy as np
 from typing import Optional, Dict, List
 import time
 import json
@@ -45,6 +46,9 @@ class ConversationManager:
         """
         self.config = config
         self.tts = tts_system
+
+        # Reference to indoor navigator (to be set later by main system)
+        self.indoor_navigator = None
 
         # Conversation settings
         self.enabled = config.get('conversation.enabled', True)
@@ -364,6 +368,25 @@ class ConversationManager:
         if scene_context:
             self.context.update(scene_context)
 
+        # Check if this is a location command (save location or navigate to location)
+        slam_position = scene_context.get('slam_position') if scene_context else None
+        location_response = self._handle_location_commands(user_input, slam_position)
+        if location_response:
+            # Add to conversation history
+            self.conversation_history.append({
+                'role': 'user',
+                'content': user_input,
+                'timestamp': datetime.now().isoformat()
+            })
+            
+            self.conversation_history.append({
+                'role': 'assistant',
+                'content': location_response,
+                'timestamp': datetime.now().isoformat()
+            })
+            
+            return location_response
+
         # Check if this is a social navigation query
         social_nav_response = self._handle_social_navigation_query(user_input, scene_context)
         if social_nav_response:
@@ -490,6 +513,77 @@ class ConversationManager:
                 detections = scene_context['detected_objects']
                 social_guidance = self.social_navigation.get_social_navigation_guidance(detections, user_input)
                 return social_guidance
+        
+        return None
+
+    def _handle_location_commands(self, user_input: str, slam_position: np.ndarray = None) -> Optional[str]:
+        """
+        Handle location-related commands like saving locations or navigating to them.
+        
+        Args:
+            user_input: User's message
+            slam_position: Current SLAM position if available
+            
+        Returns:
+            Response string if it's a location command, None otherwise
+        """
+        user_lower = user_input.lower().strip()
+        
+        # Check for saving a location command
+        save_patterns = [
+            'remember this as',
+            'save this as',
+            'save location as',
+            'remember as',
+            'name this place'
+        ]
+        
+        for pattern in save_patterns:
+            if pattern in user_lower:
+                # Extract location name
+                parts = user_lower.split(pattern)
+                if len(parts) > 1 and hasattr(self, 'indoor_navigator') and self.indoor_navigator:
+                    location_name = parts[1].strip().split()[0]  # Get first word after the pattern
+                    if location_name and len(location_name) > 1:
+                        if self.indoor_navigator:
+                            self.indoor_navigator.save_location(location_name, slam_position)
+                            response = f"Saved this location as '{location_name}'. You can navigate here later."
+                            logging.info(f"Saved location: {location_name} at position {slam_position}")
+                            return response
+                        else:
+                            return "Sorry, indoor navigation is not available right now."
+                
+        # Check for navigating to a location command
+        navigate_patterns = [
+            'take me to',
+            'go to',
+            'navigate to',
+            'get to',
+            'find the',
+            'find my way to'
+        ]
+        
+        if self.indoor_navigator:
+            saved_locations = self.indoor_navigator.get_saved_locations()
+            if saved_locations:
+                for pattern in navigate_patterns:
+                    if pattern in user_lower:
+                        # Extract potential location name
+                        parts = user_lower.split(pattern)
+                        if len(parts) > 1:
+                            potential_location = parts[1].strip().split()[0]  # Get first word after pattern
+                            
+                            # Check if the location exists in saved locations
+                            for saved_name in saved_locations.keys():
+                                if potential_location.lower() in saved_name.lower() or saved_name.lower() in potential_location.lower():
+                                    # Set the goal to navigate to the location
+                                    success = self.indoor_navigator.set_goal(saved_name)
+                                    if success:
+                                        response = f"Setting navigation goal to {saved_name}. Following path now."
+                                        logging.info(f"Set navigation goal to: {saved_name}")
+                                        return response
+                                    else:
+                                        return f"Sorry, I couldn't plan a path to {saved_name}."
         
         return None
 
