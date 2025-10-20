@@ -36,7 +36,7 @@ conversation:
   model: "gemma3:4b"                 # LLM model for conversations
   temperature: 0.7                   # Response creativity (0-1)
   max_tokens: 200                    # Maximum response length
-  voice_input: true                  # Enable voice input (requires microphone)
+  voice_input: false                  # Enable voice input (requires microphone)
   activation_phrase: "hey orby"      # Wake phrase to start conversation
   check_interval: 1.0                # How often to check for activation (seconds)
 
@@ -113,14 +113,14 @@ mapping3d:
 
 # SLAM Settings (Visual Simultaneous Localization and Mapping)
 slam:
-  enabled: false                  # Enable SLAM for indoor navigation (EXPERIMENTAL - set to true to test)
+  enabled: true                   # Enable SLAM for indoor navigation (EXPERIMENTAL)
   grid_size: [200, 200]           # Occupancy grid size (width, height) in cells
   grid_resolution: 0.1            # Grid cell size in meters (0.1m = 10cm per cell)
   save_maps: true                 # Save maps for later reuse
-  visualize: false                # Show SLAM visualization window
+  visualize: true                 # Show SLAM visualization window
 
 # Indoor Navigation Settings
 indoor_navigation:
-  enabled: false                  # Enable goal-oriented indoor navigation (requires SLAM)
+  enabled: true                   # Enable goal-oriented indoor navigation (requires SLAM)
   path_planning: true             # Enable A* path planning
   save_locations: true            # Remember named locations

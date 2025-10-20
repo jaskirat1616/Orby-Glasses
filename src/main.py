@@ -25,6 +25,8 @@ from narrative import ContextualAssistant
 from prediction import PathPlanner
 from mapping3d import Mapper3D
 from conversation import ConversationManager
+from slam import MonocularSLAM
+from indoor_navigation import IndoorNavigator
 
 
 class OrbyGlasses:
@@ -80,6 +82,22 @@ class OrbyGlasses:
 
         # 3D Mapping
         self.mapper_3d = Mapper3D(self.config)
+
+        # SLAM and Indoor Navigation
+        self.slam_enabled = self.config.get('slam.enabled', False)
+        if self.slam_enabled:
+            self.logger.info("Initializing SLAM system...")
+            self.slam = MonocularSLAM(self.config)
+            self.indoor_nav_enabled = self.config.get('indoor_navigation.enabled', False)
+            if self.indoor_nav_enabled:
+                self.indoor_navigator = IndoorNavigator(self.slam, self.config)
+                self.logger.info("✓ SLAM and Indoor Navigation enabled")
+            else:
+                self.indoor_navigator = None
+                self.logger.info("✓ SLAM enabled (indoor navigation disabled)")
+        else:
+            self.slam = None
+            self.indoor_navigator = None
 
         # Data logging
         self.data_logger = DataLogger()
@@ -186,6 +204,17 @@ class OrbyGlasses:
         # Get navigation summary
         nav_summary = self.detection_pipeline.get_navigation_summary(detections)
 
+        # SLAM tracking (if enabled)
+        slam_result = None
+        if self.slam_enabled and self.slam is not None:
+            self.perf_monitor.start_timer('slam')
+            slam_result = self.slam.process_frame(frame)
+            slam_time = self.perf_monitor.stop_timer('slam')
+
+            # Update indoor navigator if enabled
+            if self.indoor_nav_enabled and self.indoor_navigator is not None:
+                self.indoor_navigator.update(slam_result, detections)
+
         # Path planning (RL prediction) - DISABLED for speed
         self.perf_monitor.start_timer('prediction')
         path_plan = None  # Disabled
@@ -267,10 +296,22 @@ class OrbyGlasses:
         cv2.putText(annotated_frame, status_text, (10, 120),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, status_color, 2)
 
+        # Add SLAM info if enabled
+        if slam_result is not None:
+            position = slam_result['position']
+            quality = slam_result['tracking_quality']
+
+            # SLAM status overlay
+            slam_color = (0, 255, 0) if quality > 0.7 else (0, 165, 255) if quality > 0.4 else (0, 0, 255)
+            cv2.putText(annotated_frame, f"SLAM: ({position[0]:.1f}, {position[1]:.1f}, {position[2]:.1f})",
+                       (10, 145), cv2.FONT_HERSHEY_SIMPLEX, 0.4, slam_color, 1)
+            cv2.putText(annotated_frame, f"Quality: {quality:.2f} | Points: {slam_result['num_map_points']}",
+                       (10, 165), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1)
+
         # Log frame time
         self.perf_monitor.log_frame_time(total_time)
 
-        return annotated_frame, detections, guidance, audio_signal, audio_message, depth_map
+        return annotated_frame, detections, guidance, audio_signal, audio_message, depth_map, slam_result
 
     def run(self, display: bool = True, save_video: bool = False):
         """
@@ -306,6 +347,10 @@ class OrbyGlasses:
         self.logger.info(f"Target FPS: {self.config.get('camera.fps', 30)}")
         self.logger.info(f"Audio update interval: {self.audio_interval}s")
         self.logger.info(f"Depth calculation: Every {self.skip_depth_frames + 1} frames")
+        if self.slam_enabled:
+            self.logger.info(f"🗺️  SLAM enabled - Indoor navigation active")
+            if self.config.get('slam.visualize', False):
+                self.logger.info(f"   SLAM visualization window will appear")
         if self.conversation_enabled:
             activation = self.config.get('conversation.activation_phrase', 'hey glasses')
             self.logger.info(f"💬 Conversational mode: Say '{activation}' to start")
@@ -324,8 +369,8 @@ class OrbyGlasses:
                 self.frame_count += 1
 
                 # Process frame
-                annotated_frame, detections, guidance, audio_signal, audio_message, depth_map = \
-                    self.process_frame(frame)
+                result = self.process_frame(frame)
+                annotated_frame, detections, guidance, audio_signal, audio_message, depth_map, slam_result = result
 
                 # Play adaptive audio beaconing (if available and not speaking)
                 # Play beacons with higher priority, separate from voice guidance
@@ -477,6 +522,12 @@ class OrbyGlasses:
                         # Resize depth map to smaller size for display
                         depth_display = cv2.resize(depth_colored, (256, 256))
                         cv2.imshow('Depth Map', depth_display)
+
+                    # Show SLAM visualization if enabled
+                    if slam_result is not None and self.config.get('slam.visualize', False):
+                        slam_vis = self.slam.visualize_tracking(frame, slam_result)
+                        slam_display = cv2.resize(slam_vis, (400, 400))
+                        cv2.imshow('SLAM Tracking', slam_display)
 
                 # Save video
                 if video_writer:
