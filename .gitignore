@@ -54,3 +54,18 @@ yolo12n.pt
 !models/yolo/.gitkeep
 !models/depth/.gitkeep
 !models/rl/.gitkeep
+
+# Logs
+logs/
+*.log
+data/logs/
+data/logs/*
+
+# Docs
+docs/
+*.md
+*.txt
+*.pdf
+
+data/maps/
+data/maps/*
