@@ -102,7 +102,7 @@ performance:
 
 # 3D Mapping Settings
 mapping3d:
-  enabled: false                   # Enable 3D real-time mapping visualization (set to true to enable)
+  enabled: true                   # Enable 3D real-time mapping visualization (set to true to enable)
   max_depth: 10.0                 # Maximum depth in meters to visualize
   voxel_size: 0.1                 # Voxel size for downsampling (larger = faster, less detail)
   subsample_step: 8               # Subsample every Nth point (higher = faster, less detail)
@@ -110,3 +110,17 @@ mapping3d:
   fx: 500                         # Camera focal length X (pixels)
   fy: 500                         # Camera focal length Y (pixels)
   skip_bbox: true                 # Skip bounding boxes for better performance
+
+# SLAM Settings (Visual Simultaneous Localization and Mapping)
+slam:
+  enabled: true                   # Enable SLAM for indoor navigation
+  grid_size: [200, 200]           # Occupancy grid size (width, height) in cells
+  grid_resolution: 0.1            # Grid cell size in meters (0.1m = 10cm per cell)
+  save_maps: true                 # Save maps for later reuse
+  visualize: true                 # Show SLAM visualization window
+
+# Indoor Navigation Settings
+indoor_navigation:
+  enabled: true                   # Enable goal-oriented indoor navigation
+  path_planning: true             # Enable A* path planning
+  save_locations: true            # Remember named locations
