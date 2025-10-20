@@ -102,7 +102,7 @@ performance:
 
 # 3D Mapping Settings
 mapping3d:
-  enabled: true                   # Enable 3D real-time mapping visualization (set to true to enable)
+  enabled: false                   # Enable 3D real-time mapping visualization (set to true to enable)
   max_depth: 10.0                 # Maximum depth in meters to visualize
   voxel_size: 0.1                 # Voxel size for downsampling (larger = faster, less detail)
   subsample_step: 8               # Subsample every Nth point (higher = faster, less detail)
@@ -124,3 +124,12 @@ indoor_navigation:
   enabled: true                   # Enable goal-oriented indoor navigation (requires SLAM)
   path_planning: true             # Enable A* path planning
   save_locations: true            # Remember named locations
+
+# Trajectory Prediction Settings (Graph Neural Network)
+trajectory_prediction:
+  enabled: false                  # Enable GNN-based trajectory prediction (EXPERIMENTAL)
+  max_history: 10                 # Number of historical positions to track
+  prediction_horizon: 3           # Number of future timesteps to predict
+  time_step: 0.5                  # Time between predictions (seconds)
+  visualize: false                # Show trajectory visualization
+  collision_warning: true         # Warn about predicted collisions

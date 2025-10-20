@@ -27,6 +27,7 @@ from mapping3d import Mapper3D
 from conversation import ConversationManager
 from slam import MonocularSLAM
 from indoor_navigation import IndoorNavigator
+from trajectory_prediction import TrajectoryPredictionSystem
 
 
 class OrbyGlasses:
@@ -98,6 +99,15 @@ class OrbyGlasses:
         else:
             self.slam = None
             self.indoor_navigator = None
+
+        # Trajectory Prediction (GNN)
+        self.trajectory_pred_enabled = self.config.get('trajectory_prediction.enabled', False)
+        if self.trajectory_pred_enabled:
+            self.logger.info("Initializing Trajectory Prediction (GNN)...")
+            self.trajectory_predictor = TrajectoryPredictionSystem(self.config)
+            self.logger.info("✓ Trajectory prediction enabled")
+        else:
+            self.trajectory_predictor = None
 
         # Data logging
         self.data_logger = DataLogger()
@@ -215,6 +225,13 @@ class OrbyGlasses:
             if self.indoor_nav_enabled and self.indoor_navigator is not None:
                 self.indoor_navigator.update(slam_result, detections)
 
+        # Trajectory Prediction (if enabled)
+        trajectory_result = None
+        if self.trajectory_pred_enabled and self.trajectory_predictor is not None:
+            self.perf_monitor.start_timer('trajectory')
+            trajectory_result = self.trajectory_predictor.update(detections)
+            traj_time = self.perf_monitor.stop_timer('trajectory')
+
         # Path planning (RL prediction) - DISABLED for speed
         self.perf_monitor.start_timer('prediction')
         path_plan = None  # Disabled
@@ -308,10 +325,29 @@ class OrbyGlasses:
             cv2.putText(annotated_frame, f"Quality: {quality:.2f} | Points: {slam_result['num_map_points']}",
                        (10, 165), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1)
 
+        # Add trajectory prediction info if enabled
+        if trajectory_result is not None:
+            tracked_count = len(trajectory_result['tracked_objects'])
+            predictions = trajectory_result['predictions']
+
+            # Count objects with predictions
+            predicted_count = len([p for p in predictions.values() if len(p['predicted_positions']) > 0])
+
+            cv2.putText(annotated_frame, f"Tracked: {tracked_count} | Predicted: {predicted_count}",
+                       (10, 185), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 255, 255), 1)
+
+            # Visualize trajectories if enabled
+            if self.config.get('trajectory_prediction.visualize', False):
+                annotated_frame = self.trajectory_predictor.visualize_predictions(
+                    annotated_frame,
+                    trajectory_result['tracked_objects'],
+                    trajectory_result['predictions']
+                )
+
         # Log frame time
         self.perf_monitor.log_frame_time(total_time)
 
-        return annotated_frame, detections, guidance, audio_signal, audio_message, depth_map, slam_result
+        return annotated_frame, detections, guidance, audio_signal, audio_message, depth_map, slam_result, trajectory_result
 
     def run(self, display: bool = True, save_video: bool = False):
         """
@@ -370,7 +406,7 @@ class OrbyGlasses:
 
                 # Process frame
                 result = self.process_frame(frame)
-                annotated_frame, detections, guidance, audio_signal, audio_message, depth_map, slam_result = result
+                annotated_frame, detections, guidance, audio_signal, audio_message, depth_map, slam_result, trajectory_result = result
 
                 # Play adaptive audio beaconing (if available and not speaking)
                 # Play beacons with higher priority, separate from voice guidance
