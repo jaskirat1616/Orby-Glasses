@@ -231,9 +231,13 @@ class MonocularSLAM:
 
         num_matches = len(good_matches)
 
+        # Initialize defaults
+        position = self.current_pose[:3, 3].tolist()
+        tracking_quality = 0.0
+
         if num_matches < self.min_matches:
             logging.warning(f"Lost tracking: only {num_matches} matches")
-            tracking_quality = 0.0
+            # Keep current position and low quality
         else:
             # Extract matched points
             pts_current = np.float32([keypoints[m.queryIdx].pt for m in good_matches])
