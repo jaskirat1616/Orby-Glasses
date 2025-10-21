@@ -463,18 +463,241 @@ class OccupancyGrid3D:
         # Apply colormap: blue = free, red = occupied, gray = unknown
         vis_colored = cv2.applyColorMap(vis_img, cv2.COLORMAP_JET)
 
-        # Resize for better visibility
-        vis_colored = cv2.resize(vis_colored, (400, 400), interpolation=cv2.INTER_NEAREST)
+        # Resize for better visibility with larger voxels
+        vis_colored = cv2.resize(vis_colored, (600, 600), interpolation=cv2.INTER_NEAREST)
 
-        # Add text overlay
+        # Add text overlay with larger font
         cv2.putText(vis_colored, f"Occupancy Grid @ z={z_height:.1f}m",
-                   (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                   (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         cv2.putText(vis_colored, f"Updates: {self.total_updates}",
-                   (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+                   (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
         cv2.putText(vis_colored, f"Occupied: {len(self.occupied_voxels)}",
-                   (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+                   (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+
+        # Add controls info
+        cv2.putText(vis_colored, "Mouse: Scroll to zoom",
+                   (10, vis_colored.shape[0] - 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        cv2.putText(vis_colored, "Keys: +/- zoom, arrows pan",
+                   (10, vis_colored.shape[0] - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
         return vis_colored
+
+    def visualize_3d_interactive(self, camera_position: Optional[np.ndarray] = None) -> np.ndarray:
+        """
+        Create interactive 3D visualization with larger voxels.
+
+        Args:
+            camera_position: Current camera position for highlighting
+
+        Returns:
+            Visualization image for display
+        """
+        # Create larger canvas
+        img_size = 800
+        canvas = np.zeros((img_size, img_size, 3), dtype=np.uint8)
+
+        # Get occupied and free voxels
+        occupied_voxels = []
+        free_voxels = []
+
+        for voxel_idx, log_odds in self.grid.items():
+            if log_odds > 0.5:
+                occupied_voxels.append(voxel_idx)
+            elif log_odds < -0.5:
+                free_voxels.append(voxel_idx)
+
+        if not occupied_voxels and not free_voxels:
+            # Draw empty grid message
+            cv2.putText(canvas, "No voxels observed yet",
+                       (img_size//2 - 150, img_size//2),
+                       cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
+            cv2.putText(canvas, "Move camera to build map",
+                       (img_size//2 - 180, img_size//2 + 40),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.8, (200, 200, 200), 2)
+            return canvas
+
+        # Rotation and scale parameters (can be adjusted)
+        if not hasattr(self, 'view_angle_x'):
+            self.view_angle_x = 30.0  # degrees
+            self.view_angle_z = 45.0  # degrees
+            self.view_scale = 20.0    # pixels per meter
+            self.view_offset_x = 0.0
+            self.view_offset_y = 0.0
+
+        # Project 3D voxels to 2D
+        def project_voxel(voxel_idx):
+            world_pos = self.voxel_to_world(voxel_idx)
+
+            # Apply rotation
+            angle_x = np.radians(self.view_angle_x)
+            angle_z = np.radians(self.view_angle_z)
+
+            # Rotate around Z axis
+            x_rot = world_pos[0] * np.cos(angle_z) - world_pos[1] * np.sin(angle_z)
+            y_rot = world_pos[0] * np.sin(angle_z) + world_pos[1] * np.cos(angle_z)
+            z_rot = world_pos[2]
+
+            # Rotate around X axis (tilt)
+            y_final = y_rot * np.cos(angle_x) - z_rot * np.sin(angle_x)
+            z_final = y_rot * np.sin(angle_x) + z_rot * np.cos(angle_x)
+
+            # Isometric projection
+            screen_x = int((x_rot + self.view_offset_x) * self.view_scale + img_size / 2)
+            screen_y = int((-y_final + self.view_offset_y) * self.view_scale + img_size / 2)
+
+            return screen_x, screen_y, z_final
+
+        # Draw free voxels (smaller, transparent)
+        for voxel_idx in free_voxels[:500]:  # Limit for performance
+            sx, sy, depth = project_voxel(voxel_idx)
+            if 0 <= sx < img_size and 0 <= sy < img_size:
+                voxel_size = max(2, int(self.view_scale * self.resolution * 0.3))
+                cv2.circle(canvas, (sx, sy), voxel_size, (50, 100, 50), -1)
+
+        # Draw occupied voxels (larger, brighter) - sorted by depth
+        voxel_depths = [(v, project_voxel(v)) for v in occupied_voxels]
+        voxel_depths.sort(key=lambda x: x[1][2])  # Sort by depth
+
+        for voxel_idx, (sx, sy, depth) in voxel_depths:
+            if 0 <= sx < img_size and 0 <= sy < img_size:
+                # Larger voxel size for better visibility
+                voxel_size = max(4, int(self.view_scale * self.resolution))
+
+                # Color based on probability
+                log_odds = self.grid.get(voxel_idx, 0.0)
+                prob = 1.0 / (1.0 + np.exp(-log_odds))
+
+                # Red gradient for occupied
+                color_intensity = int(prob * 255)
+                color = (50, 50, color_intensity)  # Blue to Red
+
+                # Draw voxel as rectangle for better visibility
+                cv2.rectangle(canvas,
+                            (sx - voxel_size, sy - voxel_size),
+                            (sx + voxel_size, sy + voxel_size),
+                            color, -1)
+
+                # Add border for clarity
+                cv2.rectangle(canvas,
+                            (sx - voxel_size, sy - voxel_size),
+                            (sx + voxel_size, sy + voxel_size),
+                            (255, 255, 255), 1)
+
+        # Draw camera position if provided
+        if camera_position is not None:
+            cam_voxel = self.world_to_voxel(camera_position)
+            sx, sy, _ = project_voxel(cam_voxel)
+            if 0 <= sx < img_size and 0 <= sy < img_size:
+                cv2.circle(canvas, (sx, sy), 8, (0, 255, 255), -1)
+                cv2.circle(canvas, (sx, sy), 10, (255, 255, 255), 2)
+                cv2.putText(canvas, "YOU", (sx + 15, sy),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+
+        # Add info overlay
+        overlay = canvas.copy()
+        cv2.rectangle(overlay, (10, 10), (350, 180), (0, 0, 0), -1)
+        cv2.addWeighted(overlay, 0.7, canvas, 0.3, 0, canvas)
+
+        # Info text
+        cv2.putText(canvas, "3D Occupancy Grid", (20, 35),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+        cv2.putText(canvas, f"Occupied: {len(occupied_voxels)}", (20, 65),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+        cv2.putText(canvas, f"Free: {len(free_voxels)}", (20, 90),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (50, 200, 50), 2)
+        cv2.putText(canvas, f"Resolution: {self.resolution*100:.0f}cm", (20, 115),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
+        cv2.putText(canvas, f"Zoom: {self.view_scale:.1f}x", (20, 140),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
+
+        # Controls
+        cv2.putText(canvas, "CONTROLS:", (20, 165),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
+
+        # Bottom controls
+        cv2.rectangle(canvas, (10, img_size - 110), (790, img_size - 10), (0, 0, 0), -1)
+        cv2.putText(canvas, "Mouse Wheel: Zoom In/Out", (20, img_size - 85),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+        cv2.putText(canvas, "Arrow Keys: Pan View", (20, img_size - 55),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+        cv2.putText(canvas, "R: Reset View   Q/E: Rotate Z   W/S: Rotate X", (20, img_size - 25),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+
+        return canvas
+
+    def update_view_controls(self, key: int) -> bool:
+        """
+        Update view parameters based on keyboard input.
+
+        Args:
+            key: OpenCV key code
+
+        Returns:
+            True if view was updated
+        """
+        updated = False
+
+        # Zoom
+        if key == ord('+') or key == ord('='):
+            self.view_scale *= 1.2
+            updated = True
+        elif key == ord('-') or key == ord('_'):
+            self.view_scale *= 0.8
+            updated = True
+
+        # Pan
+        elif key == 82:  # Up arrow
+            self.view_offset_y += 0.5
+            updated = True
+        elif key == 84:  # Down arrow
+            self.view_offset_y -= 0.5
+            updated = True
+        elif key == 81:  # Left arrow
+            self.view_offset_x -= 0.5
+            updated = True
+        elif key == 83:  # Right arrow
+            self.view_offset_x += 0.5
+            updated = True
+
+        # Rotate
+        elif key == ord('q') or key == ord('Q'):
+            self.view_angle_z -= 5.0
+            updated = True
+        elif key == ord('e') or key == ord('E'):
+            self.view_angle_z += 5.0
+            updated = True
+        elif key == ord('w') or key == ord('W'):
+            self.view_angle_x += 5.0
+            updated = True
+        elif key == ord('s') or key == ord('S'):
+            self.view_angle_x -= 5.0
+            updated = True
+
+        # Reset
+        elif key == ord('r') or key == ord('R'):
+            self.view_angle_x = 30.0
+            self.view_angle_z = 45.0
+            self.view_scale = 20.0
+            self.view_offset_x = 0.0
+            self.view_offset_y = 0.0
+            updated = True
+
+        return updated
+
+    def handle_mouse_wheel(self, delta: int):
+        """
+        Handle mouse wheel for zooming.
+
+        Args:
+            delta: Mouse wheel delta (positive = zoom in, negative = zoom out)
+        """
+        if delta > 0:
+            self.view_scale *= 1.1
+        else:
+            self.view_scale *= 0.9
+
+        # Clamp zoom
+        self.view_scale = np.clip(self.view_scale, 5.0, 100.0)
 
     def clear(self):
         """Clear the occupancy grid."""

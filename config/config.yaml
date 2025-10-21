@@ -147,4 +147,5 @@ occupancy_grid_3d:
   log_odds_max: 5.0               # Maximum log-odds value (clamping)
   subsample_step: 8               # Subsample depth map every Nth pixel (higher = faster)
   update_interval: 0.5            # Update grid every N seconds
-  visualize: true                 # Show occupancy grid visualization window
+  visualize: true                 # Show 3D occupancy grid visualization window
+  show_2d_slice: false            # Also show 2D slice in separate window

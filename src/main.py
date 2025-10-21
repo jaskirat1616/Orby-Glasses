@@ -150,6 +150,9 @@ class OrbyGlasses:
         self.danger_distance = self.config.get('safety.danger_distance', 1.0)
         self.caution_distance = self.config.get('safety.caution_distance', 2.5)
 
+        # Mouse wheel callback for occupancy grid
+        self.mouse_wheel_delta = 0
+
         self.logger.info("Initialization complete!")
 
     def initialize_camera(self) -> bool:
@@ -569,6 +572,17 @@ class OrbyGlasses:
                     display_frame = cv2.resize(annotated_frame, (500, 500))
                     cv2.imshow('OrbyGlasses', display_frame)
 
+                    # Setup mouse callback for occupancy grid window (first time only)
+                    if self.occupancy_grid_enabled and self.occupancy_grid is not None:
+                        if self.frame_count == 1:
+                            def mouse_callback(event, x, y, flags, param):
+                                if event == cv2.EVENT_MOUSEWHEEL:
+                                    if flags > 0:  # Scroll up
+                                        self.occupancy_grid.handle_mouse_wheel(1)
+                                    else:  # Scroll down
+                                        self.occupancy_grid.handle_mouse_wheel(-1)
+                            cv2.setMouseCallback('3D Occupancy Grid', mouse_callback)
+
                     # Show depth map in separate smaller window (only when freshly calculated)
                     if depth_map is not None and self.frame_count % (self.skip_depth_frames + 1) == 0:
                         # Convert depth map to colormap for visualization
@@ -589,16 +603,32 @@ class OrbyGlasses:
                     # Show 3D Occupancy Grid visualization if enabled
                     if self.occupancy_grid_enabled and self.occupancy_grid is not None:
                         if self.config.get('occupancy_grid_3d.visualize', True):
-                            occ_vis = self.occupancy_grid.visualize_2d_slice(z_height=1.5)
-                            cv2.imshow('3D Occupancy Grid', occ_vis)
+                            # Get camera position from SLAM if available
+                            camera_pos = None
+                            if slam_result is not None:
+                                camera_pos = np.array(slam_result['position'])
+
+                            # Show interactive 3D view
+                            occ_vis_3d = self.occupancy_grid.visualize_3d_interactive(camera_pos)
+                            cv2.imshow('3D Occupancy Grid', occ_vis_3d)
+
+                            # Also show 2D slice in separate window
+                            if self.config.get('occupancy_grid_3d.show_2d_slice', False):
+                                occ_vis_2d = self.occupancy_grid.visualize_2d_slice(z_height=1.5)
+                                cv2.imshow('2D Occupancy Slice', occ_vis_2d)
 
                 # Save video
                 if video_writer:
                     video_writer.write(annotated_frame)
 
-                # Check for quit
+                # Check for quit and handle keyboard controls
                 key = cv2.waitKey(1) & 0xFF
                 emergency_key = self.config.get('safety.emergency_stop_key', 'q')
+
+                # Handle occupancy grid controls
+                if self.occupancy_grid_enabled and self.occupancy_grid is not None:
+                    if self.occupancy_grid.update_view_controls(key):
+                        pass  # View updated, will refresh on next frame
 
                 if key == ord(emergency_key):
                     self.logger.info("Emergency stop activated")
