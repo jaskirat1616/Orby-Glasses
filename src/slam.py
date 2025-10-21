@@ -1145,48 +1145,4 @@ class MonocularSLAM:
                 x, y = int(kp.pt[0]), int(kp.pt[1])
                 cv2.circle(vis_frame, (x, y), 2, (0, 255, 0), -1)
 
-        # Draw tracking info with enhanced details
-        h, w = frame.shape[:2]
-
-        # Background overlay for text
-        overlay = vis_frame.copy()
-        cv2.rectangle(overlay, (5, h - 150), (350, h - 5), (0, 0, 0), -1)
-        cv2.addWeighted(overlay, 0.7, vis_frame, 0.3, 0, vis_frame)
-
-        # Extract information
-        position = tracking_result.get('position', [0,0,0])
-        quality = tracking_result.get('tracking_quality', 0.0)
-        relative_movement = tracking_result.get('relative_movement', [0]*6)
-
-        # Ensure all values are finite before displaying
-        pos_str = f"Pos: ({position[0]:.2f}, {position[1]:.2f}, {position[2]:.2f})" if all(np.isfinite(p) for p in position) else "Pos: (n/a)"
-        quality_str = f"Quality: {quality:.2f}" if np.isfinite(quality) else "Quality: (n/a)"
-        
-        dx, dy, dz = relative_movement[0], relative_movement[1], relative_movement[2]
-        drx, dry, drz = relative_movement[3], relative_movement[4], relative_movement[5]
-
-        mov_str = f"Δ: ({dx:.3f}, {dy:.3f}, {dz:.3f})m" if all(np.isfinite(m) for m in [dx,dy,dz]) else "Δ: (n/a)"
-        rot_str = f"R: ({np.degrees(drx):.1f}, {np.degrees(dry):.1f}, {np.degrees(drz):.1f})°" if all(np.isfinite(r) for r in [drx,dry,drz]) else "R: (n/a)"
-
-        # Display position
-        cv2.putText(vis_frame, pos_str, (10, h - 125), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
-
-        # Tracking quality with color coding
-        quality_color = (0, 255, 0) if quality > 0.7 else (0, 165, 255) if quality > 0.4 else (0, 0, 255)
-        cv2.putText(vis_frame, quality_str, (10, h - 105), cv2.FONT_HERSHEY_SIMPLEX, 0.4, quality_color, 1)
-
-        # Movement information
-        cv2.putText(vis_frame, mov_str, (10, h - 85), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 200, 0), 1)
-        cv2.putText(vis_frame, rot_str, (10, h - 65), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 200, 0), 1)
-
-        # Feature information
-        num_matches = tracking_result.get('num_matches', 0)
-        num_map_points = tracking_result.get('num_map_points', 0)
-        cv2.putText(vis_frame, f"Matches: {num_matches}", (10, h - 45), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
-        cv2.putText(vis_frame, f"Map Points: {num_map_points}", (10, h - 25), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
-
-        # Keyframe indicator
-        if tracking_result.get('is_keyframe', False):
-            cv2.putText(vis_frame, "KEYFRAME", (w - 130, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
-
         return vis_frame

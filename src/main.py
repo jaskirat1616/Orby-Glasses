@@ -214,7 +214,7 @@ class OrbyGlasses:
             self.logger.error(f"Camera initialization error: {e}")
             return False
 
-    def process_frame(self, frame: np.ndarray) -> tuple:
+    def process_frame(self, frame: np.ndarray) -> Optional[tuple]:
         """
         Process a single frame through the entire pipeline.
 
@@ -224,209 +224,268 @@ class OrbyGlasses:
         Returns:
             Tuple of (annotated_frame, detections, guidance)
         """
-        # Start timer
-        self.perf_monitor.start_timer('total')
+        try:
+            # Start timer
+            self.perf_monitor.start_timer('total')
 
-        # Detection - always run
-        self.perf_monitor.start_timer('detection')
-        detections = self.detection_pipeline.detector.detect(frame)
-        det_time = self.perf_monitor.stop_timer('detection')
+            # Detection - always run
+            self.perf_monitor.start_timer('detection')
+            detections = self.detection_pipeline.detector.detect(frame)
+            det_time = self.perf_monitor.stop_timer('detection')
 
-        # Depth estimation - run every Nth frame to save performance
-        self.perf_monitor.start_timer('depth')
-        if self.frame_count % (self.skip_depth_frames + 1) == 0:
-            depth_map = self.detection_pipeline.depth_estimator.estimate_depth(frame)
-            self.last_depth_map = depth_map
-        else:
-            depth_map = self.last_depth_map
-        depth_time = self.perf_monitor.stop_timer('depth')
-
-        # Add depth to detections
-        if depth_map is not None:
-            for detection in detections:
-                bbox = detection['bbox']
-                depth = self.detection_pipeline.depth_estimator.get_depth_at_bbox(depth_map, bbox)
-                detection['depth'] = depth
-                detection['is_danger'] = depth < self.detection_pipeline.min_safe_distance
-        else:
-            for detection in detections:
-                detection['depth'] = 0.0
-                detection['is_danger'] = False
-
-        # Get navigation summary
-        nav_summary = self.detection_pipeline.get_navigation_summary(detections)
-
-        # SLAM tracking (if enabled) - pass depth map for scale
-        slam_result = None
-        if self.slam_enabled and self.slam is not None:
-            self.perf_monitor.start_timer('slam')
-            slam_result = self.slam.process_frame(frame, depth_map)
-            slam_time = self.perf_monitor.stop_timer('slam')
-
-            # Update indoor navigator if enabled
-            if self.indoor_nav_enabled and self.indoor_navigator is not None:
-                self.indoor_navigator.update(slam_result, detections)
-
-        # Trajectory Prediction (if enabled)
-        trajectory_result = None
-        if self.trajectory_pred_enabled and self.trajectory_predictor is not None:
-            self.perf_monitor.start_timer('trajectory')
-            trajectory_result = self.trajectory_predictor.update(detections)
-            traj_time = self.perf_monitor.stop_timer('trajectory')
-
-        # 3D Occupancy Grid Update (if enabled and SLAM available)
-        if self.occupancy_grid_enabled and self.occupancy_grid is not None:
-            if slam_result is not None and depth_map is not None:
-                self.perf_monitor.start_timer('occupancy_grid')
-                camera_pose = slam_result['pose']
-                self.occupancy_grid.update_from_depth(depth_map, camera_pose)
-                occ_time = self.perf_monitor.stop_timer('occupancy_grid')
-
-        # 3D Point Cloud Update (if enabled)
-        if self.point_cloud_enabled and self.point_cloud is not None:
-            if depth_map is not None:
-                self.perf_monitor.start_timer('point_cloud')
-                camera_pose = slam_result['pose'] if slam_result is not None else None
-                self.point_cloud.add_frame(frame, depth_map, camera_pose)
-                pc_time = self.perf_monitor.stop_timer('point_cloud')
-
-        # Get current time for updates
-        current_time = time.time()
-
-        # Movement Visualizer Update (if enabled)
-        if self.movement_visualizer_enabled and self.movement_visualizer is not None:
-            self.perf_monitor.start_timer('movement_visualizer')
-            if slam_result is not None:
-                self.movement_visualizer.update(slam_result, current_time)
+            # Depth estimation - run every Nth frame to save performance
+            self.perf_monitor.start_timer('depth')
+            if self.frame_count % (self.skip_depth_frames + 1) == 0:
+                depth_map = self.detection_pipeline.depth_estimator.estimate_depth(frame)
+                self.last_depth_map = depth_map
             else:
-                # Update with empty result to maintain timing
-                empty_result = {
-                    'position': [0, 0, 0],
-                    'pose': np.eye(4),
-                    'tracking_quality': 0.0,
-                    'num_matches': 0,
-                    'is_keyframe': False,
-                    'num_map_points': 0,
-                    'relative_movement': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-                }
-                self.movement_visualizer.update(empty_result, current_time)
-            mv_time = self.perf_monitor.stop_timer('movement_visualizer')
+                depth_map = self.last_depth_map
+            depth_time = self.perf_monitor.stop_timer('depth')
 
-        # Path planning (RL prediction) - DISABLED for speed
-        self.perf_monitor.start_timer('prediction')
-        path_plan = None  # Disabled
-        pred_time = self.perf_monitor.stop_timer('prediction')
+            # Add depth to detections
+            if depth_map is not None:
+                for detection in detections:
+                    bbox = detection['bbox']
+                    depth = self.detection_pipeline.depth_estimator.get_depth_at_bbox(depth_map, bbox)
+                    detection['depth'] = depth
+                    detection['is_danger'] = depth < self.detection_pipeline.min_safe_distance
+            else:
+                for detection in detections:
+                    detection['depth'] = 0.0
+                    detection['is_danger'] = False
 
-        # Generate narrative guidance - Re-enabled for Ollama
-        self.perf_monitor.start_timer('narrative')
-        if current_time - self.last_audio_time > self.audio_interval:
-            # Generate full guidance with Ollama
-            guidance = self.contextual_assistant.get_guidance(
-                detections, frame, nav_summary, path_plan
+            # Get navigation summary
+            nav_summary = self.detection_pipeline.get_navigation_summary(detections)
+
+            # SLAM tracking (if enabled) - pass depth map for scale
+            slam_result = None
+            if self.slam_enabled and self.slam is not None:
+                self.perf_monitor.start_timer('slam')
+                slam_result = self.slam.process_frame(frame, depth_map)
+                slam_time = self.perf_monitor.stop_timer('slam')
+
+                # Update indoor navigator if enabled
+                if self.indoor_nav_enabled and self.indoor_navigator is not None:
+                    self.indoor_navigator.update(slam_result, detections)
+
+            # Trajectory Prediction (if enabled)
+            trajectory_result = None
+            if self.trajectory_pred_enabled and self.trajectory_predictor is not None:
+                self.perf_monitor.start_timer('trajectory')
+                trajectory_result = self.trajectory_predictor.update(detections)
+                traj_time = self.perf_monitor.stop_timer('trajectory')
+
+            # 3D Occupancy Grid Update (if enabled and SLAM available)
+            if self.occupancy_grid_enabled and self.occupancy_grid is not None:
+                if slam_result is not None and depth_map is not None:
+                    self.perf_monitor.start_timer('occupancy_grid')
+                    camera_pose = slam_result['pose']
+                    self.occupancy_grid.update_from_depth(depth_map, camera_pose)
+                    occ_time = self.perf_monitor.stop_timer('occupancy_grid')
+
+            # 3D Point Cloud Update (if enabled)
+            if self.point_cloud_enabled and self.point_cloud is not None:
+                if depth_map is not None:
+                    self.perf_monitor.start_timer('point_cloud')
+                    camera_pose = slam_result['pose'] if slam_result is not None else None
+                    self.point_cloud.add_frame(frame, depth_map, camera_pose)
+                    pc_time = self.perf_monitor.stop_timer('point_cloud')
+
+            # Get current time for updates
+            current_time = time.time()
+
+            # Movement Visualizer Update (if enabled)
+            if self.movement_visualizer_enabled and self.movement_visualizer is not None:
+                self.perf_monitor.start_timer('movement_visualizer')
+                if slam_result is not None:
+                    self.movement_visualizer.update(slam_result, current_time)
+                else:
+                    # Update with empty result to maintain timing
+                    empty_result = {
+                        'position': [0, 0, 0],
+                        'pose': np.eye(4),
+                        'tracking_quality': 0.0,
+                        'num_matches': 0,
+                        'is_keyframe': False,
+                        'num_map_points': 0,
+                        'relative_movement': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+                    }
+                    self.movement_visualizer.update(empty_result, current_time)
+                mv_time = self.perf_monitor.stop_timer('movement_visualizer')
+
+            # Path planning (RL prediction) - DISABLED for speed
+            self.perf_monitor.start_timer('prediction')
+            path_plan = None  # Disabled
+            pred_time = self.perf_monitor.stop_timer('prediction')
+
+            # Generate narrative guidance - Re-enabled for Ollama
+            self.perf_monitor.start_timer('narrative')
+            if current_time - self.last_audio_time > self.audio_interval:
+                # Generate full guidance with Ollama
+                guidance = self.contextual_assistant.get_guidance(
+                    detections, frame, nav_summary, path_plan
+                )
+            else:
+                # Skip narrative generation between audio updates
+                guidance = {'narrative': '', 'predictive': '', 'combined': ''}
+            narr_time = self.perf_monitor.stop_timer('narrative')
+
+            # Generate audio cues
+            self.perf_monitor.start_timer('audio')
+            audio_signal, audio_message = self.audio_cue_generator.generate_cues(
+                detections,
+                (self.frame_height, self.frame_width)
             )
-        else:
-            # Skip narrative generation between audio updates
-            guidance = {'narrative': '', 'predictive': '', 'combined': ''}
-        narr_time = self.perf_monitor.stop_timer('narrative')
+            audio_time = self.perf_monitor.stop_timer('audio')
 
-        # Generate audio cues
-        self.perf_monitor.start_timer('audio')
-        audio_signal, audio_message = self.audio_cue_generator.generate_cues(
-            detections,
-            (self.frame_height, self.frame_width)
-        )
-        audio_time = self.perf_monitor.stop_timer('audio')
+            # Annotate frame
+            annotated_frame = FrameProcessor.annotate_detections(frame, detections)
 
-        # Annotate frame
-        annotated_frame = FrameProcessor.annotate_detections(frame, detections)
+            # Add performance info to frame
+            total_time = self.perf_monitor.stop_timer('total')
+            fps = self.perf_monitor.get_avg_fps()
 
-        # Add performance info to frame
-        total_time = self.perf_monitor.stop_timer('total')
-        fps = self.perf_monitor.get_avg_fps()
+            # Check for danger zone
+            danger_objects = [d for d in detections if d.get('depth', 10) < self.danger_distance]
+            caution_objects = [d for d in detections if self.danger_distance <= d.get('depth', 10) < self.caution_distance]
 
-        # Check for danger zone
+            # Performance overlay with danger-aware background
+            overlay = annotated_frame.copy()
+            bg_color = (0, 0, 100) if danger_objects else (0, 0, 0)  # Red tint if danger
+            cv2.rectangle(overlay, (5, 5), (250, 135), bg_color, -1)
+            cv2.addWeighted(overlay, 0.6, annotated_frame, 0.4, 0, annotated_frame)
+
+            # FPS indicator
+            fps_color = (0, 255, 0) if fps > 10 else (0, 165, 255) if fps > 5 else (0, 0, 255)
+            cv2.putText(annotated_frame, f"FPS: {fps:.1f}", (10, 30),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, fps_color, 2)
+
+            # Danger/Caution/Safe counts
+            cv2.putText(annotated_frame, f"Danger: {len(danger_objects)} | Caution: {len(caution_objects)}", (10, 55),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
+
+            # Closest object with distance
+            if detections:
+                closest = min(detections, key=lambda x: x.get('depth', 10))
+                dist_color = (0, 0, 255) if closest['depth'] < self.danger_distance else \
+                            (0, 165, 255) if closest['depth'] < self.caution_distance else (0, 255, 0)
+                cv2.putText(annotated_frame, f"Closest: {closest['label']} {closest['depth']:.1f}m", (10, 75),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, dist_color, 1)
+
+            # Processing time
+            cv2.putText(annotated_frame, f"Process: {total_time:.0f}ms", (10, 95),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
+
+            # Status indicator
+            if danger_objects:
+                status_text = "⚠ DANGER"
+                status_color = (0, 0, 255)
+            elif caution_objects:
+                status_text = "⚠ CAUTION"
+                status_color = (0, 165, 255)
+            elif detections:
+                status_text = "SAFE"
+                status_color = (0, 255, 0)
+            else:
+                status_text = "CLEAR"
+                status_color = (0, 255, 0)
+
+            cv2.putText(annotated_frame, status_text, (10, 120),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, status_color, 2)
+
+            # Add SLAM info if enabled
+            if slam_result is not None:
+                position = slam_result['position']
+                quality = slam_result['tracking_quality']
+
+                # SLAM status overlay
+                slam_color = (0, 255, 0) if quality > 0.7 else (0, 165, 255) if quality > 0.4 else (0, 0, 255)
+                cv2.putText(annotated_frame, f"SLAM: ({position[0]:.1f}, {position[1]:.1f}, {position[2]:.1f})",
+                           (10, 145), cv2.FONT_HERSHEY_SIMPLEX, 0.4, slam_color, 1)
+                cv2.putText(annotated_frame, f"Quality: {quality:.2f} | Points: {slam_result['num_map_points']}",
+                           (10, 165), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1)
+
+            # Add trajectory prediction info if enabled
+            if trajectory_result is not None:
+                tracked_count = len(trajectory_result['tracked_objects'])
+                predictions = trajectory_result['predictions']
+
+                # Count objects with predictions
+                predicted_count = len([p for p in predictions.values() if len(p['predicted_positions']) > 0])
+
+                cv2.putText(annotated_frame, f"Tracked: {tracked_count} | Predicted: {predicted_count}",
+                           (10, 185), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 255, 255), 1)
+
+                # Visualize trajectories if enabled
+                if self.config.get('trajectory_prediction.visualize', False):
+                    annotated_frame = self.trajectory_predictor.visualize_predictions(
+                        annotated_frame,
+                        trajectory_result['tracked_objects'],
+                        trajectory_result['predictions']
+                    )
+
+            # Log frame time
+            self.perf_monitor.log_frame_time(total_time)
+
+            return annotated_frame, detections, guidance, audio_signal, audio_message, depth_map, slam_result, trajectory_result
+        
+        except Exception as e:
+            self.logger.error(f"Error processing frame: {e}", exc_info=True)
+            return None
+
+    def _display_terminal_info(self, fps, detections, total_time, slam_result, trajectory_result):
+        """Display information in the terminal."""
+        print("\n" * 5)
+        print("\033[H\033[J", end="") # Clear screen
+
+        # FPS
+        fps_color = "\033[92m" if fps > 10 else "\033[93m" if fps > 5 else "\033[91m"
+        print(f"{fps_color}FPS: {fps:.1f}\033[0m")
+
+        # Danger/Caution
         danger_objects = [d for d in detections if d.get('depth', 10) < self.danger_distance]
         caution_objects = [d for d in detections if self.danger_distance <= d.get('depth', 10) < self.caution_distance]
+        print(f"Danger: {len(danger_objects)} | Caution: {len(caution_objects)}")
 
-        # Performance overlay with danger-aware background
-        overlay = annotated_frame.copy()
-        bg_color = (0, 0, 100) if danger_objects else (0, 0, 0)  # Red tint if danger
-        cv2.rectangle(overlay, (5, 5), (250, 135), bg_color, -1)
-        cv2.addWeighted(overlay, 0.6, annotated_frame, 0.4, 0, annotated_frame)
-
-        # FPS indicator
-        fps_color = (0, 255, 0) if fps > 10 else (0, 165, 255) if fps > 5 else (0, 0, 255)
-        cv2.putText(annotated_frame, f"FPS: {fps:.1f}", (10, 30),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, fps_color, 2)
-
-        # Danger/Caution/Safe counts
-        cv2.putText(annotated_frame, f"Danger: {len(danger_objects)} | Caution: {len(caution_objects)}", (10, 55),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
-
-        # Closest object with distance
+        # Closest Object
         if detections:
             closest = min(detections, key=lambda x: x.get('depth', 10))
-            dist_color = (0, 0, 255) if closest['depth'] < self.danger_distance else \
-                        (0, 165, 255) if closest['depth'] < self.caution_distance else (0, 255, 0)
-            cv2.putText(annotated_frame, f"Closest: {closest['label']} {closest['depth']:.1f}m", (10, 75),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, dist_color, 1)
+            dist_color = "\033[91m" if closest['depth'] < self.danger_distance else \
+                         "\033[93m" if closest['depth'] < self.caution_distance else "\033[92m"
+            print(f"{dist_color}Closest: {closest['label']} {closest['depth']:.1f}m\033[0m")
 
         # Processing time
-        cv2.putText(annotated_frame, f"Process: {total_time:.0f}ms", (10, 95),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
+        print(f"Process: {total_time:.0f}ms")
 
-        # Status indicator
+        # Status
         if danger_objects:
             status_text = "⚠ DANGER"
-            status_color = (0, 0, 255)
+            status_color = "\033[91m"
         elif caution_objects:
             status_text = "⚠ CAUTION"
-            status_color = (0, 165, 255)
+            status_color = "\033[93m"
         elif detections:
             status_text = "SAFE"
-            status_color = (0, 255, 0)
+            status_color = "\033[92m"
         else:
             status_text = "CLEAR"
-            status_color = (0, 255, 0)
+            status_color = "\033[92m"
+        print(f"{status_color}{status_text}\033[0m")
 
-        cv2.putText(annotated_frame, status_text, (10, 120),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, status_color, 2)
-
-        # Add SLAM info if enabled
+        # SLAM info
         if slam_result is not None:
             position = slam_result['position']
             quality = slam_result['tracking_quality']
+            slam_color = "\033[92m" if quality > 0.7 else "\033[93m" if quality > 0.4 else "\033[91m"
+            print(f"{slam_color}SLAM: ({position[0]:.1f}, {position[1]:.1f}, {position[2]:.1f}) | Quality: {quality:.2f} | Points: {slam_result['num_map_points']}\033[0m")
 
-            # SLAM status overlay
-            slam_color = (0, 255, 0) if quality > 0.7 else (0, 165, 255) if quality > 0.4 else (0, 0, 255)
-            cv2.putText(annotated_frame, f"SLAM: ({position[0]:.1f}, {position[1]:.1f}, {position[2]:.1f})",
-                       (10, 145), cv2.FONT_HERSHEY_SIMPLEX, 0.4, slam_color, 1)
-            cv2.putText(annotated_frame, f"Quality: {quality:.2f} | Points: {slam_result['num_map_points']}",
-                       (10, 165), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1)
-
-        # Add trajectory prediction info if enabled
+        # Trajectory info
         if trajectory_result is not None:
             tracked_count = len(trajectory_result['tracked_objects'])
             predictions = trajectory_result['predictions']
-
-            # Count objects with predictions
             predicted_count = len([p for p in predictions.values() if len(p['predicted_positions']) > 0])
+            print(f"\033[96mTracked: {tracked_count} | Predicted: {predicted_count}\033[0m")
 
-            cv2.putText(annotated_frame, f"Tracked: {tracked_count} | Predicted: {predicted_count}",
-                       (10, 185), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 255, 255), 1)
-
-            # Visualize trajectories if enabled
-            if self.config.get('trajectory_prediction.visualize', False):
-                annotated_frame = self.trajectory_predictor.visualize_predictions(
-                    annotated_frame,
-                    trajectory_result['tracked_objects'],
-                    trajectory_result['predictions']
-                )
-
-        # Log frame time
-        self.perf_monitor.log_frame_time(total_time)
-
-        return annotated_frame, detections, guidance, audio_signal, audio_message, depth_map, slam_result, trajectory_result
 
     def run(self, display: bool = True, save_video: bool = False):
         """
@@ -485,6 +544,9 @@ class OrbyGlasses:
 
                 # Process frame
                 result = self.process_frame(frame)
+                if result is None or len(result) != 8:
+                    self.logger.warning("Skipping frame due to invalid processing result.")
+                    continue
                 annotated_frame, detections, guidance, audio_signal, audio_message, depth_map, slam_result, trajectory_result = result
 
                 # Play adaptive audio beaconing (if available and not speaking)
@@ -610,20 +672,12 @@ class OrbyGlasses:
 
                 # Display
                 if display:
+                    # Display terminal info
+                    total_time = self.perf_monitor.get_stats().get('avg_frame_time_ms', 0)
+                    fps = self.perf_monitor.get_avg_fps()
+                    self._display_terminal_info(fps, detections, total_time, slam_result, trajectory_result)
+
                     display_size = (400, 400)  # Standard size for all windows
-
-                    # Add guidance text to frame
-                    y_offset = self.frame_height - 60
-                    text = guidance.get('narrative', 'Processing...')
-                    # Wrap text if too long
-                    if len(text) > 50:
-                        text = text[:47] + "..."
-
-                    cv2.rectangle(annotated_frame, (0, y_offset - 5),
-                                (self.frame_width, self.frame_height),
-                                (0, 0, 0), -1)
-                    cv2.putText(annotated_frame, text, (10, y_offset + 20),
-                               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
                     # Resize main window
                     display_frame = cv2.resize(annotated_frame, display_size)
@@ -634,21 +688,13 @@ class OrbyGlasses:
                         # Voxel grid mouse callback
                         if self.occupancy_grid_enabled and self.occupancy_grid is not None:
                             def occ_mouse_callback(event, x, y, flags, param):
-                                if event == cv2.EVENT_MOUSEWHEEL:
-                                    if flags > 0:
-                                        self.occupancy_grid.handle_mouse_wheel(1)
-                                    else:
-                                        self.occupancy_grid.handle_mouse_wheel(-1)
+                                self.occupancy_grid.handle_mouse_events(event, x, y, flags, param)
                             cv2.setMouseCallback('Voxel Grid Map', occ_mouse_callback)
 
                         # Point cloud mouse callback
                         if self.point_cloud_enabled and self.point_cloud is not None:
                             def pc_mouse_callback(event, x, y, flags, param):
-                                if event == cv2.EVENT_MOUSEWHEEL:
-                                    if flags > 0:
-                                        self.point_cloud.handle_mouse_wheel(1)
-                                    else:
-                                        self.point_cloud.handle_mouse_wheel(-1)
+                                self.point_cloud.handle_mouse_events(event, x, y, flags, param)
                             cv2.setMouseCallback('3D Point Cloud', pc_mouse_callback)
 
                     # Show depth map in separate smaller window (only when freshly calculated)

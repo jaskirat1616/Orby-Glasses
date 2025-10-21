@@ -103,6 +103,11 @@ class OccupancyGrid3D:
         self.use_3d_bresenham = True  # Use optimized 3D Bresenham algorithm
         self.max_voxels_per_ray = config.get('occupancy_grid_3d.max_voxels_per_ray', 200)  # Limit per ray
 
+        # Mouse control state
+        self.mouse_is_pressed = False
+        self.last_mouse_x = 0
+        self.last_mouse_y = 0
+
         logging.info(f"Enhanced 3D Occupancy Grid initialized:")
         logging.info(f"  Grid size: {self.grid_size} meters")
         logging.info(f"  Resolution: {self.resolution} m/voxel")
@@ -111,6 +116,36 @@ class OccupancyGrid3D:
         logging.info(f"  Temporal consistency: {self.temporal_consistency}")
         logging.info(f"  Minimum observations: {self.min_observations}")
         logging.info(f"  Update interval: {self.update_interval}s")
+
+    def handle_mouse_events(self, event, x, y, flags, param):
+        """Handle mouse events for interactive control."""
+        if event == cv2.EVENT_LBUTTONDOWN:
+            self.mouse_is_pressed = True
+            self.last_mouse_x = x
+            self.last_mouse_y = y
+        elif event == cv2.EVENT_LBUTTONUP:
+            self.mouse_is_pressed = False
+        elif event == cv2.EVENT_MOUSEMOVE:
+            if self.mouse_is_pressed:
+                dx = x - self.last_mouse_x
+                dy = y - self.last_mouse_y
+
+                if flags & cv2.EVENT_FLAG_SHIFTKEY:
+                    # Pan
+                    self.view_offset_x += dx * 0.1
+                    self.view_offset_y += dy * 0.1
+                else:
+                    # Rotate
+                    self.view_angle_z += dx * 0.5
+                    self.view_angle_x += dy * 0.5
+
+                self.last_mouse_x = x
+                self.last_mouse_y = y
+        elif event == cv2.EVENT_MOUSEWHEEL:
+            if flags > 0:
+                self.handle_mouse_wheel(1)
+            else:
+                self.handle_mouse_wheel(-1)
 
     def world_to_voxel(self, point_3d: np.ndarray, camera_position: Optional[np.ndarray] = None) -> Tuple[int, int, int]:
         """
@@ -746,12 +781,6 @@ class OccupancyGrid3D:
         cv2.putText(vis_colored, f"Occupied: {len(self.occupied_voxels)}",
                    (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
-        # Add controls info
-        cv2.putText(vis_colored, "Mouse: Scroll to zoom",
-                   (10, vis_colored.shape[0] - 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        cv2.putText(vis_colored, "Keys: +/- zoom, arrows pan",
-                   (10, vis_colored.shape[0] - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-
         return vis_colored
 
     def visualize_3d_interactive(self, camera_position: Optional[np.ndarray] = None) -> np.ndarray:
@@ -955,21 +984,6 @@ class OccupancyGrid3D:
                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (100, 100, 100), 2)
         cv2.putText(canvas, f"Zoom: {self.view_scale:.1f}x", (20, 225),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
-
-        # Bottom controls with light background
-        overlay2 = canvas.copy()
-        cv2.rectangle(overlay2, (10, img_size - 140), (790, img_size - 10), (245, 245, 245), -1)
-        cv2.addWeighted(overlay2, 0.9, canvas, 0.1, 0, canvas)
-        cv2.rectangle(canvas, (10, img_size - 140), (790, img_size - 10), (128, 128, 128), 2)
-
-        cv2.putText(canvas, "Mouse Wheel: Zoom In/Out", (20, img_size - 110),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
-        cv2.putText(canvas, "Arrow Keys: Pan View    R: Reset View", (20, img_size - 80),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
-        cv2.putText(canvas, "Q/E: Rotate Y-axis    W/S: Rotate X-axis", (20, img_size - 50),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
-        cv2.putText(canvas, "Movement Trail: Shows trajectory for path analysis", (20, img_size - 20),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 150, 0), 1)
 
         return canvas
 
