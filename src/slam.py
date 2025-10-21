@@ -124,7 +124,7 @@ class MonocularSLAM:
         self.last_pose_update_time = time.time()
 
         # Pose smoothing (exponential moving average)
-        self.pose_alpha = 0.3  # Smoothing factor
+        self.pose_alpha = 0.5  # Smoothing factor (higher = more responsive)
         self.smoothed_pose = np.eye(4, dtype=np.float32)
 
         # Map saving
@@ -137,12 +137,13 @@ class MonocularSLAM:
         logging.info("Monocular SLAM initialized (camera-only, no IMU)")
         logging.info(f"Camera matrix: fx={self.fx}, fy={self.fy}, cx={self.cx:.1f}, cy={self.cy:.1f}")
 
-    def process_frame(self, frame: np.ndarray) -> Dict:
+    def process_frame(self, frame: np.ndarray, depth_map: Optional[np.ndarray] = None) -> Dict:
         """
         Process a new frame through SLAM pipeline.
 
         Args:
             frame: Input frame (BGR)
+            depth_map: Optional depth map for scale initialization (H x W, normalized 0-1)
 
         Returns:
             Dictionary with tracking info:
@@ -180,9 +181,9 @@ class MonocularSLAM:
 
         # Initialize or track
         if not self.is_initialized:
-            result = self._initialize(gray, keypoints, descriptors)
+            result = self._initialize(gray, keypoints, descriptors, depth_map)
         else:
-            result = self._track(gray, keypoints, descriptors)
+            result = self._track(gray, keypoints, descriptors, depth_map)
 
         # Store for next frame
         self.last_frame = gray
@@ -191,7 +192,8 @@ class MonocularSLAM:
 
         return result
 
-    def _initialize(self, frame: np.ndarray, keypoints: List, descriptors: np.ndarray) -> Dict:
+    def _initialize(self, frame: np.ndarray, keypoints: List, descriptors: np.ndarray,
+                    depth_map: Optional[np.ndarray] = None) -> Dict:
         """
         Initialize SLAM with first frame.
         """
@@ -209,9 +211,22 @@ class MonocularSLAM:
         self.keyframes.append(keyframe)
         self.next_keyframe_id += 1
 
-        # Initialize map points (assume depth = 1.0 for first frame)
+        # Initialize map points with proper depth
         for kp, desc in zip(keypoints[:500], descriptors[:500]):
-            point_3d = self._pixel_to_3d(kp.pt, depth=1.0)
+            # Use depth map if available for accurate initialization
+            if depth_map is not None:
+                u, v = int(kp.pt[0]), int(kp.pt[1])
+                if 0 <= v < depth_map.shape[0] and 0 <= u < depth_map.shape[1]:
+                    depth_norm = depth_map[v, u]
+                    depth = depth_norm * 5.0  # Convert to meters (assuming max 5m)
+                    if depth < 0.1:
+                        depth = 2.0  # Default depth for invalid measurements
+                else:
+                    depth = 2.0
+            else:
+                depth = 2.0  # Default depth without depth map
+
+            point_3d = self._pixel_to_3d(kp.pt, depth=depth)
             map_point = MapPoint(
                 id=self.next_point_id,
                 position=point_3d,
@@ -235,7 +250,8 @@ class MonocularSLAM:
             'num_map_points': len(self.map_points)
         }
 
-    def _track(self, frame: np.ndarray, keypoints: List, descriptors: np.ndarray) -> Dict:
+    def _track(self, frame: np.ndarray, keypoints: List, descriptors: np.ndarray,
+               depth_map: Optional[np.ndarray] = None) -> Dict:
         """
         Track camera motion by matching features with previous frame.
         Enhanced with motion model and pose smoothing (no IMU needed).
@@ -286,12 +302,20 @@ class MonocularSLAM:
                 # Recover pose from essential matrix
                 _, R, t, mask_pose = cv2.recoverPose(E, pts_current, pts_last, self.K, mask=mask)
 
-                # Scale translation using motion model (monocular scale ambiguity fix)
-                if len(self.position_history) >= 2:
-                    # Estimate scale from velocity
-                    scale = np.linalg.norm(self.velocity[:3]) * dt
-                    if scale > 0.01:  # Minimum movement
-                        t = t * min(scale, 1.0)  # Cap at 1 meter per frame
+                # IMPORTANT: Fix monocular scale using realistic assumptions
+                # Default scale for monocular SLAM (assume ~0.1m movement per frame at normal speed)
+                scale = 0.1  # meters per frame (baseline scale)
+
+                # If we have velocity history, use it for scale
+                if len(self.position_history) >= 3:
+                    # Estimate scale from recent velocity
+                    vel_magnitude = np.linalg.norm(self.velocity[:3])
+                    if vel_magnitude > 0.01:  # Minimum movement
+                        scale = vel_magnitude * dt
+                        scale = np.clip(scale, 0.02, 0.5)  # Reasonable range: 2cm to 50cm per frame
+
+                # Apply scale to translation
+                t = t * scale
 
                 # Create transformation matrix
                 T = np.eye(4, dtype=np.float32)

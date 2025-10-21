@@ -240,11 +240,11 @@ class OrbyGlasses:
         # Get navigation summary
         nav_summary = self.detection_pipeline.get_navigation_summary(detections)
 
-        # SLAM tracking (if enabled)
+        # SLAM tracking (if enabled) - pass depth map for scale
         slam_result = None
         if self.slam_enabled and self.slam is not None:
             self.perf_monitor.start_timer('slam')
-            slam_result = self.slam.process_frame(frame)
+            slam_result = self.slam.process_frame(frame, depth_map)
             slam_time = self.perf_monitor.stop_timer('slam')
 
             # Update indoor navigator if enabled
