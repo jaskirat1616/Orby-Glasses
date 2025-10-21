@@ -492,9 +492,16 @@ class OccupancyGrid3D:
         Returns:
             Visualization image for display
         """
-        # Create larger canvas
+        # Create larger canvas with WHITE background
         img_size = 800
-        canvas = np.zeros((img_size, img_size, 3), dtype=np.uint8)
+        canvas = np.ones((img_size, img_size, 3), dtype=np.uint8) * 255  # White background
+
+        # Draw grid lines for depth perception
+        grid_spacing = 40  # pixels
+        grid_color = (230, 230, 230)  # Light gray
+        for i in range(0, img_size, grid_spacing):
+            cv2.line(canvas, (i, 0), (i, img_size), grid_color, 1)
+            cv2.line(canvas, (0, i), (img_size, i), grid_color, 1)
 
         # Get occupied and free voxels
         occupied_voxels = []
@@ -507,13 +514,13 @@ class OccupancyGrid3D:
                 free_voxels.append(voxel_idx)
 
         if not occupied_voxels and not free_voxels:
-            # Draw empty grid message
+            # Draw empty grid message (black text on white background)
             cv2.putText(canvas, "No voxels observed yet",
                        (img_size//2 - 150, img_size//2),
-                       cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
+                       cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 0), 2)
             cv2.putText(canvas, "Move camera to build map",
                        (img_size//2 - 180, img_size//2 + 40),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.8, (200, 200, 200), 2)
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.8, (50, 50, 50), 2)
             return canvas
 
         # Rotation and scale parameters (can be adjusted)
@@ -547,12 +554,13 @@ class OccupancyGrid3D:
 
             return screen_x, screen_y, z_final
 
-        # Draw free voxels (smaller, transparent)
+        # Draw free voxels (smaller, light green on white)
         for voxel_idx in free_voxels[:500]:  # Limit for performance
             sx, sy, depth = project_voxel(voxel_idx)
             if 0 <= sx < img_size and 0 <= sy < img_size:
                 voxel_size = max(2, int(self.view_scale * self.resolution * 0.3))
-                cv2.circle(canvas, (sx, sy), voxel_size, (50, 100, 50), -1)
+                cv2.circle(canvas, (sx, sy), voxel_size, (200, 255, 200), -1)  # Light green
+                cv2.circle(canvas, (sx, sy), voxel_size, (100, 200, 100), 1)   # Green border
 
         # Draw occupied voxels (larger, brighter) - sorted by depth
         voxel_depths = [(v, project_voxel(v)) for v in occupied_voxels]
@@ -567,9 +575,9 @@ class OccupancyGrid3D:
                 log_odds = self.grid.get(voxel_idx, 0.0)
                 prob = 1.0 / (1.0 + np.exp(-log_odds))
 
-                # Red gradient for occupied
-                color_intensity = int(prob * 255)
-                color = (50, 50, color_intensity)  # Blue to Red
+                # Red gradient for occupied (darker = more confident)
+                color_intensity = int(prob * 200 + 55)  # 55-255 range
+                color = (50, 50, color_intensity)  # Red (BGR format)
 
                 # Draw voxel as rectangle for better visibility
                 cv2.rectangle(canvas,
@@ -577,51 +585,54 @@ class OccupancyGrid3D:
                             (sx + voxel_size, sy + voxel_size),
                             color, -1)
 
-                # Add border for clarity
+                # Add dark border for clarity on white background
                 cv2.rectangle(canvas,
                             (sx - voxel_size, sy - voxel_size),
                             (sx + voxel_size, sy + voxel_size),
-                            (255, 255, 255), 1)
+                            (0, 0, 0), 1)  # Black border
 
-        # Draw camera position if provided
+        # Draw camera position if provided (bright blue on white background)
         if camera_position is not None:
             cam_voxel = self.world_to_voxel(camera_position)
             sx, sy, _ = project_voxel(cam_voxel)
             if 0 <= sx < img_size and 0 <= sy < img_size:
-                cv2.circle(canvas, (sx, sy), 8, (0, 255, 255), -1)
-                cv2.circle(canvas, (sx, sy), 10, (255, 255, 255), 2)
+                cv2.circle(canvas, (sx, sy), 10, (255, 200, 0), -1)  # Orange/yellow center
+                cv2.circle(canvas, (sx, sy), 12, (0, 0, 0), 2)       # Black border
                 cv2.putText(canvas, "YOU", (sx + 15, sy),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2)  # Black text
 
-        # Add info overlay
+        # Add info overlay with light background
         overlay = canvas.copy()
-        cv2.rectangle(overlay, (10, 10), (350, 180), (0, 0, 0), -1)
-        cv2.addWeighted(overlay, 0.7, canvas, 0.3, 0, canvas)
+        cv2.rectangle(overlay, (10, 10), (380, 200), (240, 240, 240), -1)  # Light gray
+        cv2.addWeighted(overlay, 0.85, canvas, 0.15, 0, canvas)
+        cv2.rectangle(canvas, (10, 10), (380, 200), (100, 100, 100), 2)  # Border
 
-        # Info text
-        cv2.putText(canvas, "3D Occupancy Grid", (20, 35),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
-        cv2.putText(canvas, f"Occupied: {len(occupied_voxels)}", (20, 65),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
-        cv2.putText(canvas, f"Free: {len(free_voxels)}", (20, 90),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (50, 200, 50), 2)
-        cv2.putText(canvas, f"Resolution: {self.resolution*100:.0f}cm", (20, 115),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
-        cv2.putText(canvas, f"Zoom: {self.view_scale:.1f}x", (20, 140),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
+        # Info text (black on light background)
+        cv2.putText(canvas, "3D Occupancy Grid", (20, 40),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 0), 2)
+        cv2.putText(canvas, f"Occupied: {len(occupied_voxels)}", (20, 75),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 50, 50), 2)  # Dark red
+        cv2.putText(canvas, f"Free: {len(free_voxels)}", (20, 105),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (50, 150, 50), 2)  # Dark green
+        cv2.putText(canvas, f"Resolution: {self.resolution*100:.0f}cm", (20, 135),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (50, 50, 50), 1)  # Dark gray
+        cv2.putText(canvas, f"Zoom: {self.view_scale:.1f}x", (20, 165),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (50, 50, 50), 1)
+        cv2.putText(canvas, "CONTROLS:", (20, 190),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 100, 200), 1)  # Blue
 
-        # Controls
-        cv2.putText(canvas, "CONTROLS:", (20, 165),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
+        # Bottom controls with light background
+        overlay2 = canvas.copy()
+        cv2.rectangle(overlay2, (10, img_size - 120), (790, img_size - 10), (240, 240, 240), -1)
+        cv2.addWeighted(overlay2, 0.85, canvas, 0.15, 0, canvas)
+        cv2.rectangle(canvas, (10, img_size - 120), (790, img_size - 10), (100, 100, 100), 2)
 
-        # Bottom controls
-        cv2.rectangle(canvas, (10, img_size - 110), (790, img_size - 10), (0, 0, 0), -1)
-        cv2.putText(canvas, "Mouse Wheel: Zoom In/Out", (20, img_size - 85),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
-        cv2.putText(canvas, "Arrow Keys: Pan View", (20, img_size - 55),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
-        cv2.putText(canvas, "R: Reset View   Q/E: Rotate Z   W/S: Rotate X", (20, img_size - 25),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+        cv2.putText(canvas, "Mouse Wheel: Zoom In/Out", (20, img_size - 90),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+        cv2.putText(canvas, "Arrow Keys: Pan View", (20, img_size - 60),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+        cv2.putText(canvas, "R: Reset View   Q/E: Rotate Z   W/S: Rotate X", (20, img_size - 30),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
 
         return canvas
 
