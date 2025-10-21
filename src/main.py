@@ -28,6 +28,7 @@ from conversation import ConversationManager
 from slam import MonocularSLAM
 from indoor_navigation import IndoorNavigator
 from trajectory_prediction import TrajectoryPredictionSystem
+from occupancy_grid_3d import OccupancyGrid3D
 
 
 class OrbyGlasses:
@@ -111,6 +112,15 @@ class OrbyGlasses:
             self.logger.info("✓ Trajectory prediction enabled")
         else:
             self.trajectory_predictor = None
+
+        # 3D Occupancy Grid Mapping
+        self.occupancy_grid_enabled = self.config.get('occupancy_grid_3d.enabled', False)
+        if self.occupancy_grid_enabled:
+            self.logger.info("Initializing 3D Occupancy Grid...")
+            self.occupancy_grid = OccupancyGrid3D(self.config)
+            self.logger.info("✓ 3D Occupancy Grid enabled")
+        else:
+            self.occupancy_grid = None
 
         # Data logging
         self.data_logger = DataLogger()
@@ -234,6 +244,14 @@ class OrbyGlasses:
             self.perf_monitor.start_timer('trajectory')
             trajectory_result = self.trajectory_predictor.update(detections)
             traj_time = self.perf_monitor.stop_timer('trajectory')
+
+        # 3D Occupancy Grid Update (if enabled and SLAM available)
+        if self.occupancy_grid_enabled and self.occupancy_grid is not None:
+            if slam_result is not None and depth_map is not None:
+                self.perf_monitor.start_timer('occupancy_grid')
+                camera_pose = slam_result['pose']
+                self.occupancy_grid.update_from_depth(depth_map, camera_pose)
+                occ_time = self.perf_monitor.stop_timer('occupancy_grid')
 
         # Path planning (RL prediction) - DISABLED for speed
         self.perf_monitor.start_timer('prediction')
@@ -567,6 +585,12 @@ class OrbyGlasses:
                         slam_vis = self.slam.visualize_tracking(frame, slam_result)
                         slam_display = cv2.resize(slam_vis, (400, 400))
                         cv2.imshow('SLAM Tracking', slam_display)
+
+                    # Show 3D Occupancy Grid visualization if enabled
+                    if self.occupancy_grid_enabled and self.occupancy_grid is not None:
+                        if self.config.get('occupancy_grid_3d.visualize', True):
+                            occ_vis = self.occupancy_grid.visualize_2d_slice(z_height=1.5)
+                            cv2.imshow('3D Occupancy Grid', occ_vis)
 
                 # Save video
                 if video_writer:

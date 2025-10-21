@@ -133,3 +133,18 @@ trajectory_prediction:
   time_step: 0.5                  # Time between predictions (seconds)
   visualize: false                # Show trajectory visualization
   collision_warning: true         # Warn about predicted collisions
+
+# 3D Occupancy Grid Settings
+occupancy_grid_3d:
+  enabled: true                   # Enable 3D occupancy grid mapping (EXPERIMENTAL)
+  grid_size: [20.0, 20.0, 3.0]    # Grid dimensions [x, y, z] in meters
+  resolution: 0.1                 # Voxel size in meters (0.1m = 10cm per voxel)
+  max_range: 5.0                  # Maximum sensor range in meters
+  min_range: 0.1                  # Minimum sensor range in meters
+  log_odds_occupied: 0.7          # Log-odds update for occupied voxels
+  log_odds_free: -0.4             # Log-odds update for free space
+  log_odds_min: -5.0              # Minimum log-odds value (clamping)
+  log_odds_max: 5.0               # Maximum log-odds value (clamping)
+  subsample_step: 8               # Subsample depth map every Nth pixel (higher = faster)
+  update_interval: 0.5            # Update grid every N seconds
+  visualize: true                 # Show occupancy grid visualization window
