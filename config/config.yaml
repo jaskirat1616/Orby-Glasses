@@ -134,28 +134,28 @@ trajectory_prediction:
   visualize: false                # Show trajectory visualization
   collision_warning: true         # Warn about predicted collisions
 
-# 3D Occupancy Grid Settings (Voxel Grid Map)
+# 3D Occupancy Grid Settings (Voxel Grid Map) - OPTIMIZED FOR ACCURACY & SPEED
 occupancy_grid_3d:
   enabled: true                   # Enable voxel grid visualization
   grid_size: [20.0, 20.0, 3.0]    # Grid dimensions [x, y, z] in meters
-  resolution: 0.2                 # Voxel size in meters (20cm = LARGER, more visible)
+  resolution: 0.15                # Voxel size (15cm = balance of detail & speed)
   max_range: 5.0                  # Maximum sensor range in meters
   min_range: 0.1                  # Minimum sensor range in meters
-  log_odds_occupied: 0.7          # Log-odds update for occupied voxels
-  log_odds_free: -0.4             # Log-odds update for free space
+  log_odds_occupied: 0.8          # Higher = faster convergence to occupied
+  log_odds_free: -0.5             # Higher magnitude = faster free space updates
   log_odds_min: -5.0              # Minimum log-odds value (clamping)
   log_odds_max: 5.0               # Maximum log-odds value (clamping)
-  subsample_step: 6               # Subsample depth map every Nth pixel (higher = faster)
-  update_interval: 0.3            # Update grid every N seconds
+  subsample_step: 4               # Lower = more accurate (process more pixels)
+  update_interval: 0.2            # Faster updates (5 Hz)
   visualize: true                 # Show 3D voxel grid visualization window
   show_2d_slice: false            # Also show 2D slice in separate window
 
-# 3D Point Cloud Viewer Settings (Recommended for dense visualization)
+# 3D Point Cloud Viewer Settings (DISABLED - using voxel grid only)
 point_cloud_viewer:
-  enabled: true                   # Enable real-time 3D point cloud visualization
+  enabled: false                  # DISABLED - focus on voxel grid
   max_points: 100000              # Maximum points to store (100K recommended)
   subsample: 3                    # Subsample every Nth pixel (lower = denser, slower)
   min_depth: 0.1                  # Minimum depth in meters
   max_depth: 5.0                  # Maximum depth in meters
   update_interval: 0.1            # Update frequency in seconds
-  visualize: true                 # Show visualization window
+  visualize: false                # Show visualization window

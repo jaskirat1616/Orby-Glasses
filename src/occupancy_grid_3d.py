@@ -137,11 +137,12 @@ class OccupancyGrid3D:
         camera_position = camera_pose[:3, 3]
 
         # Subsample depth map for performance (every Nth pixel)
-        subsample = self.config.get('occupancy_grid_3d.subsample_step', 8)
+        subsample = self.config.get('occupancy_grid_3d.subsample_step', 4)
 
         rays_cast = 0
         voxels_updated = 0
 
+        # Process depth map with optimized ray casting
         for v in range(0, h, subsample):
             for u in range(0, w, subsample):
                 depth_normalized = depth_map[v, u]
@@ -151,6 +152,10 @@ class OccupancyGrid3D:
 
                 # Skip invalid depths
                 if depth < self.min_range or depth > self.max_range:
+                    continue
+
+                # Skip very uncertain depth values (too close to 0 or 1)
+                if depth_normalized < 0.05 or depth_normalized > 0.95:
                     continue
 
                 # Back-project pixel to 3D point in camera frame
@@ -170,7 +175,8 @@ class OccupancyGrid3D:
         self.total_updates += 1
         self.last_update_time = current_time
 
-        logging.debug(f"Occupancy grid updated: {rays_cast} rays, {voxels_updated} voxels modified")
+        if rays_cast > 0:
+            logging.debug(f"Grid updated: {rays_cast} rays, {voxels_updated} voxels, {len(self.occupied_voxels)} occupied")
 
     def _ray_cast_update(self, start: np.ndarray, end: np.ndarray) -> int:
         """
