@@ -1,7 +1,7 @@
 """
 3D Occupancy Grid Mapping for OrbyGlasses
 Real-time volumetric environment representation using depth and SLAM data.
-Enhanced accuracy with improved ray-casting and sensor fusion.
+Accuracy with ray-casting and sensor fusion.
 """
 
 import numpy as np
@@ -14,16 +14,16 @@ import time
 
 class OccupancyGrid3D:
     """
-    Enhanced 3D Occupancy Grid Map for highly accurate volumetric environment representation.
+    Simplified 3D Occupancy Grid Map for precise volumetric environment representation.
 
     Uses a sparse voxel grid to efficiently represent occupied, free, and unknown space.
-    Integrates with SLAM for accurate pose estimation and depth maps for obstacle detection.
-    Includes temporal consistency and sensor fusion for improved accuracy.
+    Integrates with SLAM for pose estimation and depth maps for obstacle detection.
+    Includes temporal consistency and sensor fusion for better accuracy.
     """
 
     def __init__(self, config):
         """
-        Initialize 3D Occupancy Grid with enhanced accuracy.
+        Initialize 3D Occupancy Grid with accuracy.
 
         Args:
             config: ConfigManager instance
@@ -64,7 +64,7 @@ class OccupancyGrid3D:
         self.cx = config.get('camera.width', 320) / 2
         self.cy = config.get('camera.height', 320) / 2
 
-        # Ray-casting parameters for improved accuracy
+        # Ray-casting parameters for better accuracy
         self.max_range = config.get('occupancy_grid_3d.max_range', 5.0)  # Maximum sensor range
         self.min_range = config.get('occupancy_grid_3d.min_range', 0.1)  # Minimum sensor range
         self.range_variance = config.get('occupancy_grid_3d.range_variance', 0.02)  # For probabilistic modeling
@@ -100,7 +100,7 @@ class OccupancyGrid3D:
         self.last_positions = deque(maxlen=10)  # Track camera positions for temporal consistency
 
         # Ray casting optimization
-        self.use_3d_bresenham = True  # Use optimized 3D Bresenham algorithm
+        self.use_3d_bresenham = True  # Use 3D Bresenham algorithm
         self.max_voxels_per_ray = config.get('occupancy_grid_3d.max_voxels_per_ray', 200)  # Limit per ray
 
         # Mouse control state
@@ -108,7 +108,7 @@ class OccupancyGrid3D:
         self.last_mouse_x = 0
         self.last_mouse_y = 0
 
-        logging.info(f"Enhanced 3D Occupancy Grid initialized:")
+        logging.info(f"Simplified 3D Occupancy Grid initialized:")
         logging.info(f"  Grid size: {self.grid_size} meters")
         logging.info(f"  Resolution: {self.resolution} m/voxel")
         logging.info(f"  Grid dimensions: {self.grid_dims} voxels")
@@ -202,7 +202,7 @@ class OccupancyGrid3D:
 
     def update_from_depth(self, depth_map: np.ndarray, camera_pose: np.ndarray):
         """
-        Update occupancy grid from depth map and camera pose with enhanced accuracy.
+        Update occupancy grid from depth map and camera pose.
 
         Uses ray-casting with uncertainty modeling and temporal filtering.
 
@@ -223,7 +223,7 @@ class OccupancyGrid3D:
         # Add current position to history for temporal consistency
         self.last_positions.append(camera_position.copy())
 
-        # Process depth map with enhanced accuracy
+        # Process depth map
         subsample = self.config.get('occupancy_grid_3d.subsample_step', 2)  # More dense sampling for accuracy
 
         rays_cast = 0
@@ -299,7 +299,7 @@ class OccupancyGrid3D:
         depth_factor = depth / self.max_range
         depth_uncertainty = base_uncertainty * (1.0 + 0.5 * depth_factor)
         
-        # Increase uncertainty at image edges (less accurate)
+        # Increase uncertainty at image edges (less precise)
         center_u, center_v = w / 2, h / 2
         pixel_distance = np.sqrt((u - center_u)**2 + (v - center_v)**2)
         max_distance = np.sqrt(center_u**2 + center_v**2)
@@ -950,12 +950,12 @@ class OccupancyGrid3D:
                 color = (0, 255, 255) if i == len(points) - 1 else (100, 100, 100)  # Yellow for current
                 cv2.circle(canvas, point, size, color, -1)
 
-        # Enhanced current camera position visualization
+        # Current camera position visualization
         if camera_position is not None:
             cam_voxel = self.world_to_voxel(camera_position)
             sx, sy, _ = project_voxel(cam_voxel)
             if 0 <= sx < img_size and 0 <= sy < img_size:
-                # Enhanced camera indicator with direction
+                # Camera indicator with direction
                 cv2.circle(canvas, (sx, sy), 12, (0, 255, 255), -1)  # Yellow
                 cv2.circle(canvas, (sx, sy), 14, (0, 0, 0), 2)       # Black border
                 cv2.putText(canvas, "CAM", (sx + 18, sy),
@@ -963,14 +963,14 @@ class OccupancyGrid3D:
                 # Draw direction indicator (simplified - just show as arrow)
                 cv2.arrowedLine(canvas, (sx, sy), (sx + 20, sy), (0, 100, 255), 2, tipLength=0.3)
 
-        # Enhanced info overlay
+        # Info overlay
         overlay = canvas.copy()
         cv2.rectangle(overlay, (10, 10), (450, 250), (245, 245, 245), -1)  # Light gray
         cv2.addWeighted(overlay, 0.9, canvas, 0.1, 0, canvas)
         cv2.rectangle(canvas, (10, 10), (450, 250), (128, 128, 128), 2)  # Border
 
-        # Enhanced info text (black on light background)
-        cv2.putText(canvas, "Enhanced 3D Occupancy Grid", (20, 40),
+        # Info text (black on light background)
+        cv2.putText(canvas, "Simplified 3D Occupancy Grid", (20, 40),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 0), 2)
         cv2.putText(canvas, f"Voxels: {len(occupied_voxels):,}", (20, 75),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 100, 200), 2)
@@ -989,7 +989,7 @@ class OccupancyGrid3D:
 
     def update_view_controls(self, key: int) -> bool:
         """
-        Update view parameters based on keyboard input with enhanced controls.
+        Update view parameters based on keyboard input with controls.
 
         Args:
             key: OpenCV key code
@@ -1065,7 +1065,7 @@ class OccupancyGrid3D:
 
     def handle_mouse_wheel(self, delta: int):
         """
-        Handle mouse wheel for zooming with enhanced sensitivity.
+        Handle mouse wheel for zooming with sensitivity.
 
         Args:
             delta: Mouse wheel delta (positive = zoom in, negative = zoom out)

@@ -15,6 +15,14 @@ import queue
 # Add src to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
+from rich.text import Text
+from rich.layout import Layout
+from rich.live import Live
+from rich.box import ROUNDED
+
 from utils import (
     ConfigManager, Logger, AudioManager, FrameProcessor,
     DataLogger, PerformanceMonitor, ensure_directories, check_device
@@ -26,9 +34,11 @@ from prediction import PathPlanner
 from mapping3d import Mapper3D
 from conversation import ConversationManager
 from slam import MonocularSLAM
+from slam_system import SLAMSystem
 from indoor_navigation import IndoorNavigator
 from trajectory_prediction import TrajectoryPredictionSystem
 from occupancy_grid_3d import OccupancyGrid3D
+from voxel_map import VoxelMap
 from point_cloud_viewer import PointCloudViewer
 from movement_visualizer import MovementVisualizer
 from coordinate_transformer import CoordinateTransformer
@@ -94,8 +104,9 @@ class OrbyGlasses:
         # SLAM and Indoor Navigation
         self.slam_enabled = self.config.get('slam.enabled', False)
         if self.slam_enabled:
+            # Use the new SLAM system by default
             self.logger.info("Initializing SLAM system...")
-            self.slam = MonocularSLAM(self.config)
+            self.slam = SLAMSystem(self.config)
             self.indoor_nav_enabled = self.config.get('indoor_navigation.enabled', False)
             if self.indoor_nav_enabled:
                 self.indoor_navigator = IndoorNavigator(self.slam, self.config)
@@ -119,9 +130,9 @@ class OrbyGlasses:
         # 3D Occupancy Grid Mapping
         self.occupancy_grid_enabled = self.config.get('occupancy_grid_3d.enabled', False)
         if self.occupancy_grid_enabled:
-            self.logger.info("Initializing 3D Occupancy Grid...")
-            self.occupancy_grid = OccupancyGrid3D(self.config)
-            self.logger.info("✓ 3D Occupancy Grid enabled")
+            self.logger.info("Initializing Voxel Map...")
+            self.occupancy_grid = VoxelMap(self.config)
+            self.logger.info("✓ Voxel Map enabled")
         else:
             self.occupancy_grid = None
 
@@ -434,57 +445,106 @@ class OrbyGlasses:
             return None
 
     def _display_terminal_info(self, fps, detections, total_time, slam_result, trajectory_result):
-        """Display information in the terminal."""
-        print("\n" * 5)
-        print("\033[H\033[J", end="") # Clear screen
-
-        # FPS
-        fps_color = "\033[92m" if fps > 10 else "\033[93m" if fps > 5 else "\033[91m"
-        print(f"{fps_color}FPS: {fps:.1f}\033[0m")
-
-        # Danger/Caution
+        """Display information in the terminal using Rich."""
+        # Clear the terminal screen
+        os.system('clear' if os.name == 'posix' else 'cls')
+        
+        # Create the console
+        console = Console()
+        
+        # Create a layout for the display
+        layout = Layout()
+        layout.split_column(
+            Layout(name="header", size=3),
+            Layout(name="main", ratio=1),
+            Layout(name="footer", size=3)
+        )
+        
+        # FPS indicator with color based on performance
+        if fps > 10:
+            fps_text = Text(f"FPS: {fps:.1f}", style="bold green")
+        elif fps > 5:
+            fps_text = Text(f"FPS: {fps:.1f}", style="bold yellow")
+        else:
+            fps_text = Text(f"FPS: {fps:.1f}", style="bold red")
+        
+        # Danger/Caution counts
         danger_objects = [d for d in detections if d.get('depth', 10) < self.danger_distance]
         caution_objects = [d for d in detections if self.danger_distance <= d.get('depth', 10) < self.caution_distance]
-        print(f"Danger: {len(danger_objects)} | Caution: {len(caution_objects)}")
-
-        # Closest Object
+        
+        # Status indicator
+        if danger_objects:
+            status_text = Text("⚠ DANGER", style="bold red")
+        elif caution_objects:
+            status_text = Text("⚠ CAUTION", style="bold yellow")
+        elif detections:
+            status_text = Text("SAFE", style="bold green")
+        else:
+            status_text = Text("CLEAR", style="bold green")
+        
+        # Create a table for main information
+        table = Table(title="OrbyGlasses Navigation Status", box=ROUNDED, show_header=True, header_style="bold magenta")
+        table.add_column("Metric", style="cyan")
+        table.add_column("Value", justify="right", style="green")
+        
+        table.add_row("FPS", f"{fps:.1f}")
+        table.add_row("Danger Objects", str(len(danger_objects)))
+        table.add_row("Caution Objects", str(len(caution_objects)))
+        table.add_row("Status", status_text.plain)
+        table.add_row("Process Time", f"{total_time:.0f}ms")
+        
+        # Add closest object info if detections exist
         if detections:
             closest = min(detections, key=lambda x: x.get('depth', 10))
-            dist_color = "\033[91m" if closest['depth'] < self.danger_distance else \
-                         "\033[93m" if closest['depth'] < self.caution_distance else "\033[92m"
-            print(f"{dist_color}Closest: {closest['label']} {closest['depth']:.1f}m\033[0m")
-
-        # Processing time
-        print(f"Process: {total_time:.0f}ms")
-
-        # Status
-        if danger_objects:
-            status_text = "⚠ DANGER"
-            status_color = "\033[91m"
-        elif caution_objects:
-            status_text = "⚠ CAUTION"
-            status_color = "\033[93m"
-        elif detections:
-            status_text = "SAFE"
-            status_color = "\033[92m"
-        else:
-            status_text = "CLEAR"
-            status_color = "\033[92m"
-        print(f"{status_color}{status_text}\033[0m")
-
-        # SLAM info
+            closest_text = Text(f"{closest['label']} {closest['depth']:.1f}m", style="bold")
+            
+            # Color code based on distance
+            if closest['depth'] < self.danger_distance:
+                closest_text.stylize("red", 0, len(closest_text))
+            elif closest['depth'] < self.caution_distance:
+                closest_text.stylize("yellow", 0, len(closest_text))
+            else:
+                closest_text.stylize("green", 0, len(closest_text))
+                
+            table.add_row("Closest Object", closest_text.plain)
+        
+        # Add SLAM info if available
         if slam_result is not None:
             position = slam_result['position']
             quality = slam_result['tracking_quality']
-            slam_color = "\033[92m" if quality > 0.7 else "\033[93m" if quality > 0.4 else "\033[91m"
-            print(f"{slam_color}SLAM: ({position[0]:.1f}, {position[1]:.1f}, {position[2]:.1f}) | Quality: {quality:.2f} | Points: {slam_result['num_map_points']}\033[0m")
-
-        # Trajectory info
+            slam_pos_text = f"({position[0]:.1f}, {position[1]:.1f}, {position[2]:.1f})"
+            
+            # Color code SLAM quality
+            if quality > 0.7:
+                quality_text = Text(f"{quality:.2f}", style="green")
+            elif quality > 0.4:
+                quality_text = Text(f"{quality:.2f}", style="yellow")
+            else:
+                quality_text = Text(f"{quality:.2f}", style="red")
+                
+            table.add_row("SLAM Position", slam_pos_text)
+            table.add_row("Tracking Quality", quality_text.plain)
+            table.add_row("Map Points", str(slam_result['num_map_points']))
+        
+        # Add trajectory info if available
         if trajectory_result is not None:
             tracked_count = len(trajectory_result['tracked_objects'])
             predictions = trajectory_result['predictions']
             predicted_count = len([p for p in predictions.values() if len(p['predicted_positions']) > 0])
-            print(f"\033[96mTracked: {tracked_count} | Predicted: {predicted_count}\033[0m")
+            
+            table.add_row("Tracked Objects", str(tracked_count))
+            table.add_row("Predicted Trajectories", str(predicted_count))
+        
+        # Print the table
+        console.print(table)
+        
+        # Add a summary panel
+        summary_text = f"[bold]Navigation System Active[/bold] | [green]Objects: {len(detections)}[/green] | [red]Danger: {len(danger_objects)}[/red] | [yellow]Caution: {len(caution_objects)}[/yellow]"
+        console.print(Panel(summary_text, title="System Summary", border_style="blue"))
+        
+        # Performance info
+        performance_text = f"[bold]Performance[/bold]: {fps:.1f} FPS | {total_time:.0f}ms processing | [green]Active[/green]"
+        console.print(Panel(performance_text, title="Performance", border_style="green"))
 
 
     def run(self, display: bool = True, save_video: bool = False):
@@ -672,10 +732,11 @@ class OrbyGlasses:
 
                 # Display
                 if display:
-                    # Display terminal info
-                    total_time = self.perf_monitor.get_stats().get('avg_frame_time_ms', 0)
-                    fps = self.perf_monitor.get_avg_fps()
-                    self._display_terminal_info(fps, detections, total_time, slam_result, trajectory_result)
+                    # Display terminal info every N frames to avoid flickering
+                    if self.frame_count % 5 == 0:  # Show terminal info every 5 frames
+                        total_time = self.perf_monitor.get_stats().get('avg_frame_time_ms', 0)
+                        fps = self.perf_monitor.get_avg_fps()
+                        self._display_terminal_info(fps, detections, total_time, slam_result, trajectory_result)
 
                     display_size = (400, 400)  # Standard size for all windows
 
@@ -713,6 +774,15 @@ class OrbyGlasses:
                         slam_vis = self.slam.visualize_tracking(frame, slam_result)
                         slam_display = cv2.resize(slam_vis, display_size)
                         cv2.imshow('SLAM Tracking', slam_display)
+                        
+                        # Show 3D real-time SLAM map if mapping is enabled
+                        if self.config.get('mapping3d.enabled', False):
+                            # Create a 3D visualization of the SLAM map
+                            if hasattr(self.slam, 'visualize_3d_map'):
+                                slam_3d_vis = self.slam.visualize_3d_map()
+                                if slam_3d_vis is not None:
+                                    slam_3d_display = cv2.resize(slam_3d_vis, display_size)
+                                    cv2.imshow('SLAM 3D Map', slam_3d_display)
 
                     # Show 3D Point Cloud visualization if enabled
                     if self.point_cloud_enabled and self.point_cloud is not None:

@@ -102,11 +102,11 @@ performance:
 
 # 3D Mapping Settings
 mapping3d:
-  enabled: false                   # Enable 3D real-time mapping visualization (set to true to enable)
-  max_depth: 10.0                 # Maximum depth in meters to visualize
-  voxel_size: 0.1                 # Voxel size for downsampling (larger = faster, less detail)
-  subsample_step: 8               # Subsample every Nth point (higher = faster, less detail)
-  update_interval: 0.3            # Update 3D map every N seconds (slower updates = better performance)
+  enabled: true                   # Enable 3D real-time mapping visualization
+  max_depth: 8.0                  # Maximum depth in meters to visualize
+  voxel_size: 0.1                 # Voxel size for downsampling
+  subsample_step: 6               # Subsample every Nth point (balance quality and performance)
+  update_interval: 0.2            # Update 3D map every N seconds for real-time
   fx: 500                         # Camera focal length X (pixels)
   fy: 500                         # Camera focal length Y (pixels)
   skip_bbox: true                 # Skip bounding boxes for better performance
@@ -115,14 +115,31 @@ mapping3d:
 slam:
   enabled: true                   # Enable SLAM for indoor navigation
   grid_size: [200, 200]           # Occupancy grid size (width, height) in cells
-  grid_resolution: 0.1            # Grid cell size in meters (0.1m = 10cm per cell)
+  grid_resolution: 0.4            # Grid cell size in meters (0.1m = 10cm per cell)
   save_maps: true                 # Save maps for later reuse
   visualize: true                 # Show SLAM visualization window
 
-  # Advanced tracking without IMU
+  # Tracking without IMU
+  orb_features: 4000              # More features for better tracking
+  fast_threshold: 8               # More features in low-texture areas
+  min_matches: 12                 # Maintain tracking with fewer matches
   motion_model: true              # Use constant velocity motion model
-  pose_smoothing: 0.3             # Smoothing factor (0=no smooth, 1=max smooth)
-  strict_matching: true           # Stricter feature matching for accuracy
+  pose_smoothing: 0.7             # More aggressive smoothing for stability
+  temporal_consistency_check: true # Check for physically impossible movements
+  max_position_jump: 0.3          # Maximum allowed position jump (m)
+  max_rotation_jump: 0.3          # Maximum allowed rotation jump (rad)
+  strict_matching: true           # Stricter feature matching
+  min_tracked_features: 10        # Minimum tracked features for good tracking
+  keyframe_threshold: 15          # Insert keyframe every N frames
+  reprojection_threshold: 2.0     # Lower reprojection threshold
+  min_depth: 0.1                  # Minimum depth for triangulation (m)
+  max_depth: 10.0                 # Maximum depth for triangulation (m)
+  depth_variance: 0.02            # Lower variance for more confidence in depth
+  pose_alpha: 0.8                 # Pose smoothing factor (higher = more smoothing)
+  loop_closure: true              # Enable loop closure detection
+  loop_closure_threshold: 0.6     # Loop closure threshold (0-1)
+  bundle_adjustment: false        # Enable bundle adjustment (may slow down)
+  ba_interval: 10                 # Perform BA every N keyframes
 
 # Indoor Navigation Settings
 indoor_navigation:
@@ -139,21 +156,30 @@ trajectory_prediction:
   visualize: false                # Show trajectory visualization
   collision_warning: true         # Warn about predicted collisions
 
-# 3D Occupancy Grid Settings (Voxel Grid Map) - OPTIMIZED FOR IMMEDIATE RESULTS
+# 3D Occupancy Grid Settings (Voxel Grid Map) - FOR REAL-TIME VISUALIZATION
 occupancy_grid_3d:
   enabled: true                   # Enable voxel grid visualization
-  grid_size: [10.0, 10.0, 3.0]    # Smaller grid = faster, easier to see
-  resolution: 0.2                 # Larger voxels = more visible (20cm)
+  grid_size: [15.0, 15.0, 3.0]    # Balanced grid size
+  resolution: 0.15                # Better resolution for detail
+  near_resolution: 0.08           # High resolution for nearby area
+  near_distance: 2.0              # High resolution up to 2m
+  far_resolution: 0.25            # Lower resolution beyond 2m
   max_range: 5.0                  # Maximum sensor range in meters
   min_range: 0.1                  # Minimum sensor range in meters
-  log_odds_occupied: 1.5          # FAST convergence to occupied
-  log_odds_free: -0.8             # FAST free space marking
-  log_odds_min: -3.0              # Faster saturation
-  log_odds_max: 3.0               # Faster saturation
-  subsample_step: 20              # MUCH fewer rays for SPEED
-  update_interval: 1.0            # Slow updates to maintain FPS
+  log_odds_occupied: 2.0          # Faster convergence to occupied
+  log_odds_free: -1.0             # Faster free space marking
+  log_odds_min: -4.0              # Better saturation
+  log_odds_max: 4.0               # Better saturation
+  subsample_step: 15              # Balance between speed and quality
+  update_interval: 0.5            # Update more frequently for real-time
   visualize: true                 # Show 3D voxel grid visualization window
-  show_2d_slice: false            # Also show 2D slice in separate window
+  show_2d_slice: true             # Show 2D slice for better understanding
+  temporal_consistency: true      # Maintain consistency over time
+  temporal_filtering: true        # Use temporal filtering
+  min_observations: 2             # Minimum observations for confidence
+  decay_rate: 0.001               # Slow decay for stability
+  max_history_length: 8           # History length for temporal filtering
+  history_decay: 0.9              # Decay factor for historical observations
 
 # 3D Point Cloud Viewer Settings (DISABLED - using voxel grid only)
 point_cloud_viewer:
@@ -169,8 +195,8 @@ point_cloud_viewer:
 movement_visualizer:
   enabled: true                   # Enable movement visualization
   canvas_size: [800, 800]         # Canvas dimensions (width, height)
-  trail_length: 200               # Number of positions to show in trail
-  grid_size: 20.0                 # Grid size in meters
+  trail_length: 300               # Longer trail for better path visualization
+  grid_size: 25.0                 # Larger grid for better context
   show_velocity: true             # Show velocity vector
   show_orientation: true          # Show orientation indicator
   show_grid: true                 # Show coordinate grid
