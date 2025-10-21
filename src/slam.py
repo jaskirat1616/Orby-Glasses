@@ -119,6 +119,14 @@ class MonocularSLAM:
         self.keyframe_threshold = 15  # More frequent keyframes
         self.frame_count = 0
 
+        # Motion model for pose prediction (no IMU needed)
+        self.velocity = np.zeros(6)  # [vx, vy, vz, wx, wy, wz]
+        self.last_pose_update_time = time.time()
+
+        # Pose smoothing (exponential moving average)
+        self.pose_alpha = 0.3  # Smoothing factor
+        self.smoothed_pose = np.eye(4, dtype=np.float32)
+
         # Map saving
         self.map_save_dir = "data/maps"
         os.makedirs(self.map_save_dir, exist_ok=True)
@@ -230,16 +238,17 @@ class MonocularSLAM:
     def _track(self, frame: np.ndarray, keypoints: List, descriptors: np.ndarray) -> Dict:
         """
         Track camera motion by matching features with previous frame.
+        Enhanced with motion model and pose smoothing (no IMU needed).
         """
         # Match features with last frame
         matches = self.matcher.knnMatch(descriptors, self.last_descriptors, k=2)
 
-        # Apply Lowe's ratio test
+        # Apply Lowe's ratio test (stricter for better accuracy)
         good_matches = []
         for match_pair in matches:
             if len(match_pair) == 2:
                 m, n = match_pair
-                if m.distance < 0.75 * n.distance:
+                if m.distance < 0.7 * n.distance:  # Stricter (was 0.75)
                     good_matches.append(m)
 
         num_matches = len(good_matches)
@@ -248,30 +257,56 @@ class MonocularSLAM:
         position = self.current_pose[:3, 3].tolist()
         tracking_quality = 0.0
 
+        # Predict pose using motion model (constant velocity assumption)
+        current_time = time.time()
+        dt = current_time - self.last_pose_update_time
+        predicted_pose = self._predict_pose(dt)
+
         if num_matches < self.min_matches:
-            # Don't spam warnings, keep last pose
-            if num_matches < 10:  # Only warn if very few matches
-                logging.debug(f"Low tracking: only {num_matches} matches (keeping last pose)")
-            tracking_quality = num_matches / self.min_matches  # Proportional quality
+            # Use predicted pose when tracking is weak
+            if num_matches >= 10:
+                # Partial tracking - blend prediction with last pose
+                self.current_pose = predicted_pose
+                tracking_quality = num_matches / self.min_matches
+            else:
+                # Very weak tracking - use prediction only
+                self.current_pose = predicted_pose
+                tracking_quality = 0.1
+                logging.debug(f"Low tracking: {num_matches} matches (using motion prediction)")
         else:
-            # Extract matched points
+            # Good tracking - estimate pose from features
             pts_current = np.float32([keypoints[m.queryIdx].pt for m in good_matches])
             pts_last = np.float32([self.last_keypoints[m.trainIdx].pt for m in good_matches])
 
-            # Estimate essential matrix (assumes calibrated camera)
-            E, mask = cv2.findEssentialMat(pts_current, pts_last, self.K, method=cv2.RANSAC, prob=0.999, threshold=1.0)
+            # Estimate essential matrix with RANSAC
+            E, mask = cv2.findEssentialMat(pts_current, pts_last, self.K,
+                                          method=cv2.RANSAC, prob=0.999, threshold=0.8)
 
             if E is not None and mask is not None:
                 # Recover pose from essential matrix
                 _, R, t, mask_pose = cv2.recoverPose(E, pts_current, pts_last, self.K, mask=mask)
 
-                # Update pose (relative motion)
+                # Scale translation using motion model (monocular scale ambiguity fix)
+                if len(self.position_history) >= 2:
+                    # Estimate scale from velocity
+                    scale = np.linalg.norm(self.velocity[:3]) * dt
+                    if scale > 0.01:  # Minimum movement
+                        t = t * min(scale, 1.0)  # Cap at 1 meter per frame
+
+                # Create transformation matrix
                 T = np.eye(4, dtype=np.float32)
                 T[:3, :3] = R
                 T[:3, 3] = t.flatten()
 
-                # Update current pose
-                self.current_pose = self.current_pose @ T
+                # Update pose
+                new_pose = self.current_pose @ T
+
+                # Apply pose smoothing (exponential moving average)
+                self.current_pose = self._smooth_pose(new_pose)
+
+                # Update velocity for motion model
+                self._update_velocity(dt)
+                self.last_pose_update_time = current_time
 
                 # Extract position
                 position = self.current_pose[:3, 3].tolist()
@@ -280,8 +315,9 @@ class MonocularSLAM:
                 # Tracking quality based on inliers
                 tracking_quality = np.sum(mask_pose) / len(good_matches)
             else:
-                position = self.current_pose[:3, 3].tolist()
-                tracking_quality = 0.5
+                # Essential matrix failed - use prediction
+                self.current_pose = predicted_pose
+                tracking_quality = 0.3
 
         # Check if we need a new keyframe
         is_keyframe = self._should_insert_keyframe(num_matches)
@@ -481,6 +517,85 @@ class MonocularSLAM:
             logging.error(f"Failed to load map: {e}")
             return False
 
+    def _predict_pose(self, dt: float) -> np.ndarray:
+        """
+        Predict next pose using constant velocity motion model.
+        No IMU needed - uses previous motion.
+
+        Args:
+            dt: Time since last update
+
+        Returns:
+            Predicted 4x4 pose matrix
+        """
+        # Predict translation
+        predicted_pose = self.current_pose.copy()
+        translation_delta = self.velocity[:3] * dt
+        predicted_pose[:3, 3] += translation_delta
+
+        # Predict rotation (small angle approximation)
+        if np.linalg.norm(self.velocity[3:]) > 0.01:
+            angle = np.linalg.norm(self.velocity[3:]) * dt
+            axis = self.velocity[3:] / np.linalg.norm(self.velocity[3:])
+
+            # Rodrigues rotation formula
+            K = np.array([[0, -axis[2], axis[1]],
+                         [axis[2], 0, -axis[0]],
+                         [-axis[1], axis[0], 0]])
+            R_delta = np.eye(3) + np.sin(angle) * K + (1 - np.cos(angle)) * (K @ K)
+
+            predicted_pose[:3, :3] = predicted_pose[:3, :3] @ R_delta
+
+        return predicted_pose
+
+    def _update_velocity(self, dt: float):
+        """
+        Update velocity estimate from pose changes.
+
+        Args:
+            dt: Time delta
+        """
+        if len(self.position_history) < 2 or dt < 0.001:
+            return
+
+        # Linear velocity
+        current_pos = self.current_pose[:3, 3]
+        if len(self.position_history) >= 2:
+            prev_pos = np.array(self.position_history[-2])
+            linear_vel = (current_pos - prev_pos) / dt
+
+            # Exponential moving average for smoothing
+            alpha = 0.3
+            self.velocity[:3] = alpha * linear_vel + (1 - alpha) * self.velocity[:3]
+
+    def _smooth_pose(self, new_pose: np.ndarray) -> np.ndarray:
+        """
+        Apply exponential moving average to smooth pose.
+        Reduces jitter without IMU.
+
+        Args:
+            new_pose: Newly estimated pose
+
+        Returns:
+            Smoothed pose
+        """
+        # Smooth translation
+        smoothed = self.smoothed_pose.copy()
+        smoothed[:3, 3] = (self.pose_alpha * new_pose[:3, 3] +
+                          (1 - self.pose_alpha) * self.smoothed_pose[:3, 3])
+
+        # Smooth rotation using SLERP-like interpolation
+        # Simple linear interpolation of rotation matrices
+        smoothed[:3, :3] = (self.pose_alpha * new_pose[:3, :3] +
+                           (1 - self.pose_alpha) * self.smoothed_pose[:3, :3])
+
+        # Re-orthogonalize rotation matrix
+        U, _, Vt = np.linalg.svd(smoothed[:3, :3])
+        smoothed[:3, :3] = U @ Vt
+
+        self.smoothed_pose = smoothed
+        return smoothed
+
     def reset(self):
         """Reset SLAM to initial state."""
         self.map_points = {}
@@ -490,6 +605,8 @@ class MonocularSLAM:
         self.next_keyframe_id = 0
         self.is_initialized = False
         self.position_history.clear()
+        self.velocity = np.zeros(6)
+        self.smoothed_pose = np.eye(4, dtype=np.float32)
         logging.info("SLAM reset")
 
     def _empty_result(self) -> Dict:

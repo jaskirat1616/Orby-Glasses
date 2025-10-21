@@ -111,13 +111,18 @@ mapping3d:
   fy: 500                         # Camera focal length Y (pixels)
   skip_bbox: true                 # Skip bounding boxes for better performance
 
-# SLAM Settings (Visual Simultaneous Localization and Mapping)
+# SLAM Settings (Visual Simultaneous Localization and Mapping - NO IMU)
 slam:
-  enabled: true                   # Enable SLAM for indoor navigation (EXPERIMENTAL)
+  enabled: true                   # Enable SLAM for indoor navigation
   grid_size: [200, 200]           # Occupancy grid size (width, height) in cells
   grid_resolution: 0.1            # Grid cell size in meters (0.1m = 10cm per cell)
   save_maps: true                 # Save maps for later reuse
   visualize: true                 # Show SLAM visualization window
+
+  # Advanced tracking without IMU
+  motion_model: true              # Use constant velocity motion model
+  pose_smoothing: 0.3             # Smoothing factor (0=no smooth, 1=max smooth)
+  strict_matching: true           # Stricter feature matching for accuracy
 
 # Indoor Navigation Settings
 indoor_navigation:
