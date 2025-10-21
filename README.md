@@ -13,6 +13,7 @@ OrbyGlasses is an innovative, AI-powered navigation assistance system designed t
 - **Real-Time Object Detection**: YOLOv11n optimized for Apple Silicon MPS acceleration.
 - **Depth Estimation**: Apple Depth Pro (with MiDaS fallback) for accurate distance measurement.
 - **Visual SLAM System**: Tracks user position indoors using only a USB webcam (no GPS or IMU needed).
+- **3D Occupancy Grid Mapping**: Real-time volumetric environment representation with probabilistic obstacle detection.
 - **Indoor Navigation System**: Enables goal-oriented navigation (e.g., "Take me to the kitchen").
 - **Trajectory Prediction**: Uses a simplified Graph Neural Network (GNN) to predict the future positions of moving objects.
 - **Social Navigation**: Provides guidance in crowded areas based on social norms and conventions.
@@ -40,6 +41,32 @@ The latest version of OrbyGlasses introduces a powerful Visual SLAM (Simultaneou
     -   Provides turn-by-turn voice guidance to the destination.
 
 This combination allows for true indoor navigation, enabling users to move from point A to point B with confidence, rather than just reacting to their immediate surroundings.
+
+#### 3D Occupancy Grid Mapping
+
+OrbyGlasses now includes a sophisticated 3D occupancy grid system that creates a volumetric representation of the environment in real-time.
+
+-   **Sparse Voxel Storage (`src/occupancy_grid_3d.py`)**:
+    -   Efficiently stores only observed voxels using a probabilistic approach.
+    -   Memory-efficient representation (~1 MB for typical indoor rooms).
+    -   Uses Bayesian log-odds updates for robust obstacle detection.
+
+-   **Ray Casting & Sensor Fusion**:
+    -   Combines depth estimation with SLAM camera poses for accurate 3D mapping.
+    -   Marks space along sensor rays as free, endpoints as occupied.
+    -   Handles sensor noise and uncertainty through probabilistic updates.
+
+-   **Real-Time Visualization**:
+    -   Displays 2D slices at head height for navigation awareness.
+    -   Color-coded occupancy: Blue (free), Red (occupied), Gray (unknown).
+    -   Updates at 2 Hz with minimal performance impact (<5% FPS reduction).
+
+-   **Path Planning Integration**:
+    -   Provides collision-free path planning information.
+    -   Enables spatial memory and environment understanding.
+    -   Supports future features like map persistence and revisit locations.
+
+See `docs/OCCUPANCY_GRID_3D.md` for detailed documentation, API reference, and usage examples.
 
 #### Trajectory Prediction
 
