@@ -36,7 +36,7 @@ class NarrativeGenerator:
 
         # Concurrency control to prevent duplicate model calls
         self._last_call_time = 0
-        self._min_call_interval = 4.0  # Minimum 4 seconds between calls to prevent overuse
+        self._min_call_interval = 2.0  # Reduced from 4s to 2s for better responsiveness
         self._is_call_in_progress = False  # Flag to prevent concurrent calls
 
         # Check available models

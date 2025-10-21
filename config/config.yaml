@@ -25,14 +25,14 @@ models:
 
   # LLM for Narrative Generation
   llm:
-    primary: "gemma3:4b"        # Primary model for both narrative and vision tasks
-    vision: "gemma3:4b"         # Use same model for vision tasks (no separate vision model)
+    primary: "moondream:latest"        # Primary model for both narrative and vision tasks
+    vision: "moondream:latest"         # Use same model for vision tasks (no separate vision model)
     temperature: 0.7            # Sampling temperature (0-1)
     max_tokens: 150             # Maximum tokens to generate
 
 # Conversational Navigation
 conversation:
-  enabled: true                      # Enable conversational mode
+  enabled: false                      # Enable conversational mode
   model: "gemma3:4b"                 # LLM model for conversations
   temperature: 0.7                   # Response creativity (0-1)
   max_tokens: 200                    # Maximum response length
@@ -94,11 +94,11 @@ logging:
 
 # Performance Tuning
 performance:
-  audio_update_interval: 5.0      # Seconds between audio updates (ensures sentences complete)
-  danger_audio_interval: 3.0      # Faster alerts for danger zone objects (increased to reduce spam)
-  stats_interval: 100             # Log stats every N frames
+  audio_update_interval: 3.0      # Reduced from 5s to 3s for more frequent updates
+  danger_audio_interval: 1.5      # Faster alerts for danger zone objects
+  stats_interval: 50              # Log stats more frequently
   max_detections: 3               # Focus on top 3 most relevant objects
-  depth_skip_frames: 3            # Calculate depth every Nth frame (3 = every 4th frame)
+  depth_skip_frames: 2            # Calculate depth more frequently (every 3rd frame)
 
 # 3D Mapping Settings
 mapping3d:
@@ -173,7 +173,7 @@ occupancy_grid_3d:
   subsample_step: 15              # Moderate subsample (was 20)
   update_interval: 0.7            # Better update frequency (was 1.0)
   visualize: true                 # Show 3D voxel grid visualization window
-  show_2d_slice: true             # Enable 2D slice for better understanding (was false)
+  show_2d_slice: false             # Enable 2D slice for better understanding (was false)
   temporal_consistency: true      # Enable for accuracy (was false)
   temporal_filtering: true        # Enable temporal filtering for accuracy (was false)
   min_observations: 2             # Better observations for accuracy (was 1)
