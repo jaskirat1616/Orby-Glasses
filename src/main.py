@@ -441,7 +441,9 @@ class OrbyGlasses:
             return annotated_frame, detections, guidance, audio_signal, audio_message, depth_map, slam_result, trajectory_result
         
         except Exception as e:
-            self.logger.error(f"Error processing frame: {e}", exc_info=True)
+            self.logger.error(f"Error processing frame: {e}")
+            import traceback
+            traceback.print_exc()  # Print the full exception trace
             return None
 
     def _display_terminal_info(self, fps, detections, total_time, slam_result, trajectory_result):

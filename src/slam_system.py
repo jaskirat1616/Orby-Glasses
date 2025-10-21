@@ -79,7 +79,8 @@ class SLAMSystem:
             firstLevel=0,
             WTA_K=2,
             patchSize=31,
-            fastThreshold=10  # Lower threshold for more features
+            fastThreshold=10,  # Lower threshold for more features
+            scoreType=cv2.ORB_HARRIS_SCORE
         )
 
         # Multiple matcher strategies
@@ -322,21 +323,15 @@ class SLAMSystem:
         Simplified track camera motion by matching features with previous frame.
         Includes temporal consistency checks and pose estimation.
         """
-        # Try multiple matcher strategies
-        try:
-            # Try FLANN matcher first (better performance with many features)
-            matches = self.flann_matcher.knnMatch(descriptors, self.last_descriptors, k=2)
-        except:
-            # Fallback to brute force matcher
-            matches = self.bf_matcher.knnMatch(descriptors, self.last_descriptors, k=2)
+        # Use FLANN-based matcher for better performance
+        matches = self.flann_matcher.knnMatch(descriptors, self.last_descriptors, k=2)
 
-        # Apply Lowe's ratio test with adaptive threshold
+        # Apply Lowe's ratio test to filter out bad matches
         good_matches = []
         for match_pair in matches:
             if len(match_pair) == 2:
                 m, n = match_pair
-                adaptive_threshold = 0.75
-                if m.distance < adaptive_threshold * n.distance:
+                if m.distance < 0.7 * n.distance:
                     good_matches.append(m)
 
         num_matches = len(good_matches)
@@ -364,84 +359,53 @@ class SLAMSystem:
                 self.lost_frames += 1
         else:
             # Good tracking - estimate pose from features
-            if len(good_matches) >= 5:  # Need at least 5 points for Essential matrix
-                # Get matched points
-                pts_current = np.float32([keypoints[m.queryIdx].pt for m in good_matches])
-                pts_last = np.float32([self.last_keypoints[m.trainIdx].pt for m in good_matches])
+            if len(good_matches) >= 5:  # Need at least 5 points for PnP
+                # Get 3D-2D correspondences
+                object_points = []
+                image_points = []
+                for m in good_matches:
+                    if m.trainIdx in self.map_points:
+                        object_points.append(self.map_points[m.trainIdx].position)
+                        image_points.append(keypoints[m.queryIdx].pt)
 
-                # Estimate essential matrix with parameters
-                E, mask = cv2.findEssentialMat(
-                    pts_current, pts_last, self.K,
-                    method=cv2.RANSAC, 
-                    prob=0.999, 
-                    threshold=0.5  # More stringent threshold for better accuracy
-                )
+                if len(object_points) >= 5:
+                    object_points = np.float32(object_points)
+                    image_points = np.float32(image_points)
 
-                if E is not None and mask is not None:
-                    # Count inliers
-                    inliers = np.sum(mask)
-                    
-                    if inliers >= self.min_tracked_features:
-                        # Recover pose from essential matrix
-                        success, R, t, mask_pose = cv2.recoverPose(
-                            E, pts_current, pts_last, self.K, mask=mask
-                        )
+                    # Estimate pose with PnP
+                    success, rvec, tvec, inliers = cv2.solvePnPRansac(
+                        object_points, image_points, self.K, None,
+                        iterationsCount=100, reprojectionError=self.reprojection_threshold
+                    )
 
-                        if success and t is not None and np.all(np.isfinite(t)):
-                            # Scale estimation for monocular SLAM
-                            scale = self._estimate_scale_from_depth(
-                                pts_current, pts_last, t.flatten(), depth_map
-                            )
+                    if success:
+                        # Create transformation matrix
+                        R, _ = cv2.Rodrigues(rvec)
+                        T = np.eye(4, dtype=np.float32)
+                        T[:3, :3] = R
+                        T[:3, 3] = tvec.flatten()
 
-                            # Apply scale to translation
-                            t_scaled = t * scale
+                        # Update pose
+                        self.current_pose = T
 
-                            # Create transformation matrix
-                            T = np.eye(4, dtype=np.float32)
-                            T[:3, :3] = R
-                            T[:3, 3] = t_scaled.flatten()
+                        # Update velocity for motion model
+                        if dt > 0.001:
+                            self._update_velocity(dt)
+                            self.last_pose_update_time = current_time
 
-                            # Update pose relative to last pose
-                            new_pose = self.current_pose @ T
+                        # Extract position
+                        position = self.current_pose[:3, 3].tolist()
+                        
+                        # Update statistics
+                        self.tracked_features += len(inliers)
+                        self.total_features += len(good_matches)
 
-                            # Apply temporal consistency check
-                            if self.temporal_consistency_check:
-                                if self._is_pose_consistent(new_pose):
-                                    # Smoothing with more aggressive approach
-                                    self.current_pose = self._smooth_pose(new_pose)
-                                else:
-                                    # Use prediction instead of inconsistent pose
-                                    self.current_pose = predicted_pose
-                                    tracking_quality = 0.4
-                            else:
-                                self.current_pose = self._smooth_pose(new_pose)
-
-                            # Update velocity for motion model
-                            if dt > 0.001:
-                                self._update_velocity(dt)
-                                self.last_pose_update_time = current_time
-
-                            # Extract position
-                            position = self.current_pose[:3, 3].tolist()
-                            
-                            # Update statistics
-                            self.tracked_features += inliers
-                            self.total_features += len(good_matches)
-
-                            # Tracking quality based on inliers and matches
-                            tracking_quality = min(1.0, (inliers / self.min_matches) * 0.7 + 
-                                                 (len(good_matches) / (self.min_matches * 2)) * 0.3)
-                        else:
-                            self.current_pose = predicted_pose
-                            tracking_quality = 0.3
+                        # Tracking quality based on inliers and matches
+                        tracking_quality = min(1.0, (len(inliers) / self.min_matches) * 0.7 + 
+                                             (len(good_matches) / (self.min_matches * 2)) * 0.3)
                     else:
-                        # Not enough inliers
                         self.current_pose = predicted_pose
                         tracking_quality = 0.3
-                else:
-                    # Essential matrix estimation failed
-                    self.current_pose = predicted_pose
-                    tracking_quality = 0.3
             else:
                 # Not enough matches to estimate pose
                 self.current_pose = predicted_pose
@@ -476,6 +440,10 @@ class SLAMSystem:
         if len(pts_current) < 3 or not np.all(np.isfinite(translation)):
             return default_scale
 
+        # Use a sliding window of recent scale estimates
+        if not hasattr(self, 'scale_history'):
+            self.scale_history = deque(maxlen=10)
+
         # Calculate distances in current frame
         current_depths = []
         for pt in pts_current[:20]:  # Use more points for better estimate
@@ -487,6 +455,8 @@ class SLAMSystem:
                     current_depths.append(depth)
         
         if not current_depths:
+            if len(self.scale_history) > 0:
+                return np.median(self.scale_history)
             return default_scale
 
         avg_depth = np.mean(current_depths)
@@ -497,7 +467,11 @@ class SLAMSystem:
             expected_translation = translation_norm * avg_depth
             # Use this to estimate scale
             scale = np.clip(expected_translation, 0.01, 0.5) # Limit scale to reasonable range
-            return scale
+            self.scale_history.append(scale)
+            return np.median(self.scale_history)
+
+        if len(self.scale_history) > 0:
+            return np.median(self.scale_history)
 
         return default_scale
 
@@ -716,7 +690,7 @@ class SLAMSystem:
 
     def _predict_pose(self, dt: float) -> np.ndarray:
         """
-        Predict next pose using constant velocity motion model.
+        Predict next pose using a Kalman filter-based motion model.
 
         Args:
             dt: Time since last update
@@ -724,27 +698,40 @@ class SLAMSystem:
         Returns:
             Predicted 4x4 pose matrix
         """
-        if not np.all(np.isfinite(self.velocity)):
-            return self.current_pose.copy()
+        if not hasattr(self, 'kalman_filter'):
+            # Initialize Kalman filter
+            self.kalman_filter = cv2.KalmanFilter(18, 6, 0)
+            self.kalman_filter.transitionMatrix = np.eye(18, dtype=np.float32)
+            for i in range(6):
+                self.kalman_filter.transitionMatrix[i, i+6] = dt
+                self.kalman_filter.transitionMatrix[i+6, i+12] = dt
+            self.kalman_filter.measurementMatrix = np.zeros((6, 18), dtype=np.float32)
+            for i in range(6):
+                self.kalman_filter.measurementMatrix[i, i] = 1
+            self.kalman_filter.processNoiseCov = np.eye(18, dtype=np.float32) * 1e-5
+            self.kalman_filter.measurementNoiseCov = np.eye(6, dtype=np.float32) * 1e-4
+            self.kalman_filter.errorCovPost = np.eye(18, dtype=np.float32)
 
-        # Predict translation
-        predicted_pose = self.current_pose.copy()
-        translation_delta = self.velocity[:3] * dt
-        predicted_pose[:3, 3] += translation_delta
+            # Initialize state
+            self.kalman_filter.statePost = np.zeros(18, dtype=np.float32)
+            self.kalman_filter.statePost[0:3] = self.current_pose[:3, 3]
+            rvec, _ = cv2.Rodrigues(self.current_pose[:3, :3])
+            self.kalman_filter.statePost[3:6] = rvec.flatten()
 
-        # Predict rotation (small angle approximation)
-        angular_velocity_norm = np.linalg.norm(self.velocity[3:])
-        if angular_velocity_norm > 1e-6:
-            angle = angular_velocity_norm * dt
-            axis = self.velocity[3:] / angular_velocity_norm
+        # Predict
+        predicted_state = self.kalman_filter.predict()
 
-            # Rodrigues rotation formula
-            K = np.array([[0, -axis[2], axis[1]],
-                         [axis[2], 0, -axis[0]],
-                         [-axis[1], axis[0], 0]])
-            R_delta = np.eye(3) + np.sin(angle) * K + (1 - np.cos(angle)) * (K @ K)
+        # Update transition matrix with new dt
+        for i in range(6):
+            self.kalman_filter.transitionMatrix[i, i+6] = dt
+            self.kalman_filter.transitionMatrix[i+6, i+12] = dt
 
-            predicted_pose[:3, :3] = predicted_pose[:3, :3] @ R_delta
+        # Create predicted pose
+        predicted_pose = np.eye(4, dtype=np.float32)
+        predicted_pose[:3, 3] = predicted_state[0:3].flatten()
+        rvec = predicted_state[3:6].flatten()
+        R, _ = cv2.Rodrigues(rvec)
+        predicted_pose[:3, :3] = R
 
         return predicted_pose
 
@@ -882,7 +869,7 @@ class SLAMSystem:
         return R
 
     def get_movement_summary(self) -> Dict:
-        """Get summary of movement and trajectory for visualization."""
+        """Get summary of movement and trajectory for visualization with enhanced accuracy."""
         if not self.position_history:
             return self._empty_movement_summary()
 
@@ -891,24 +878,76 @@ class SLAMSystem:
         if len(positions) < 2:
             return self._empty_movement_summary(trajectory_length=len(positions))
 
-        # Calculate total distance traveled along trajectory
+        # Calculate total distance traveled along trajectory with enhanced accuracy
         total_distance = 0.0
+        instantaneous_speeds = []
+        
+        # Calculate distance and speed for each step
         for i in range(1, len(positions)):
             dist = np.linalg.norm(positions[i] - positions[i-1])
             total_distance += dist
+            
+            # Calculate instantaneous speed (assuming 10 FPS)
+            time_delta = 0.1  # 0.1 seconds per frame at 10 FPS
+            instantaneous_speeds.append(dist / time_delta)
 
         # Calculate displacement (straight-line distance from start to end)
         displacement_vector = positions[-1] - positions[0]
         displacement_magnitude = np.linalg.norm(displacement_vector)
 
-        # Calculate current speed (if enough history)
-        last_pos = positions[-1]
-        prev_pos = positions[-2]
-        displacement = np.linalg.norm(last_pos - prev_pos)
-        current_speed = displacement * 10  # Rough estimate at 10 FPS
+        # Calculate current speed with better estimation using recent positions
+        recent_positions = positions[-5:] if len(positions) >= 5 else positions  # Use last 5 positions
+        if len(recent_positions) >= 2:
+            # Calculate speed based on recent movements for better accuracy
+            recent_distance = 0.0
+            for i in range(len(recent_positions) - 1):
+                recent_distance += np.linalg.norm(recent_positions[i+1] - recent_positions[i])
+            # Average speed over recent positions
+            time_span = len(recent_positions) * 0.1  # 0.1s per frame at 10 FPS
+            current_speed = recent_distance / time_span if time_span > 0 else 0.0
+        else:
+            current_speed = 0.0
 
-        # Calculate average speed
-        avg_speed = total_distance / (len(positions) -1) if len(positions) > 1 else 0.0
+        # Calculate average speed with outlier filtering
+        if len(instantaneous_speeds) > 0:
+            # Use trimmed mean to exclude outliers
+            speeds_array = np.array(instantaneous_speeds)
+            if len(speeds_array) > 4:  # Only filter if we have enough data
+                p10 = np.percentile(speeds_array, 10)
+                p90 = np.percentile(speeds_array, 90)
+                filtered_speeds = speeds_array[(speeds_array >= p10) & (speeds_array <= p90)]
+                avg_speed = np.mean(filtered_speeds) if len(filtered_speeds) > 0 else np.mean(speeds_array)
+            else:
+                avg_speed = np.mean(speeds_array)
+        else:
+            avg_speed = 0.0
+
+        # Calculate trajectory smoothness (1.0 = perfectly smooth, 0.0 = very jagged)
+        if len(positions) > 2:
+            # Calculate the deviation from a straight line between multiple points
+            smoothness_sum = 0.0
+            smoothness_count = 0
+            for i in range(0, len(positions) - 2, 3):  # Check every 3rd point to reduce computation
+                if i + 2 < len(positions):
+                    p1, p2, p3 = positions[i], positions[i+1], positions[i+2]
+                    # Calculate how much p2 deviates from the line between p1 and p3
+                    line_vec = p3 - p1
+                    line_length = np.linalg.norm(line_vec)
+                    if line_length > 0.01:  # Avoid division by zero
+                        # Project p2 onto the line between p1 and p3
+                        line_unit = line_vec / line_length
+                        projected = p1 + np.dot(p2 - p1, line_unit) * line_unit
+                        deviation = np.linalg.norm(p2 - projected)
+                        # Normalize deviation by line length to get relative smoothness
+                        relative_deviation = deviation / line_length
+                        # Smoothness is inverse of deviation (clamped between 0 and 1)
+                        smoothness = max(0.0, min(1.0, 1.0 - 5.0 * relative_deviation))
+                        smoothness_sum += smoothness
+                        smoothness_count += 1
+            
+            trajectory_smoothness = smoothness_sum / smoothness_count if smoothness_count > 0 else 1.0
+        else:
+            trajectory_smoothness = 1.0
 
         return {
             'total_distance': total_distance,
@@ -916,7 +955,10 @@ class SLAMSystem:
             'current_speed': current_speed,
             'trajectory_length': len(positions),
             'displacement_vector': displacement_vector.tolist(),
-            'displacement_magnitude': displacement_magnitude
+            'displacement_magnitude': displacement_magnitude,
+            'trajectory_smoothness': trajectory_smoothness,
+            'max_instantaneous_speed': max(instantaneous_speeds) if instantaneous_speeds else 0.0,
+            'speed_variance': np.var(instantaneous_speeds) if instantaneous_speeds else 0.0
         }
 
     def _empty_movement_summary(self, trajectory_length: int = 0) -> Dict:

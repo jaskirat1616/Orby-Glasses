@@ -102,7 +102,7 @@ performance:
 
 # 3D Mapping Settings
 mapping3d:
-  enabled: true                   # Enable 3D real-time mapping visualization
+  enabled: false                   # Enable 3D real-time mapping visualization
   max_depth: 8.0                  # Maximum depth in meters to visualize
   voxel_size: 0.1                 # Voxel size for downsampling
   subsample_step: 6               # Subsample every Nth point (balance quality and performance)

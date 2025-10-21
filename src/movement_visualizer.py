@@ -64,10 +64,10 @@ class MovementVisualizer:
 
     def update(self, slam_result: Dict, current_time: Optional[float] = None):
         """
-        Update movement visualization with new SLAM data.
+        Update movement visualization with new SLAM data using enhanced accuracy methods.
         
         Args:
-            slam_result: Dictionary containing SLAM results including pose and position
+            slam_result: Dictionary containing SLAM results including pose, position, and tracking quality
             current_time: Optional timestamp for velocity calculation
         """
         if not self.enabled:
@@ -76,43 +76,109 @@ class MovementVisualizer:
         if current_time is None:
             current_time = time.time()
         
-        # Extract position from slam result
+        # Extract position and tracking quality from slam result
         position = np.array(slam_result.get('position', [0, 0, 0]))
+        tracking_quality = slam_result.get('tracking_quality', 0.5)  # Default to medium quality
         
-        # Calculate velocity
+        # Calculate velocity with quality-based filtering
         dt = current_time - self.last_update_time
         if dt > 0.001:  # Avoid division by zero
             displacement = position - self.last_position
-            velocity = displacement / dt
-            speed = np.linalg.norm(velocity)
             
-            # Update velocity history
-            self.velocity_history.append((velocity, speed, current_time))
+            # Calculate raw velocity
+            raw_velocity = displacement / dt
+            raw_speed = np.linalg.norm(raw_velocity)
             
-            # Update movement statistics
-            self.movement_stats['current_speed'] = speed
-            self.movement_stats['max_speed'] = max(self.movement_stats['max_speed'], speed)
-            self.movement_stats['average_speed'] = (
-                (self.movement_stats['average_speed'] * (len(self.velocity_history) - 1) + speed) / 
-                max(1, len(self.velocity_history))
-            )
+            # Apply quality-based filtering to velocity
+            if len(self.velocity_history) > 0:
+                # Weight current measurement by tracking quality
+                last_velocity_entry = self.velocity_history[-1]
+                
+                # Handle both old and new velocity history formats properly
+                if len(last_velocity_entry) >= 4:  # New format: (velocity, speed, time, quality)
+                    prev_velocity, prev_speed, _, _ = last_velocity_entry
+                elif len(last_velocity_entry) >= 3:  # Old format: (velocity, speed, time)
+                    prev_velocity, prev_speed, _ = last_velocity_entry
+                else:  # Very old format: (velocity, speed)
+                    prev_velocity, prev_speed = last_velocity_entry
+                
+                # Check for velocity outliers based on tracking quality
+                velocity_diff = np.linalg.norm(raw_velocity - prev_velocity)
+                max_reasonable_change = prev_speed * 2.0  # Reasonable acceleration limit
+                
+                if velocity_diff > max_reasonable_change and tracking_quality < 0.5:
+                    # Use previous velocity if current measurement is noisy
+                    raw_velocity = prev_velocity
+                    raw_speed = prev_speed
             
-            # Update total distance
-            self.movement_stats['total_distance'] += np.linalg.norm(displacement)
+            # Store velocity with quality weighting
+            self.velocity_history.append((raw_velocity, raw_speed, current_time, tracking_quality))
+            
+            # Update movement statistics with quality filtering
+            # Use exponentially weighted moving average for smoother results
+            if 'current_speed' not in self.movement_stats or self.movement_stats['current_speed'] == 0:
+                self.movement_stats['current_speed'] = raw_speed
+            else:
+                # Use quality-weighted smoothing
+                alpha = min(0.3, tracking_quality)  # Higher quality = more weight to new value
+                self.movement_stats['current_speed'] = (
+                    alpha * raw_speed + (1 - alpha) * self.movement_stats['current_speed']
+                )
+                
+            self.movement_stats['max_speed'] = max(self.movement_stats['max_speed'], raw_speed)
+            
+            # Calculate average speed with quality weighting
+            if len(self.velocity_history) > 0:
+                # Calculate weighted average based on tracking quality
+                total_weighted_speed = 0
+                total_weight = 0
+                for entry in self.velocity_history:
+                    # Handle both old and new formats
+                    if len(entry) >= 4:
+                        _, speed, _, quality = entry
+                    elif len(entry) >= 3:
+                        _, speed, _ = entry
+                        quality = 0.5  # Default quality
+                    else:
+                        _, speed = entry
+                        quality = 0.5  # Default quality
+                    
+                    weight = max(0.1, quality)  # Minimum weight to prevent zero division
+                    total_weighted_speed += speed * weight
+                    total_weight += weight
+                
+                if total_weight > 0:
+                    self.movement_stats['average_speed'] = total_weighted_speed / total_weight
 
+        # Apply quality-based filtering to position before adding to trail
+        if len(self.position_trail) > 0:
+            # Check for sudden position jumps that might indicate tracking errors
+            last_pos = self.position_trail[-1]
+            pos_diff = np.linalg.norm(position - last_pos)
+            
+            # Reasonable movement threshold (assuming ~1m/s max speed, 30fps = ~0.03m/frame)
+            max_reasonable_move = 0.3 / (1.0 + tracking_quality * 2)  # Lower threshold for lower quality
+            
+            if pos_diff > max_reasonable_move and tracking_quality < 0.4:
+                # Position jump is too large for low tracking quality, use prediction
+                if len(self.velocity_history) >= 2:
+                    # Use velocity prediction to fill in the gap
+                    est_position = last_pos + self.velocity_history[-1][0] * dt
+                    position = est_position
+        
         # Store position in trail
         self.position_trail.append(position.copy())
         self.last_position = position.copy()
         self.last_update_time = current_time
         
-        # Store orientation if available
+        # Store orientation with quality filtering if available
         if 'pose' in slam_result:
             pose = slam_result['pose']
             # Extract orientation (simplified as yaw angle)
             rotation = pose[:3, :3]
             # Extract yaw angle (rotation around Z-axis)
             yaw = np.arctan2(rotation[1, 0], rotation[0, 0])
-            self.orientation_history.append((yaw, current_time))
+            self.orientation_history.append((yaw, current_time, tracking_quality))
 
     def visualize(self) -> np.ndarray:
         """
@@ -215,42 +281,68 @@ class MovementVisualizer:
         return canvas_x, canvas_y
 
     def _draw_trajectory(self, canvas: np.ndarray):
-        """Draw the movement trajectory."""
+        """Draw the movement trajectory with enhanced accuracy indicators."""
         if len(self.position_trail) < 2:
             return
         
-        # Convert positions to canvas coordinates
+        # Convert positions to canvas coordinates with quality information if available
         points = []
-        for pos in self.position_trail:
+        
+        # Use SLAM results from elsewhere to get quality info, or use a fixed approach
+        # For now, we'll assume positions are added in order and create a quality-based visualization
+        for i, pos in enumerate(self.position_trail):
             x, y = self._world_to_canvas(pos)
             # Only add points that are valid integers within canvas bounds
             if isinstance(x, (int, np.integer)) and isinstance(y, (int, np.integer)):
                 if 0 <= x < self.canvas_size[0] and 0 <= y < self.canvas_size[1]:
-                    points.append((int(x), int(y)))
+                    points.append((int(x), int(y), i))  # Include index for quality estimation
         
-        # Draw trajectory line
-        for i in range(len(points) - 1):
-            pt1 = points[i]
-            pt2 = points[i+1]
-            # Ensure points are valid for OpenCV
-            if (isinstance(pt1, tuple) and len(pt1) == 2 and 
-                isinstance(pt2, tuple) and len(pt2) == 2 and
-                all(isinstance(coord, (int, np.integer)) for coord in pt1 + pt2)):
+        # Draw trajectory line with quality indicators
+        if len(points) >= 2:
+            for i in range(len(points) - 1):
+                pt1 = (points[i][0], points[i][1])
+                pt2 = (points[i+1][0], points[i+1][1])
                 
-                alpha = i / len(points) if len(points) > 0 else 1.0  # Avoid division by zero
-                color = (int(200 * alpha), 100, int(255 * (1 - alpha)))  # From blue to red
-                cv2.line(canvas, pt1, pt2, color, 3)
+                # Ensure points are valid for OpenCV
+                if (isinstance(pt1, tuple) and len(pt1) == 2 and 
+                    isinstance(pt2, tuple) and len(pt2) == 2 and
+                    all(isinstance(coord, (int, np.integer)) for coord in pt1 + pt2)):
+                    
+                    # Color based on position age (older to newer)
+                    age_factor = i / len(points) if len(points) > 0 else 1.0
+                    color = (int(200 * age_factor), 100, int(255 * (1 - age_factor)))  # From blue to red
+                    
+                    # Line thickness based on reliability - recent points are more reliable
+                    thickness = 2 if i < len(points) * 0.7 else 3  # Thicker for more recent
+                    
+                    cv2.line(canvas, pt1, pt2, color, thickness)
         
-        # Draw trajectory dots (more recent positions are brighter/green)
+        # Draw trajectory dots with size based on recency and quality
         for i, point in enumerate(points):
-            if (isinstance(point, tuple) and len(point) == 2 and
-                all(isinstance(coord, (int, np.integer)) for coord in point) and
-                0 <= point[0] < self.canvas_size[0] and 0 <= point[1] < self.canvas_size[1]):
+            x, y, pos_idx = point
+            if (isinstance((x, y), tuple) and len((x, y)) == 2 and
+                all(isinstance(coord, (int, np.integer)) for coord in (x, y)) and
+                0 <= x < self.canvas_size[0] and 0 <= y < self.canvas_size[1]):
                 
-                alpha = i / len(points) if len(points) > 1 else 1.0
-                size = 2 if i < len(points) - 10 else 4  # Larger for recent positions
-                color = (0, int(255 * alpha), int(255 * (1 - alpha)))  # Green for recent
-                cv2.circle(canvas, point, size, color, -1)
+                age_factor = pos_idx / len(self.position_trail) if len(self.position_trail) > 1 else 1.0
+                
+                # Size based on recency - larger for more recent positions
+                if pos_idx >= len(self.position_trail) * 0.8:  # Most recent 20%
+                    size = 5
+                elif pos_idx >= len(self.position_trail) * 0.5:  # Middle 30% 
+                    size = 3
+                else:  # Older positions
+                    size = 2
+                
+                # Color based on recency (greener for more recent)
+                color = (0, int(255 * age_factor), int(255 * (1 - age_factor)))  # Green for recent
+                cv2.circle(canvas, (x, y), size, color, -1)
+                
+                # Add subtle trail fading for older points
+                if pos_idx < len(self.position_trail) * 0.3:  # Oldest 30%
+                    # Draw a smaller, lighter circle to show fading trail
+                    faded_color = (int(100 * (1 - age_factor)), int(200 * (1 - age_factor)), int(200 * (1 - age_factor)))
+                    cv2.circle(canvas, (x, y), size//2, faded_color, -1)
 
     def _draw_current_position(self, canvas: np.ndarray):
         """Draw indicator for current position."""
@@ -274,8 +366,14 @@ class MovementVisualizer:
         if len(self.velocity_history) < 1:
             return
         
-        # Get most recent velocity
-        velocity, speed, _ = self.velocity_history[-1]
+        # Get most recent velocity (with quality information)
+        velocity_data = self.velocity_history[-1]
+        if len(velocity_data) >= 3:
+            velocity, speed, _, tracking_quality = velocity_data
+        else:
+            velocity, speed, _ = velocity_data
+            tracking_quality = 0.5  # Default quality
+        
         current_pos = self.position_trail[-1]
         
         start_x, start_y = self._world_to_canvas(current_pos)
@@ -288,21 +386,34 @@ class MovementVisualizer:
         if not (0 <= end_x < self.canvas_size[0] and 0 <= end_y < self.canvas_size[1]):
             return
         
-        # Draw velocity vector
-        cv2.arrowedLine(canvas, (start_x, start_y), (end_x, end_y), (255, 0, 0), 3, tipLength=0.2)
+        # Draw velocity vector with quality-based coloring
+        if tracking_quality > 0.7:
+            color = (0, 100, 255)  # Bright orange for high quality
+        elif tracking_quality > 0.4:
+            color = (0, 165, 255)  # Orange for medium quality
+        else:
+            color = (0, 0, 255)    # Red for low quality
         
-        # Draw speed information
-        cv2.putText(canvas, f"Speed: {speed:.2f} m/s", (end_x + 10, end_y), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
+        cv2.arrowedLine(canvas, (start_x, start_y), (end_x, end_y), color, 3, tipLength=0.2)
+        
+        # Draw speed information with quality indicator
+        speed_text = f"Speed: {speed:.2f} m/s (Q: {tracking_quality:.1f})"
+        cv2.putText(canvas, speed_text, (end_x + 10, end_y), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
     def _draw_orientation(self, canvas: np.ndarray):
         """Draw orientation indicator."""
         if len(self.orientation_history) < 1:
             return
         
-        current_pos = self.position_trail[-1]
-        orientation, _ = self.orientation_history[-1]
+        orientation_data = self.orientation_history[-1]
+        if len(orientation_data) >= 3:
+            orientation, _, tracking_quality = orientation_data
+        else:
+            orientation, _ = orientation_data
+            tracking_quality = 0.5  # Default quality
         
+        current_pos = self.position_trail[-1]
         pos_x, pos_y = self._world_to_canvas(current_pos)
         
         # Draw orientation arrow (length scaled for visibility)
@@ -310,47 +421,96 @@ class MovementVisualizer:
         end_x = int(pos_x + arrow_length * np.cos(orientation))
         end_y = int(pos_y - arrow_length * np.sin(orientation))  # Flip Y axis
         
-        cv2.arrowedLine(canvas, (pos_x, pos_y), (end_x, end_y), (0, 0, 255), 2, tipLength=0.3)
+        # Draw orientation arrow with quality-based coloring
+        if tracking_quality > 0.7:
+            color = (0, 0, 200)    # Darker red for high quality
+        elif tracking_quality > 0.4:
+            color = (0, 0, 255)    # Red for medium quality
+        else:
+            color = (100, 100, 255) # Light red for low quality
+            
+        cv2.arrowedLine(canvas, (pos_x, pos_y), (end_x, end_y), color, 2, tipLength=0.3)
         
-        # Draw direction label
-        cv2.putText(canvas, f"Dir: {np.degrees(orientation):.1f}°", 
-                   (end_x + 10, end_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+        # Draw direction label with quality indicator
+        direction_text = f"Dir: {np.degrees(orientation):.1f}° (Q: {tracking_quality:.1f})"
+        cv2.putText(canvas, direction_text, 
+                   (end_x + 10, end_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
 
     def _draw_statistics(self, canvas: np.ndarray):
-        """Draw movement statistics."""
+        """Draw movement statistics with accuracy indicators."""
         stats_y = 50  # Starting Y position for stats
         line_height = 25
         
         # Draw background for stats
         overlay = canvas.copy()
-        cv2.rectangle(overlay, (self.canvas_size[0] - 250, 40), 
-                     (self.canvas_size[0] - 10, 180), (255, 255, 255), -1)
+        cv2.rectangle(overlay, (self.canvas_size[0] - 300, 40), 
+                     (self.canvas_size[0] - 10, 230), (255, 255, 255), -1)
         cv2.addWeighted(overlay, 0.7, canvas, 0.3, 0, canvas)
         
-        # Draw stats text
+        # Draw stats text with enhanced information
         cv2.putText(canvas, f"Distance: {self.movement_stats['total_distance']:.2f}m", 
-                   (self.canvas_size[0] - 240, stats_y), 
+                   (self.canvas_size[0] - 290, stats_y), 
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
         
         stats_y += line_height
         cv2.putText(canvas, f"Current Speed: {self.movement_stats['current_speed']:.2f}m/s", 
-                   (self.canvas_size[0] - 240, stats_y), 
+                   (self.canvas_size[0] - 290, stats_y), 
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
         
         stats_y += line_height
         cv2.putText(canvas, f"Average Speed: {self.movement_stats['average_speed']:.2f}m/s", 
-                   (self.canvas_size[0] - 240, stats_y), 
+                   (self.canvas_size[0] - 290, stats_y), 
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
         
         stats_y += line_height
         cv2.putText(canvas, f"Max Speed: {self.movement_stats['max_speed']:.2f}m/s", 
-                   (self.canvas_size[0] - 240, stats_y), 
+                   (self.canvas_size[0] - 290, stats_y), 
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
         
         stats_y += line_height
         cv2.putText(canvas, f"Trajectory: {len(self.position_trail)} pts", 
-                   (self.canvas_size[0] - 240, stats_y), 
+                   (self.canvas_size[0] - 290, stats_y), 
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
+        
+        stats_y += line_height
+        # Calculate smoothness indicator based on velocity variance
+        if len(self.velocity_history) > 5:
+            # Calculate velocity variance for smoothness estimation
+            speeds = []
+            for item in self.velocity_history:
+                if len(item) >= 3:
+                    speeds.append(item[1])  # speed value
+            if speeds:
+                speed_std = np.std(speeds[-10:]) if len(speeds) >= 10 else np.std(speeds)
+                smoothness = 1.0 - min(1.0, speed_std * 2.0)  # Lower std = smoother
+                cv2.putText(canvas, f"Smoothness: {smoothness:.2f}", 
+                           (self.canvas_size[0] - 290, stats_y), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 100, 0), 1)
+        else:
+            cv2.putText(canvas, f"Smoothness: --", 
+                       (self.canvas_size[0] - 290, stats_y), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (100, 100, 100), 1)
+        
+        stats_y += line_height
+        # Show trajectory confidence based on position consistency
+        if len(self.position_trail) > 2:
+            # Calculate average distance between consecutive positions
+            distances = []
+            for i in range(1, min(len(self.position_trail), 10)):  # Check last 10 positions
+                dist = np.linalg.norm(self.position_trail[-i] - self.position_trail[-i-1])
+                distances.append(dist)
+            
+            if distances:
+                avg_step = np.mean(distances)
+                # Lower average step size indicates more consistent tracking
+                consistency = max(0.0, min(1.0, 0.3 / (avg_step + 0.01))) 
+                cv2.putText(canvas, f"Consistency: {consistency:.2f}", 
+                           (self.canvas_size[0] - 290, stats_y), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 150), 1)
+        else:
+            cv2.putText(canvas, f"Consistency: --", 
+                       (self.canvas_size[0] - 290, stats_y), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (100, 100, 100), 1)
 
     def reset(self):
         """Reset all movement data."""
@@ -378,21 +538,69 @@ class MovementVisualizer:
             return np.zeros((0, 3))
         return np.array(list(self.position_trail))
 
-    def get_velocity_profile(self) -> Tuple[np.ndarray, np.ndarray]:
-        """Get velocity profile over time."""
+    def get_velocity_profile(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Get velocity profile over time with quality information."""
         if len(self.velocity_history) == 0:
-            return np.zeros(0), np.zeros(0)
+            return np.zeros(0), np.zeros(0), np.zeros(0)
         
-        times = np.array([t for _, _, t in self.velocity_history])
-        speeds = np.array([s for _, s, _ in self.velocity_history])
+        # Handle both old and new velocity history formats
+        times = []
+        speeds = []
+        qualities = []
         
-        return times, speeds
+        for item in self.velocity_history:
+            if len(item) >= 4:  # New format with quality
+                _, speed, time_val, quality = item
+            elif len(item) >= 3:  # Old format with time but no quality
+                _, speed, time_val = item
+                quality = 0.5  # Default quality
+            else:  # Very old format
+                _, speed = item
+                time_val = time.time()
+                quality = 0.5  # Default quality
+            
+            times.append(time_val)
+            speeds.append(speed)
+            qualities.append(quality)
+        
+        return np.array(times), np.array(speeds), np.array(qualities)
 
     def get_stats(self) -> Dict:
-        """Get current movement statistics."""
+        """Get current movement statistics with accuracy metrics."""
         stats = self.movement_stats.copy()
         stats['position_count'] = len(self.position_trail)
         stats['velocity_samples'] = len(self.velocity_history)
+        
+        # Add accuracy-related metrics
+        if len(self.velocity_history) > 1:
+            # Calculate velocity consistency (lower variance = more consistent)
+            speeds = []
+            for item in self.velocity_history[-20:]:  # Use last 20 samples
+                if len(item) >= 3:
+                    speeds.append(item[1])  # speed value
+            
+            if speeds:
+                speed_variance = np.var(speeds)
+                stats['velocity_variance'] = speed_variance
+                stats['speed_std'] = np.std(speeds)
+                # Smoothness score: lower variance = higher smoothness
+                stats['smoothness_score'] = 1.0 / (1.0 + speed_variance * 10)
+        
+        # Calculate trajectory consistency
+        if len(self.position_trail) > 1:
+            # Calculate average step size and its variance
+            step_sizes = []
+            for i in range(1, min(len(self.position_trail), 15)):  # Check last 15 positions
+                dist = np.linalg.norm(self.position_trail[-i] - self.position_trail[-i-1])
+                step_sizes.append(dist)
+            
+            if step_sizes:
+                avg_step = np.mean(step_sizes)
+                step_variance = np.var(step_sizes)
+                stats['avg_step_size'] = avg_step
+                stats['step_variance'] = step_variance
+                stats['trajectory_consistency'] = 1.0 / (1.0 + step_variance * 100)
+        
         return stats
 
 

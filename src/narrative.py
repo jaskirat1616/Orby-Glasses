@@ -144,7 +144,9 @@ Provide 1-2 concise sentences. Be specific about distances and directions when p
             return description
 
         except Exception as e:
-            logging.error(f"Vision model error: {e}", exc_info=True)
+            logging.error(f"Vision model error: {e}")
+            import traceback
+            traceback.print_exc()
             return ""
 
     def generate_narrative(self, detections: List[Dict],
@@ -300,15 +302,17 @@ Provide 1-2 concise sentences. Be specific about distances and directions when p
             return narrative
 
         except Exception as e:
-            logging.error(f"LLM generation error: {e}", exc_info=True)
+            logging.error(f"LLM generation error: {e}")
+            import traceback
+            traceback.print_exc()
             return self._fallback_narrative(context)
 
     def _build_prompt(self, context: str, vision_context: str = "") -> str:
-        """Build prompt for LLM with enhanced engineering for better outputs."""
+        """Build prompt for LLM with engineering for better outputs."""
 
-        # Enhanced prompt with specific instructions and examples
+        # Prompt with specific instructions and examples
         if vision_context:
-            # Vision-enhanced prompt
+            # Vision-based prompt
             base_prompt = """You are a navigation guide for BLIND users. Give clear, actionable directions.
 
 DETECTION DATA:

@@ -1,7 +1,7 @@
 """
-OrbyGlasses - Enhanced Visual SLAM for Indoor Navigation
+OrbyGlasses - Simplified Visual SLAM for Indoor Navigation
 Advanced monocular SLAM using ORB features with improved accuracy for camera-only localization and mapping.
-No IMU required - works with just a USB webcam with enhanced tracking accuracy.
+No IMU required - works with just a USB webcam with tracking accuracy.
 """
 
 import cv2
@@ -1066,7 +1066,7 @@ class MonocularSLAM:
         logging.info("SLAM reset")
 
     def get_movement_summary(self) -> Dict:
-        """Get summary of movement and trajectory for visualization."""
+        """Get summary of movement and trajectory for visualization with enhanced accuracy."""
         if not self.position_history:
             return self._empty_movement_summary()
 
@@ -1075,25 +1075,76 @@ class MonocularSLAM:
         if len(positions) < 2:
             return self._empty_movement_summary(trajectory_length=len(positions))
 
-        # Calculate total distance traveled along trajectory
+        # Calculate total distance traveled along trajectory with enhanced accuracy
         total_distance = 0.0
+        instantaneous_speeds = []
+        
+        # Calculate distance and speed for each step
         for i in range(1, len(positions)):
             dist = np.linalg.norm(positions[i] - positions[i-1])
             total_distance += dist
+            
+            # Calculate instantaneous speed (assuming 10 FPS)
+            time_delta = 0.1  # 0.1 seconds per frame at 10 FPS
+            instantaneous_speeds.append(dist / time_delta)
 
         # Calculate displacement (straight-line distance from start to end)
         displacement_vector = positions[-1] - positions[0]
         displacement_magnitude = np.linalg.norm(displacement_vector)
 
-        # Calculate current speed (if enough history)
-        last_pos = positions[-1]
-        prev_pos = positions[-2]
-        displacement = np.linalg.norm(last_pos - prev_pos)
-        # Assuming regular frame rate, we can estimate speed
-        current_speed = displacement * 10  # Rough estimate at 10 FPS
+        # Calculate current speed with better estimation using recent positions
+        recent_positions = positions[-5:] if len(positions) >= 5 else positions  # Use last 5 positions
+        if len(recent_positions) >= 2:
+            # Calculate speed based on recent movements for better accuracy
+            recent_distance = 0.0
+            for i in range(len(recent_positions) - 1):
+                recent_distance += np.linalg.norm(recent_positions[i+1] - recent_positions[i])
+            # Average speed over recent positions
+            time_span = len(recent_positions) * 0.1  # 0.1s per frame at 10 FPS
+            current_speed = recent_distance / time_span if time_span > 0 else 0.0
+        else:
+            current_speed = 0.0
 
-        # Calculate average speed
-        avg_speed = total_distance / (len(positions) -1) if len(positions) > 1 else 0.0
+        # Calculate average speed with outlier filtering
+        if len(instantaneous_speeds) > 0:
+            # Use trimmed mean to exclude outliers
+            speeds_array = np.array(instantaneous_speeds)
+            if len(speeds_array) > 4:  # Only filter if we have enough data
+                p10 = np.percentile(speeds_array, 10)
+                p90 = np.percentile(speeds_array, 90)
+                filtered_speeds = speeds_array[(speeds_array >= p10) & (speeds_array <= p90)]
+                avg_speed = np.mean(filtered_speeds) if len(filtered_speeds) > 0 else np.mean(speeds_array)
+            else:
+                avg_speed = np.mean(speeds_array)
+        else:
+            avg_speed = 0.0
+
+        # Calculate trajectory smoothness (1.0 = perfectly smooth, 0.0 = very jagged)
+        if len(positions) > 2:
+            # Calculate the deviation from a straight line between multiple points
+            smoothness_sum = 0.0
+            smoothness_count = 0
+            for i in range(0, len(positions) - 2, 3):  # Check every 3rd point to reduce computation
+                if i + 2 < len(positions):
+                    p1, p2, p3 = positions[i], positions[i+1], positions[i+2]
+                    # Calculate how much p2 deviates from the line between p1 and p3
+                    line_vec = p3 - p1
+                    line_length = np.linalg.norm(line_vec)
+                    if line_length > 0.01:  # Avoid division by zero
+                        # Project p2 onto the line between p1 and p3
+                        line_unit = line_vec / line_length
+                        projected = p1 + np.dot(p2 - p1, line_unit) * line_unit
+                        deviation = np.linalg.norm(p2 - projected)
+                        # Normalize deviation by line length to get relative smoothness
+                        relative_deviation = deviation / line_length
+                        # Smoothness is inverse of deviation (clamped between 0 and 1)
+                        smoothness = max(0.0, min(1.0, 1.0 - 5.0 * relative_deviation))
+                        smoothness_sum += smoothness
+                        smoothness_count += 1
+            
+            trajectory_smoothness = smoothness_sum / smoothness_count if smoothness_count > 0 else 1.0
+        else:
+            trajectory_smoothness = 1.0
 
         return {
             'total_distance': total_distance,
@@ -1101,7 +1152,10 @@ class MonocularSLAM:
             'current_speed': current_speed,
             'trajectory_length': len(positions),
             'displacement_vector': displacement_vector.tolist(),
-            'displacement_magnitude': displacement_magnitude
+            'displacement_magnitude': displacement_magnitude,
+            'trajectory_smoothness': trajectory_smoothness,
+            'max_instantaneous_speed': max(instantaneous_speeds) if instantaneous_speeds else 0.0,
+            'speed_variance': np.var(instantaneous_speeds) if instantaneous_speeds else 0.0
         }
 
     def _empty_movement_summary(self, trajectory_length: int = 0) -> Dict:
