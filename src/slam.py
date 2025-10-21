@@ -1,7 +1,7 @@
 """
-OrbyGlasses - Simplified Visual SLAM for Indoor Navigation
-Monocular SLAM using ORB features with better accuracy for camera-only localization and mapping.
-No IMU required - works with just a USB webcam with tracking accuracy.
+OrbyGlasses - Enhanced Visual SLAM for Indoor Navigation
+Advanced monocular SLAM using ORB features with improved accuracy for camera-only localization and mapping.
+No IMU required - works with just a USB webcam with enhanced tracking accuracy.
 """
 
 import cv2
