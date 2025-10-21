@@ -64,7 +64,7 @@ class MovementVisualizer:
 
     def update(self, slam_result: Dict, current_time: Optional[float] = None):
         """
-        Update movement visualization with new SLAM data using optimized accuracy methods.
+        Update movement visualization with new SLAM data using balanced accuracy methods.
         
         Args:
             slam_result: Dictionary containing SLAM results including pose, position, and tracking quality
@@ -104,51 +104,46 @@ class MovementVisualizer:
                 
                 # Check for velocity outliers based on tracking quality
                 velocity_diff = np.linalg.norm(raw_velocity - prev_velocity)
-                max_reasonable_change = prev_speed * 2.0  # Reasonable acceleration limit
+                max_reasonable_change = prev_speed * 2.5  # More lenient acceleration limit
                 
-                if velocity_diff > max_reasonable_change and tracking_quality < 0.5:
+                if velocity_diff > max_reasonable_change and tracking_quality < 0.4:
                     # Use previous velocity if current measurement is noisy
                     raw_velocity = prev_velocity
                     raw_speed = prev_speed
             
-            # Store velocity with quality weighting - LIMIT history size for performance
+            # Store velocity with quality weighting - OPTIMIZED history size
             self.velocity_history.append((raw_velocity, raw_speed, current_time, tracking_quality))
-            
-            # Limit history size to improve performance
-            if len(self.velocity_history) > 50:  # Keep only last 50 entries
-                self.velocity_history = deque(list(self.velocity_history)[-50:], maxlen=50)
             
             # Update movement statistics with quality filtering
             # Use exponentially weighted moving average for smoother results
             if 'current_speed' not in self.movement_stats or self.movement_stats['current_speed'] == 0:
                 self.movement_stats['current_speed'] = raw_speed
             else:
-                # Use quality-weighted smoothing
-                alpha = min(0.3, tracking_quality)  # Higher quality = more weight to new value
+                # Use quality-weighted smoothing with adaptive alpha
+                alpha = min(0.25, max(0.05, tracking_quality * 0.3))  # Adaptive based on quality
                 self.movement_stats['current_speed'] = (
                     alpha * raw_speed + (1 - alpha) * self.movement_stats['current_speed']
                 )
                 
             self.movement_stats['max_speed'] = max(self.movement_stats['max_speed'], raw_speed)
             
-            # Calculate average speed with optimized quality weighting
-            # Use only recent entries to avoid performance impact
-            recent_entries = list(self.velocity_history)[-20:] if len(self.velocity_history) > 20 else self.velocity_history
-            if recent_entries:
+            # Calculate average speed with quality weighting - OPTIMIZED for performance
+            if len(self.velocity_history) > 0:
+                # Calculate weighted average based on tracking quality of recent entries
+                recent_count = min(15, len(self.velocity_history))  # Use fewer entries for performance
+                recent_entries = list(self.velocity_history)[-recent_count:]
+                
                 total_weighted_speed = 0
                 total_weight = 0
                 for entry in recent_entries:
                     # Handle both old and new formats
                     if len(entry) >= 4:
                         _, speed, _, quality = entry
-                    elif len(entry) >= 3:
-                        _, speed, _ = entry
-                        quality = 0.5  # Default quality
                     else:
-                        _, speed = entry
-                        quality = 0.5  # Default quality
+                        _, speed = entry[:2]
+                        quality = entry[2] if len(entry) > 2 else 0.5  # Default quality
                     
-                    weight = max(0.1, quality)  # Minimum weight to prevent zero division
+                    weight = max(0.1, min(1.0, quality))  # Bounded weight
                     total_weighted_speed += speed * weight
                     total_weight += weight
                 
@@ -161,29 +156,22 @@ class MovementVisualizer:
             last_pos = self.position_trail[-1]
             pos_diff = np.linalg.norm(position - last_pos)
             
-            # Reasonable movement threshold (assuming ~1m/s max speed)
-            max_reasonable_move = 0.3 / (1.0 + tracking_quality * 2)  # Lower threshold for lower quality
+            # Reasonable movement threshold (based on expected human walking speeds)
+            max_reasonable_move = 0.4 / (0.8 + tracking_quality * 0.8)  # Dynamic threshold
             
-            if pos_diff > max_reasonable_move and tracking_quality < 0.4:
+            if pos_diff > max_reasonable_move and tracking_quality < 0.35:
                 # Position jump is too large for low tracking quality, use prediction
                 if len(self.velocity_history) >= 1:
-                    # Use velocity prediction to fill in the gap
+                    # Use velocity prediction to maintain trajectory consistency
                     est_position = last_pos + self.velocity_history[-1][0] * dt
                     position = est_position
         
-        # Store position in trail - LIMIT trail size for performance
+        # Store position in trail - MAINTAIN ACCURACY by keeping more points
         self.position_trail.append(position.copy())
-        
-        # Limit position trail size to prevent performance degradation
-        if len(self.position_trail) > 200:  # Reduce from 300 to improve performance
-            # Convert to list, slice, then back to deque to remove from front
-            temp_list = list(self.position_trail)
-            self.position_trail = deque(temp_list[-200:], maxlen=self.trail_length)  # Keep last 200
-        
         self.last_position = position.copy()
         self.last_update_time = current_time
         
-        # Store orientation with quality filtering if available
+        # Store orientation if available
         if 'pose' in slam_result:
             pose = slam_result['pose']
             # Extract orientation (simplified as yaw angle)
@@ -191,11 +179,6 @@ class MovementVisualizer:
             # Extract yaw angle (rotation around Z-axis)
             yaw = np.arctan2(rotation[1, 0], rotation[0, 0])
             self.orientation_history.append((yaw, current_time, tracking_quality))
-            
-            # Limit orientation history for performance
-            if len(self.orientation_history) > 50:
-                temp_list = list(self.orientation_history)
-                self.orientation_history = deque(temp_list[-50:], maxlen=50)
 
     def visualize(self) -> np.ndarray:
         """
@@ -298,69 +281,66 @@ class MovementVisualizer:
         return canvas_x, canvas_y
 
     def _draw_trajectory(self, canvas: np.ndarray):
-        """Draw the movement trajectory with optimized performance."""
+        """Draw the movement trajectory with balanced accuracy and performance."""
         if len(self.position_trail) < 2:
             return
         
-        # Optimize: Only draw every Nth point to improve performance with large trails
-        step = max(1, len(self.position_trail) // 200)  # Limit to ~200 points for performance
-        positions_to_draw = list(self.position_trail)[::step]  # Sample every Nth point
+        # Convert positions to canvas coordinates with optimized sampling
+        # More intelligent sampling to maintain visual quality
+        all_positions = list(self.position_trail)
+        if len(all_positions) <= 150:  # Draw all points if not too many
+            positions_to_draw = all_positions
+        else:  # Sample intelligently for better performance
+            # Always include first and last points, and sample the rest
+            step = max(1, (len(all_positions) - 2) // 100)  # Target ~100 intermediate points
+            middle_positions = all_positions[1:-1:step]  # Sample middle points
+            positions_to_draw = [all_positions[0]] + middle_positions + [all_positions[-1]]
         
         # Convert positions to canvas coordinates
         points = []
-        for i, pos in enumerate(positions_to_draw):
+        for pos in positions_to_draw:
             x, y = self._world_to_canvas(pos)
             # Only add points that are valid integers within canvas bounds
             if isinstance(x, (int, np.integer)) and isinstance(y, (int, np.integer)):
                 if 0 <= x < self.canvas_size[0] and 0 <= y < self.canvas_size[1]:
-                    points.append((int(x), int(y), i))
+                    points.append((int(x), int(y)))
         
-        # Draw trajectory line with optimized approach
+        # Draw trajectory line with accuracy-focused coloring
         if len(points) >= 2:
-            # Use a more efficient approach for drawing lines in batch
             for i in range(len(points) - 1):
-                pt1 = (points[i][0], points[i][1])
-                pt2 = (points[i+1][0], points[i+1][1])
+                pt1 = points[i]
+                pt2 = points[i+1]
                 
-                # Ensure points are valid for OpenCV
-                if (isinstance(pt1, tuple) and len(pt1) == 2 and 
-                    isinstance(pt2, tuple) and len(pt2) == 2 and
-                    all(isinstance(coord, (int, np.integer)) for coord in pt1 + pt2)):
-                    
-                    # Simplified coloring for performance
-                    color = (100, 100, 200)  # Simple blue color for performance
-                    cv2.line(canvas, pt1, pt2, color, 2)
+                # Calculate age-based color (older to newer)
+                age_ratio = i / max(1, len(points)-1)
+                b = int(255 * (1 - age_ratio))  # Blue for older, red for newer
+                g = int(200 * age_ratio)        # Green increases with age
+                r = int(255 * age_ratio)        # Red for newer
+                color = (b, g, r)
+                
+                # Draw line segment
+                cv2.line(canvas, pt1, pt2, color, 2)
         
-        # Draw trajectory dots for key points only to improve performance
-        if len(points) <= 100:  # Only draw all dots if not too many
-            for i, point in enumerate(points):
-                x, y, pos_idx = point
-                if (isinstance((x, y), tuple) and len((x, y)) == 2 and
-                    all(isinstance(coord, (int, np.integer)) for coord in (x, y)) and
-                    0 <= x < self.canvas_size[0] and 0 <= y < self.canvas_size[1]):
-                    
-                    # Simplified size based on position in the trail
-                    if i >= len(points) * 0.9:  # Last 10% are larger
-                        size = 4
-                    elif i >= len(points) * 0.7:  # Next 20% are medium
-                        size = 3
-                    else:  # Others are small
-                        size = 1
-                    
-                    color = (0, 255, 0)  # Simple green color for performance
-                    cv2.circle(canvas, (x, y), size, color, -1)
-        else:
-            # If there are too many points, only draw recent ones
-            recent_points = points[-50:] if len(points) > 50 else points
-            for i, point in enumerate(recent_points):
-                x, y, pos_idx = point
-                if (isinstance((x, y), tuple) and len((x, y)) == 2 and
-                    all(isinstance(coord, (int, np.integer)) for coord in (x, y)) and
-                    0 <= x < self.canvas_size[0] and 0 <= y < self.canvas_size[1]):
-                    
-                    size = 3
-                    color = (0, 255, 0)  # Green for recent positions
-                    cv2.circle(canvas, (x, y), size, color, -1)
+        # Draw trajectory dots to show path progression
+        # Draw key points: first, last, and intermediate points
+        if len(points) > 0:
+            # Draw first point
+            if len(points) > 0:
+                cv2.circle(canvas, points[0], 4, (255, 100, 0), -1)  # Blue for start
+            # Draw last point  
+            if len(points) > 1:
+                cv2.circle(canvas, points[-1], 6, (0, 255, 0), -1)   # Green for current
+            # Draw intermediate points more sparsely for performance
+            if len(points) <= 100:
+                # Draw all intermediate points if not too many
+                for i, point in enumerate(points[1:-1]):
+                    if i % 3 == 0:  # Every third point to reduce density
+                        cv2.circle(canvas, point, 2, (0, 100, 255), -1)  # Orange for path
+            else:
+                # Draw fewer intermediate points when many exist
+                step = max(1, len(points[1:-1]) // 20)  # Limit to ~20 intermediate points
+                for i in range(0, len(points[1:-1]), step):
+                    cv2.circle(canvas, points[1:-1][i], 2, (0, 100, 255), -1)
 
     def _draw_current_position(self, canvas: np.ndarray):
         """Draw indicator for current position."""
