@@ -30,6 +30,8 @@ from indoor_navigation import IndoorNavigator
 from trajectory_prediction import TrajectoryPredictionSystem
 from occupancy_grid_3d import OccupancyGrid3D
 from point_cloud_viewer import PointCloudViewer
+from movement_visualizer import MovementVisualizer
+from coordinate_transformer import CoordinateTransformer
 
 
 class OrbyGlasses:
@@ -131,6 +133,20 @@ class OrbyGlasses:
             self.logger.info("✓ 3D Point Cloud Viewer enabled")
         else:
             self.point_cloud = None
+
+        # Movement Visualizer
+        self.movement_visualizer_enabled = self.config.get('movement_visualizer.enabled', False)
+        if self.movement_visualizer_enabled:
+            self.logger.info("Initializing Movement Visualizer...")
+            self.movement_visualizer = MovementVisualizer(self.config)
+            self.logger.info("✓ Movement Visualizer enabled")
+        else:
+            self.movement_visualizer = None
+
+        # Coordinate Transformer
+        self.coordinate_transformer_enabled = True  # Always enabled for coordinate transformations
+        self.coordinate_transformer = CoordinateTransformer(self.config)
+        self.logger.info("✓ Coordinate Transformer initialized")
 
         # Data logging
         self.data_logger = DataLogger()
@@ -274,6 +290,28 @@ class OrbyGlasses:
                 self.point_cloud.add_frame(frame, depth_map, camera_pose)
                 pc_time = self.perf_monitor.stop_timer('point_cloud')
 
+        # Get current time for updates
+        current_time = time.time()
+
+        # Movement Visualizer Update (if enabled)
+        if self.movement_visualizer_enabled and self.movement_visualizer is not None:
+            self.perf_monitor.start_timer('movement_visualizer')
+            if slam_result is not None:
+                self.movement_visualizer.update(slam_result, current_time)
+            else:
+                # Update with empty result to maintain timing
+                empty_result = {
+                    'position': [0, 0, 0],
+                    'pose': np.eye(4),
+                    'tracking_quality': 0.0,
+                    'num_matches': 0,
+                    'is_keyframe': False,
+                    'num_map_points': 0,
+                    'relative_movement': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+                }
+                self.movement_visualizer.update(empty_result, current_time)
+            mv_time = self.perf_monitor.stop_timer('movement_visualizer')
+
         # Path planning (RL prediction) - DISABLED for speed
         self.perf_monitor.start_timer('prediction')
         path_plan = None  # Disabled
@@ -281,7 +319,6 @@ class OrbyGlasses:
 
         # Generate narrative guidance - Re-enabled for Ollama
         self.perf_monitor.start_timer('narrative')
-        current_time = time.time()
         if current_time - self.last_audio_time > self.audio_interval:
             # Generate full guidance with Ollama
             guidance = self.contextual_assistant.get_guidance(
@@ -573,6 +610,8 @@ class OrbyGlasses:
 
                 # Display
                 if display:
+                    display_size = (400, 400)  # Standard size for all windows
+
                     # Add guidance text to frame
                     y_offset = self.frame_height - 60
                     text = guidance.get('narrative', 'Processing...')
@@ -586,8 +625,8 @@ class OrbyGlasses:
                     cv2.putText(annotated_frame, text, (10, y_offset + 20),
                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
-                    # Resize main window to smaller display size (500x500)
-                    display_frame = cv2.resize(annotated_frame, (500, 500))
+                    # Resize main window
+                    display_frame = cv2.resize(annotated_frame, display_size)
                     cv2.imshow('OrbyGlasses', display_frame)
 
                     # Setup mouse callbacks for windows (first time only)
@@ -619,14 +658,14 @@ class OrbyGlasses:
                             (depth_map * 255).astype(np.uint8),
                             cv2.COLORMAP_MAGMA
                         )
-                        # Resize depth map to smaller size for display
-                        depth_display = cv2.resize(depth_colored, (256, 256))
+                        # Resize depth map to standard size
+                        depth_display = cv2.resize(depth_colored, display_size)
                         cv2.imshow('Depth Map', depth_display)
 
                     # Show SLAM visualization if enabled
                     if slam_result is not None and self.config.get('slam.visualize', False):
                         slam_vis = self.slam.visualize_tracking(frame, slam_result)
-                        slam_display = cv2.resize(slam_vis, (400, 400))
+                        slam_display = cv2.resize(slam_vis, display_size)
                         cv2.imshow('SLAM Tracking', slam_display)
 
                     # Show 3D Point Cloud visualization if enabled
@@ -637,7 +676,8 @@ class OrbyGlasses:
                                 camera_pos = np.array(slam_result['position'])
 
                             pc_vis = self.point_cloud.visualize(camera_pos)
-                            cv2.imshow('3D Point Cloud', pc_vis)
+                            pc_display = cv2.resize(pc_vis, display_size)
+                            cv2.imshow('3D Point Cloud', pc_display)
 
                     # Show 3D Occupancy Grid visualization if enabled
                     if self.occupancy_grid_enabled and self.occupancy_grid is not None:
@@ -649,12 +689,21 @@ class OrbyGlasses:
 
                             # Show interactive voxel grid view
                             occ_vis_3d = self.occupancy_grid.visualize_3d_interactive(camera_pos)
-                            cv2.imshow('Voxel Grid Map', occ_vis_3d)
+                            occ_display_3d = cv2.resize(occ_vis_3d, display_size)
+                            cv2.imshow('Voxel Grid Map', occ_display_3d)
 
                             # Also show 2D slice in separate window
                             if self.config.get('occupancy_grid_3d.show_2d_slice', False):
                                 occ_vis_2d = self.occupancy_grid.visualize_2d_slice(z_height=1.5)
-                                cv2.imshow('2D Occupancy Slice', occ_vis_2d)
+                                occ_display_2d = cv2.resize(occ_vis_2d, display_size)
+                                cv2.imshow('2D Occupancy Slice', occ_display_2d)
+
+                    # Show Movement Visualizer if enabled
+                    if self.movement_visualizer_enabled and self.movement_visualizer is not None:
+                        if self.config.get('movement_visualizer.enabled', True):
+                            mv_vis = self.movement_visualizer.visualize()
+                            mv_display = cv2.resize(mv_vis, display_size)
+                            cv2.imshow('Movement Trajectory', mv_display)
 
                 # Save video
                 if video_writer:
@@ -673,6 +722,11 @@ class OrbyGlasses:
                 if self.point_cloud_enabled and self.point_cloud is not None:
                     if self.point_cloud.update_view_controls(key):
                         pass  # View updated, will refresh on next frame
+
+                # Handle movement visualizer controls if enabled
+                if self.movement_visualizer_enabled and self.movement_visualizer is not None:
+                    # Currently no special keyboard controls for movement visualizer
+                    pass
 
                 if key == ord(emergency_key):
                     self.logger.info("Emergency stop activated")
@@ -715,6 +769,10 @@ class OrbyGlasses:
 
         # Stop 3D mapper
         self.mapper_3d.stop()
+
+        # Reset movement visualizer
+        if self.movement_visualizer_enabled and self.movement_visualizer is not None:
+            self.movement_visualizer.reset()
 
         if self.camera:
             self.camera.release()

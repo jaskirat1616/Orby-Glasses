@@ -55,7 +55,7 @@ audio:
 
   # Echolocation/Spatial Audio
   echolocation_enabled: true   # Enabled for audio beaconing
-  spatial_audio: false
+  spatial_audio: true
   
   # Adaptive Audio Beaconing
   adaptive_beaconing_enabled: true  # Enable adaptive audio beaconing (440Hz for safe paths, 880Hz for obstacles)
@@ -164,3 +164,14 @@ point_cloud_viewer:
   max_depth: 5.0                  # Maximum depth in meters
   update_interval: 0.1            # Update frequency in seconds
   visualize: false                # Show visualization window
+
+# Movement Visualizer Settings (NEW)
+movement_visualizer:
+  enabled: true                   # Enable movement visualization
+  canvas_size: [800, 800]         # Canvas dimensions (width, height)
+  trail_length: 200               # Number of positions to show in trail
+  grid_size: 20.0                 # Grid size in meters
+  show_velocity: true             # Show velocity vector
+  show_orientation: true          # Show orientation indicator
+  show_grid: true                 # Show coordinate grid
+  show_stats: true                # Show movement statistics

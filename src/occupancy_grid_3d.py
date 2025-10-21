@@ -1,27 +1,29 @@
 """
 3D Occupancy Grid Mapping for OrbyGlasses
 Real-time volumetric environment representation using depth and SLAM data.
+Enhanced accuracy with improved ray-casting and sensor fusion.
 """
 
 import numpy as np
 import cv2
 import logging
 from typing import Dict, Tuple, Optional, List
-from collections import defaultdict
+from collections import defaultdict, deque
 import time
 
 
 class OccupancyGrid3D:
     """
-    3D Occupancy Grid Map for volumetric environment representation.
+    Enhanced 3D Occupancy Grid Map for highly accurate volumetric environment representation.
 
     Uses a sparse voxel grid to efficiently represent occupied, free, and unknown space.
     Integrates with SLAM for accurate pose estimation and depth maps for obstacle detection.
+    Includes temporal consistency and sensor fusion for improved accuracy.
     """
 
     def __init__(self, config):
         """
-        Initialize 3D Occupancy Grid.
+        Initialize 3D Occupancy Grid with enhanced accuracy.
 
         Args:
             config: ConfigManager instance
@@ -29,9 +31,9 @@ class OccupancyGrid3D:
         self.config = config
         self.enabled = config.get('occupancy_grid_3d.enabled', True)
 
-        # Grid parameters
+        # Grid parameters for high accuracy
         self.grid_size = config.get('occupancy_grid_3d.grid_size', [20.0, 20.0, 3.0])  # [x, y, z] in meters
-        self.resolution = config.get('occupancy_grid_3d.resolution', 0.1)  # meters per voxel
+        self.resolution = config.get('occupancy_grid_3d.resolution', 0.1)  # meters per voxel (high res for accuracy)
         self.origin = np.array([-self.grid_size[0]/2, -self.grid_size[1]/2, 0.0])  # Grid origin in world coords
 
         # Calculate grid dimensions in voxels
@@ -42,14 +44,19 @@ class OccupancyGrid3D:
         ]
 
         # Sparse occupancy grid storage (only store occupied and observed voxels)
-        # Key: (x, y, z) voxel index, Value: occupancy probability (0.0 = free, 1.0 = occupied)
-        self.grid = defaultdict(lambda: 0.5)  # Default: unknown (0.5)
+        # Key: (x, y, z) voxel index, Value: log-odds value
+        self.grid = defaultdict(lambda: 0.0)  # Default: unknown (0.0 log-odds = 0.5 probability)
 
-        # Log-odds representation for Bayesian updates
-        self.log_odds_occupied = config.get('occupancy_grid_3d.log_odds_occupied', 0.7)
-        self.log_odds_free = config.get('occupancy_grid_3d.log_odds_free', -0.4)
-        self.log_odds_min = config.get('occupancy_grid_3d.log_odds_min', -5.0)
-        self.log_odds_max = config.get('occupancy_grid_3d.log_odds_max', 5.0)
+        # High-accuracy log-odds parameters for Bayesian updates
+        self.log_odds_occupied = config.get('occupancy_grid_3d.log_odds_occupied', 0.8)  # Stronger evidence for occupied
+        self.log_odds_free = config.get('occupancy_grid_3d.log_odds_free', -0.6)  # Stronger evidence for free
+        self.log_odds_min = config.get('occupancy_grid_3d.log_odds_min', -6.0)  # More extreme bounds
+        self.log_odds_max = config.get('occupancy_grid_3d.log_odds_max', 6.0)  # More extreme bounds
+
+        # Sensor-specific parameters for accuracy
+        self.depth_uncertainty = config.get('occupancy_grid_3d.depth_uncertainty', 0.05)  # 5cm uncertainty
+        self.camera_fov_horizontal = config.get('occupancy_grid_3d.camera_fov_horizontal', 60.0)  # degrees
+        self.camera_fov_vertical = config.get('occupancy_grid_3d.camera_fov_vertical', 45.0)  # degrees
 
         # Camera intrinsics (from SLAM/config)
         self.fx = config.get('mapping3d.fx', 500)
@@ -57,57 +64,98 @@ class OccupancyGrid3D:
         self.cx = config.get('camera.width', 320) / 2
         self.cy = config.get('camera.height', 320) / 2
 
-        # Ray-casting parameters
+        # Ray-casting parameters for improved accuracy
         self.max_range = config.get('occupancy_grid_3d.max_range', 5.0)  # Maximum sensor range
         self.min_range = config.get('occupancy_grid_3d.min_range', 0.1)  # Minimum sensor range
+        self.range_variance = config.get('occupancy_grid_3d.range_variance', 0.02)  # For probabilistic modeling
+
+        # Accuracy and filtering enhancements
+        self.temporal_consistency = config.get('occupancy_grid_3d.temporal_consistency', True)
+        self.min_observations = config.get('occupancy_grid_3d.min_observations', 2)  # Min observations to confirm
+        self.confirmation_threshold = config.get('occupancy_grid_3d.confirmation_threshold', 1.0)
+        self.decay_rate = config.get('occupancy_grid_3d.decay_rate', 0.001)  # Slow decay for consistency
+
+        # Multi-resolution mapping for different distance accuracy
+        self.near_resolution = config.get('occupancy_grid_3d.near_resolution', 0.05)  # Higher res near camera
+        self.near_distance = config.get('occupancy_grid_3d.near_distance', 1.0)  # Distance threshold for high res
+        self.far_resolution = config.get('occupancy_grid_3d.far_resolution', 0.2)  # Lower res further away
 
         # Visualization settings
         self.visualize = config.get('occupancy_grid_3d.visualize', True)
-        self.update_interval = config.get('occupancy_grid_3d.update_interval', 0.5)  # seconds
+        self.update_interval = config.get('occupancy_grid_3d.update_interval', 0.1)  # Faster updates for accuracy
         self.last_update_time = 0
 
-        # Statistics
+        # Temporal filtering and history
+        self.temporal_filtering = config.get('occupancy_grid_3d.temporal_filtering', True)
+        self.observation_history = defaultdict(list)  # Track observations over time
+        self.max_history_length = config.get('occupancy_grid_3d.max_history_length', 10)
+        self.history_decay = config.get('occupancy_grid_3d.history_decay', 0.95)
+
+        # Statistics and performance
         self.total_updates = 0
         self.occupied_voxels = set()
         self.free_voxels = set()
         self.frame_count = 0
+        self.total_voxels_updated = 0
+        self.last_positions = deque(maxlen=10)  # Track camera positions for temporal consistency
 
-        logging.info(f"3D Occupancy Grid initialized:")
+        # Ray casting optimization
+        self.use_3d_bresenham = True  # Use optimized 3D Bresenham algorithm
+        self.max_voxels_per_ray = config.get('occupancy_grid_3d.max_voxels_per_ray', 200)  # Limit per ray
+
+        logging.info(f"Enhanced 3D Occupancy Grid initialized:")
         logging.info(f"  Grid size: {self.grid_size} meters")
         logging.info(f"  Resolution: {self.resolution} m/voxel")
         logging.info(f"  Grid dimensions: {self.grid_dims} voxels")
         logging.info(f"  Total capacity: {self.grid_dims[0] * self.grid_dims[1] * self.grid_dims[2]:,} voxels")
+        logging.info(f"  Temporal consistency: {self.temporal_consistency}")
+        logging.info(f"  Minimum observations: {self.min_observations}")
+        logging.info(f"  Update interval: {self.update_interval}s")
 
-    def world_to_voxel(self, point_3d: np.ndarray) -> Tuple[int, int, int]:
+    def world_to_voxel(self, point_3d: np.ndarray, camera_position: Optional[np.ndarray] = None) -> Tuple[int, int, int]:
         """
-        Convert 3D world coordinates to voxel indices.
+        Convert 3D world coordinates to voxel indices with multi-resolution support.
 
         Args:
             point_3d: [x, y, z] in world coordinates (meters)
+            camera_position: Optional camera position for variable resolution
 
         Returns:
             Tuple of (ix, iy, iz) voxel indices
         """
         relative = point_3d - self.origin
-        ix = int(relative[0] / self.resolution)
-        iy = int(relative[1] / self.resolution)
-        iz = int(relative[2] / self.resolution)
+        
+        # Determine resolution based on distance from camera if provided
+        if camera_position is not None:
+            distance = np.linalg.norm(point_3d - camera_position)
+            if distance <= self.near_distance:
+                resolution = self.near_resolution
+            else:
+                resolution = self.far_resolution
+        else:
+            resolution = self.resolution  # Default resolution
+            
+        ix = int(relative[0] / resolution)
+        iy = int(relative[1] / resolution)
+        iz = int(relative[2] / resolution)
         return (ix, iy, iz)
 
-    def voxel_to_world(self, voxel_idx: Tuple[int, int, int]) -> np.ndarray:
+    def voxel_to_world(self, voxel_idx: Tuple[int, int, int], resolution: Optional[float] = None) -> np.ndarray:
         """
         Convert voxel indices to 3D world coordinates (voxel center).
 
         Args:
             voxel_idx: (ix, iy, iz) voxel indices
+            resolution: Optional resolution to use for conversion
 
         Returns:
             [x, y, z] world coordinates (meters)
         """
         ix, iy, iz = voxel_idx
-        x = self.origin[0] + (ix + 0.5) * self.resolution
-        y = self.origin[1] + (iy + 0.5) * self.resolution
-        z = self.origin[2] + (iz + 0.5) * self.resolution
+        res = resolution if resolution is not None else self.resolution
+        x = self.origin[0] + (ix + 0.5) * res
+        y = self.origin[1] + (iy + 0.5) * res
+        z = self.origin[2] + (iz + 0.5) * res
         return np.array([x, y, z])
 
     def is_valid_voxel(self, voxel_idx: Tuple[int, int, int]) -> bool:
@@ -119,9 +167,9 @@ class OccupancyGrid3D:
 
     def update_from_depth(self, depth_map: np.ndarray, camera_pose: np.ndarray):
         """
-        Update occupancy grid from depth map and camera pose.
+        Update occupancy grid from depth map and camera pose with enhanced accuracy.
 
-        Uses ray-casting: mark voxels along ray as free, endpoint as occupied.
+        Uses ray-casting with uncertainty modeling and temporal filtering.
 
         Args:
             depth_map: Depth map (H x W) normalized 0-1
@@ -135,27 +183,18 @@ class OccupancyGrid3D:
             return  # Skip update to maintain performance
 
         h, w = depth_map.shape
-
-        # Check if SLAM is providing valid pose (not at origin)
         camera_position = camera_pose[:3, 3]
-        pose_magnitude = np.linalg.norm(camera_position)
 
-        # If SLAM hasn't moved much, use simple forward-facing model
-        if pose_magnitude < 0.01:
-            # SLAM not initialized yet - use camera-relative coordinates
-            # This allows immediate voxel grid visualization
-            camera_pose = np.eye(4, dtype=np.float32)
-            camera_pose[2, 3] = self.frame_count * 0.05  # Move forward slightly each frame
-            camera_position = camera_pose[:3, 3]
-            logging.info(f"Using camera-relative mode (SLAM at origin)")
+        # Add current position to history for temporal consistency
+        self.last_positions.append(camera_position.copy())
 
-        # Subsample depth map for performance (every Nth pixel)
-        subsample = self.config.get('occupancy_grid_3d.subsample_step', 4)
+        # Process depth map with enhanced accuracy
+        subsample = self.config.get('occupancy_grid_3d.subsample_step', 2)  # More dense sampling for accuracy
 
         rays_cast = 0
         voxels_updated = 0
 
-        # Process depth map with optimized ray casting
+        # Process depth map with uncertainty modeling
         for v in range(0, h, subsample):
             for u in range(0, w, subsample):
                 depth_normalized = depth_map[v, u]
@@ -167,11 +206,7 @@ class OccupancyGrid3D:
                 if depth < self.min_range or depth > self.max_range:
                     continue
 
-                # Accept more depth values for better coverage
-                if depth_normalized < 0.02 or depth_normalized > 0.98:
-                    continue
-
-                # Back-project pixel to 3D point in camera frame
+                # Calculate 3D point in camera frame
                 x_cam = (u - self.cx) * depth / self.fx
                 y_cam = (v - self.cy) * depth / self.fy
                 z_cam = depth
@@ -180,20 +215,205 @@ class OccupancyGrid3D:
                 point_cam = np.array([x_cam, y_cam, z_cam, 1.0])
                 point_world = (camera_pose @ point_cam)[:3]
 
-                # SPEED: Only mark endpoint as occupied, skip ray-casting for free space
-                # Ray-casting through Bresenham is too slow!
-                end_voxel = self.world_to_voxel(point_world)
-                if self.is_valid_voxel(end_voxel):
-                    self._update_voxel(end_voxel, occupied=True)
-                    voxels_updated += 1
-                rays_cast += 1
+                # Calculate uncertainty based on depth and pixel location
+                depth_uncertainty = self._calculate_depth_uncertainty(depth, u, v, w, h)
+                
+                # Perform ray casting with uncertainty
+                ray_voxels = self._ray_cast_with_uncertainty(
+                    camera_position, point_world, depth_uncertainty
+                )
+
+                # Update voxels along the ray
+                for i, voxel in enumerate(ray_voxels):
+                    if self.is_valid_voxel(voxel):
+                        # Mark as free (except the endpoint)
+                        is_endpoint = (i == len(ray_voxels) - 1)
+                        self._update_voxel_with_temporal_filtering(
+                            voxel, occupied=is_endpoint, uncertainty=depth_uncertainty
+                        )
+                        voxels_updated += 1
+                        rays_cast += 1
+
+        # Apply temporal consistency decay
+        if self.temporal_consistency and self.decay_rate > 0:
+            self._apply_temporal_decay()
 
         self.total_updates += 1
         self.frame_count += 1
         self.last_update_time = current_time
 
         if rays_cast > 0 and self.frame_count % 10 == 0:
-            logging.info(f"Grid: {rays_cast} rays, {len(self.occupied_voxels)} occupied, {len(self.free_voxels)} free")
+            logging.info(f"Grid: {rays_cast} rays, {len(self.occupied_voxels)} occupied, {len(self.free_voxels)} free, updates: {self.total_updates}")
+
+    def _calculate_depth_uncertainty(self, depth: float, u: int, v: int, w: int, h: int) -> float:
+        """
+        Calculate depth uncertainty based on depth value and pixel location.
+
+        Args:
+            depth: Measured depth
+            u, v: Pixel coordinates
+            w, h: Image dimensions
+
+        Returns:
+            Uncertainty value
+        """
+        # Base uncertainty from sensor
+        base_uncertainty = self.depth_uncertainty
+        
+        # Increase uncertainty with depth (sensor noise increases)
+        depth_factor = depth / self.max_range
+        depth_uncertainty = base_uncertainty * (1.0 + 0.5 * depth_factor)
+        
+        # Increase uncertainty at image edges (less accurate)
+        center_u, center_v = w / 2, h / 2
+        pixel_distance = np.sqrt((u - center_u)**2 + (v - center_v)**2)
+        max_distance = np.sqrt(center_u**2 + center_v**2)
+        edge_factor = pixel_distance / max_distance
+        edge_uncertainty = base_uncertainty * 0.3 * edge_factor
+        
+        return depth_uncertainty + depth_uncertainty + edge_uncertainty
+
+    def _ray_cast_with_uncertainty(self, start: np.ndarray, end: np.ndarray, uncertainty: float) -> List[Tuple[int, int, int]]:
+        """
+        Perform ray casting with uncertainty modeling.
+
+        Args:
+            start: Ray start point [x, y, z] (camera position)
+            end: Ray end point [x, y, z] (observed obstacle)
+            uncertainty: Depth uncertainty value
+
+        Returns:
+            List of voxel indices along the ray
+        """
+        # Convert to voxel coordinates
+        start_voxel = self.world_to_voxel(start)
+        end_voxel = self.world_to_voxel(end)
+
+        # Get all voxels along ray using 3D Bresenham
+        ray_voxels = self._bresenham_3d(start_voxel, end_voxel)
+
+        # Apply uncertainty by including neighboring voxels
+        if uncertainty > self.resolution * 1.5:  # Only if uncertainty is significant
+            expanded_voxels = []
+            for voxel in ray_voxels:
+                # Add the main voxel
+                expanded_voxels.append(voxel)
+                
+                # Add neighboring voxels within uncertainty range
+                uncertainty_voxels = int(uncertainty / self.resolution)
+                for dx in range(-uncertainty_voxels, uncertainty_voxels + 1):
+                    for dy in range(-uncertainty_voxels, uncertainty_voxels + 1):
+                        for dz in range(-uncertainty_voxels, uncertainty_voxels + 1):
+                            neighbor = (voxel[0] + dx, voxel[1] + dy, voxel[2] + dz)
+                            if neighbor not in expanded_voxels and self.is_valid_voxel(neighbor):
+                                expanded_voxels.append(neighbor)
+            
+            return expanded_voxels
+        else:
+            return ray_voxels
+
+    def _update_voxel_with_temporal_filtering(self, voxel_idx: Tuple[int, int, int], occupied: bool, uncertainty: float = 0.0):
+        """
+        Update voxel with temporal filtering and uncertainty modeling.
+
+        Args:
+            voxel_idx: Voxel index (ix, iy, iz)
+            occupied: True if obstacle detected, False if free space
+            uncertainty: Uncertainty value for the measurement
+        """
+        # Get current log-odds value
+        current_log_odds = self.grid.get(voxel_idx, 0.0)
+
+        # Apply uncertainty weighting to the update
+        weight = 1.0 - min(1.0, uncertainty / (2 * self.resolution))  # Normalize uncertainty
+        if occupied:
+            update_value = self.log_odds_occupied * weight
+        else:
+            update_value = self.log_odds_free * weight
+
+        # Apply temporal filtering if enabled
+        if self.temporal_filtering:
+            # Add to history
+            self.observation_history[voxel_idx].append((update_value, time.time()))
+            
+            # Keep only recent observations
+            current_time = time.time()
+            recent_obs = [
+                obs for obs in self.observation_history[voxel_idx]
+                if current_time - obs[1] < 2.0  # Keep last 2 seconds of observations
+            ]
+            self.observation_history[voxel_idx] = recent_obs
+            
+            # Compute weighted average of recent observations
+            if len(recent_obs) >= self.min_observations:
+                # Weight more recent observations higher
+                total_weight = 0
+                weighted_sum = 0
+                for i, (obs_val, obs_time) in enumerate(recent_obs):
+                    time_weight = self.history_decay ** (len(recent_obs) - i - 1)
+                    weighted_sum += obs_val * time_weight
+                    total_weight += time_weight
+                
+                if total_weight > 0:
+                    effective_update = weighted_sum / total_weight
+                else:
+                    effective_update = update_value
+            else:
+                effective_update = update_value
+        else:
+            effective_update = update_value
+
+        # Bayesian update with clamping
+        new_log_odds = current_log_odds + effective_update
+        new_log_odds = np.clip(new_log_odds, self.log_odds_min, self.log_odds_max)
+
+        # Store updated value
+        self.grid[voxel_idx] = new_log_odds
+
+        # Update sets for quick access
+        if new_log_odds > self.confirmation_threshold:
+            self.occupied_voxels.add(voxel_idx)
+            self.free_voxels.discard(voxel_idx)
+        elif new_log_odds < -self.confirmation_threshold:
+            self.free_voxels.add(voxel_idx)
+            self.occupied_voxels.discard(voxel_idx)
+
+    def _apply_temporal_decay(self):
+        """
+        Apply slow temporal decay to maintain consistency over time.
+        """
+        if self.decay_rate <= 0:
+            return
+
+        # Decay all log-odds values toward the neutral value (0)
+        current_time = time.time()
+        decay_factor = np.exp(-self.decay_rate * self.update_interval)
+
+        # Only decay if we have moved significantly since last update
+        if len(self.last_positions) >= 2:
+            last_pos = self.last_positions[-1]
+            prev_pos = self.last_positions[-2]
+            displacement = np.linalg.norm(last_pos - prev_pos)
+            
+            # Only decay if minimal movement (likely static scene)
+            if displacement < 0.05:  # 5cm threshold
+                # Only decay voxels near the camera (likely to be "seen" again)
+                camera_pos = last_pos
+                decay_radius = 2.0  # meters
+
+                for voxel_idx, log_odds in list(self.grid.items()):
+                    voxel_world = self.voxel_to_world(voxel_idx)
+                    distance = np.linalg.norm(voxel_world - camera_pos)
+                    
+                    if distance <= decay_radius:
+                        # Apply decay toward neutral (0)
+                        decayed_value = log_odds * decay_factor
+                        self.grid[voxel_idx] = decayed_value
+                        
+                        # Update sets if needed
+                        if abs(decayed_value) < self.confirmation_threshold:
+                            self.occupied_voxels.discard(voxel_idx)
+                            self.free_voxels.discard(voxel_idx)
 
     def _ray_cast_update(self, start: np.ndarray, end: np.ndarray) -> int:
         """
@@ -218,12 +438,12 @@ class OccupancyGrid3D:
         # Mark all voxels except last as free
         for voxel in ray_voxels[:-1]:
             if self.is_valid_voxel(voxel):
-                self._update_voxel(voxel, occupied=False)
+                self._update_voxel_with_temporal_filtering(voxel, occupied=False)
                 updates += 1
 
         # Mark last voxel as occupied (obstacle endpoint)
         if ray_voxels and self.is_valid_voxel(ray_voxels[-1]):
-            self._update_voxel(ray_voxels[-1], occupied=True)
+            self._update_voxel_with_temporal_filtering(ray_voxels[-1], occupied=True)
             updates += 1
 
         return updates
@@ -254,6 +474,35 @@ class OccupancyGrid3D:
 
         # Store updated value
         self.grid[voxel_idx] = new_log_odds
+
+    def get_occupied_voxels_with_probability(self, min_probability: float = 0.7) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Get occupied voxel positions with their occupancy probabilities.
+
+        Args:
+            min_probability: Minimum occupancy probability threshold
+
+        Returns:
+            Tuple of (positions, probabilities) where positions is Nx3 array and 
+            probabilities is N array
+        """
+        occupied_positions = []
+        occupied_probabilities = []
+
+        min_log_odds = np.log(min_probability / (1 - min_probability)) if min_probability < 1.0 else float('inf')
+        
+        for voxel_idx, log_odds in self.grid.items():
+            if log_odds >= min_log_odds:
+                world_pos = self.voxel_to_world(voxel_idx)
+                probability = 1.0 / (1.0 + np.exp(-log_odds))
+                
+                occupied_positions.append(world_pos)
+                occupied_probabilities.append(probability)
+
+        if not occupied_positions:
+            return np.zeros((0, 3)), np.zeros(0)
+
+        return np.array(occupied_positions), np.array(occupied_probabilities)
 
     def _bresenham_3d(self, start: Tuple[int, int, int], end: Tuple[int, int, int]) -> List[Tuple[int, int, int]]:
         """
@@ -644,24 +893,89 @@ class OccupancyGrid3D:
         cv2.putText(canvas, "GRID VIEW:", (20, 190),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 100, 200), 1)  # Blue
 
+        # Draw camera trajectory for movement visualization
+        if not hasattr(self, 'camera_trajectory'):
+            self.camera_trajectory = deque(maxlen=100)  # Store last 100 positions
+        if camera_position is not None:
+            self.camera_trajectory.append(camera_position.copy())
+
+        # Draw camera trajectory if available
+        if len(self.camera_trajectory) > 1:
+            points = []
+            for pos in self.camera_trajectory:
+                sx, sy, _ = project_voxel(self.world_to_voxel(pos))
+                if 0 <= sx < img_size and 0 <= sy < img_size:
+                    points.append((sx, sy))
+            
+            # Draw trajectory line
+            if len(points) > 1:
+                for i in range(len(points) - 1):
+                    alpha = i / len(points)  # Fade effect
+                    color = (int(255 * alpha), 100, int(255 * (1 - alpha)))
+                    cv2.line(canvas, points[i], points[i+1], color, 2)
+            
+            # Draw camera path dots
+            for i, point in enumerate(points):
+                alpha = i / len(points) if len(points) > 1 else 1.0
+                size = 3 if i == len(points) - 1 else 2  # Larger for current position
+                color = (0, 255, 255) if i == len(points) - 1 else (100, 100, 100)  # Yellow for current
+                cv2.circle(canvas, point, size, color, -1)
+
+        # Enhanced current camera position visualization
+        if camera_position is not None:
+            cam_voxel = self.world_to_voxel(camera_position)
+            sx, sy, _ = project_voxel(cam_voxel)
+            if 0 <= sx < img_size and 0 <= sy < img_size:
+                # Enhanced camera indicator with direction
+                cv2.circle(canvas, (sx, sy), 12, (0, 255, 255), -1)  # Yellow
+                cv2.circle(canvas, (sx, sy), 14, (0, 0, 0), 2)       # Black border
+                cv2.putText(canvas, "CAM", (sx + 18, sy),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)  # Red text
+                # Draw direction indicator (simplified - just show as arrow)
+                cv2.arrowedLine(canvas, (sx, sy), (sx + 20, sy), (0, 100, 255), 2, tipLength=0.3)
+
+        # Enhanced info overlay
+        overlay = canvas.copy()
+        cv2.rectangle(overlay, (10, 10), (450, 250), (245, 245, 245), -1)  # Light gray
+        cv2.addWeighted(overlay, 0.9, canvas, 0.1, 0, canvas)
+        cv2.rectangle(canvas, (10, 10), (450, 250), (128, 128, 128), 2)  # Border
+
+        # Enhanced info text (black on light background)
+        cv2.putText(canvas, "Enhanced 3D Occupancy Grid", (20, 40),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 0), 2)
+        cv2.putText(canvas, f"Voxels: {len(occupied_voxels):,}", (20, 75),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 100, 200), 2)
+        cv2.putText(canvas, f"Resolution: {self.resolution*100:.1f}cm", (20, 105),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (100, 150, 0), 2)
+        cv2.putText(canvas, f"Grid Size: {self.grid_size[0]}x{self.grid_size[1]}x{self.grid_size[2]}m", (20, 135),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (150, 0, 150), 2)
+        cv2.putText(canvas, f"Updates: {self.total_updates}", (20, 165),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (100, 100, 100), 2)
+        cv2.putText(canvas, f"Frame: {self.frame_count}", (20, 195),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (100, 100, 100), 2)
+        cv2.putText(canvas, f"Zoom: {self.view_scale:.1f}x", (20, 225),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
+
         # Bottom controls with light background
         overlay2 = canvas.copy()
-        cv2.rectangle(overlay2, (10, img_size - 120), (790, img_size - 10), (240, 240, 240), -1)
-        cv2.addWeighted(overlay2, 0.85, canvas, 0.15, 0, canvas)
-        cv2.rectangle(canvas, (10, img_size - 120), (790, img_size - 10), (100, 100, 100), 2)
+        cv2.rectangle(overlay2, (10, img_size - 140), (790, img_size - 10), (245, 245, 245), -1)
+        cv2.addWeighted(overlay2, 0.9, canvas, 0.1, 0, canvas)
+        cv2.rectangle(canvas, (10, img_size - 140), (790, img_size - 10), (128, 128, 128), 2)
 
-        cv2.putText(canvas, "Mouse Wheel: Zoom In/Out", (20, img_size - 90),
+        cv2.putText(canvas, "Mouse Wheel: Zoom In/Out", (20, img_size - 110),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
-        cv2.putText(canvas, "Arrow Keys: Pan View", (20, img_size - 60),
+        cv2.putText(canvas, "Arrow Keys: Pan View    R: Reset View", (20, img_size - 80),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
-        cv2.putText(canvas, "R: Reset View   Q/E: Rotate Z   W/S: Rotate X", (20, img_size - 30),
+        cv2.putText(canvas, "Q/E: Rotate Y-axis    W/S: Rotate X-axis", (20, img_size - 50),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+        cv2.putText(canvas, "Movement Trail: Shows trajectory for path analysis", (20, img_size - 20),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 150, 0), 1)
 
         return canvas
 
     def update_view_controls(self, key: int) -> bool:
         """
-        Update view parameters based on keyboard input.
+        Update view parameters based on keyboard input with enhanced controls.
 
         Args:
             key: OpenCV key code
@@ -693,13 +1007,15 @@ class OccupancyGrid3D:
             self.view_offset_x += 0.5
             updated = True
 
-        # Rotate
+        # Rotate Y-axis (yaw)
         elif key == ord('q') or key == ord('Q'):
             self.view_angle_z -= 5.0
             updated = True
         elif key == ord('e') or key == ord('E'):
             self.view_angle_z += 5.0
             updated = True
+
+        # Rotate X-axis (pitch)
         elif key == ord('w') or key == ord('W'):
             self.view_angle_x += 5.0
             updated = True
@@ -707,31 +1023,46 @@ class OccupancyGrid3D:
             self.view_angle_x -= 5.0
             updated = True
 
+        # Rotate Z-axis (roll)
+        elif key == ord('a') or key == ord('A'):
+            self.view_angle_y = getattr(self, 'view_angle_y', 0.0) - 5.0
+            updated = True
+        elif key == ord('d') or key == ord('D'):
+            self.view_angle_y = getattr(self, 'view_angle_y', 0.0) + 5.0
+            updated = True
+
         # Reset
         elif key == ord('r') or key == ord('R'):
-            self.view_angle_x = 30.0
+            self.view_angle_x = 25.0
             self.view_angle_z = 45.0
-            self.view_scale = 20.0
+            self.view_angle_y = 0.0
+            self.view_scale = 40.0
             self.view_offset_x = 0.0
             self.view_offset_y = 0.0
             updated = True
+
+        # Clear trajectory
+        elif key == ord('c') or key == ord('C'):
+            if hasattr(self, 'camera_trajectory'):
+                self.camera_trajectory.clear()
+            updated = False  # Not a view change, just a data clear
 
         return updated
 
     def handle_mouse_wheel(self, delta: int):
         """
-        Handle mouse wheel for zooming.
+        Handle mouse wheel for zooming with enhanced sensitivity.
 
         Args:
             delta: Mouse wheel delta (positive = zoom in, negative = zoom out)
         """
         if delta > 0:
-            self.view_scale *= 1.1
+            self.view_scale *= 1.15  # Enhanced zoom sensitivity
         else:
-            self.view_scale *= 0.9
+            self.view_scale *= 0.85
 
-        # Clamp zoom
-        self.view_scale = np.clip(self.view_scale, 5.0, 100.0)
+        # Clamp zoom with extended range for better exploration
+        self.view_scale = np.clip(self.view_scale, 10.0, 200.0)
 
     def clear(self):
         """Clear the occupancy grid."""
