@@ -4,7 +4,7 @@
 # Camera/Video Source Settings
 camera:
   # Source: 0 for built-in webcam, or URL for IP camera (e.g., "http://192.168.1.100:8080/video")
-  source: 1
+  source: 0
   width: 320  # Smaller size for better performance
   height: 320  # Smaller size for better performance
   fps: 20  # Target FPS
@@ -150,8 +150,8 @@ occupancy_grid_3d:
   log_odds_free: -0.8             # FAST free space marking
   log_odds_min: -3.0              # Faster saturation
   log_odds_max: 3.0               # Faster saturation
-  subsample_step: 3               # More rays = better coverage
-  update_interval: 0.1            # Very fast updates (10 Hz)
+  subsample_step: 20              # MUCH fewer rays for SPEED
+  update_interval: 1.0            # Slow updates to maintain FPS
   visualize: true                 # Show 3D voxel grid visualization window
   show_2d_slice: false            # Also show 2D slice in separate window
 

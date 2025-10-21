@@ -180,9 +180,12 @@ class OccupancyGrid3D:
                 point_cam = np.array([x_cam, y_cam, z_cam, 1.0])
                 point_world = (camera_pose @ point_cam)[:3]
 
-                # Ray-cast from camera to point
-                updated = self._ray_cast_update(camera_position, point_world)
-                voxels_updated += updated
+                # SPEED: Only mark endpoint as occupied, skip ray-casting for free space
+                # Ray-casting through Bresenham is too slow!
+                end_voxel = self.world_to_voxel(point_world)
+                if self.is_valid_voxel(end_voxel):
+                    self._update_voxel(end_voxel, occupied=True)
+                    voxels_updated += 1
                 rays_cast += 1
 
         self.total_updates += 1
@@ -574,25 +577,13 @@ class OccupancyGrid3D:
 
             return screen_x, screen_y, z_final
 
-        # Draw free voxels (visible grid cells for empty space)
-        for voxel_idx in free_voxels[:1000]:  # Show more free voxels for grid effect
-            sx, sy, depth = project_voxel(voxel_idx)
-            if 0 <= sx < img_size and 0 <= sy < img_size:
-                voxel_size = max(6, int(self.view_scale * self.resolution * 0.8))
-                # Draw as semi-transparent grid cells
-                cv2.rectangle(canvas,
-                            (sx - voxel_size, sy - voxel_size),
-                            (sx + voxel_size, sy + voxel_size),
-                            (220, 250, 220), -1)  # Very light green fill
-                # Thin border for grid effect
-                cv2.rectangle(canvas,
-                            (sx - voxel_size, sy - voxel_size),
-                            (sx + voxel_size, sy + voxel_size),
-                            (180, 220, 180), 1)   # Light green border
+        # SKIP free voxels for speed - only show occupied
+        # Drawing 1000 voxels is too slow!
 
-        # Draw occupied voxels (larger, brighter) - sorted by depth
-        voxel_depths = [(v, project_voxel(v)) for v in occupied_voxels]
-        voxel_depths.sort(key=lambda x: x[1][2])  # Sort by depth
+        # Draw occupied voxels - LIMIT for speed
+        occupied_to_draw = list(occupied_voxels)[:500]  # Max 500 voxels
+        voxel_depths = [(v, project_voxel(v)) for v in occupied_to_draw]
+        # SKIP SORTING for speed - depth sorting is expensive
 
         for voxel_idx, (sx, sy, depth) in voxel_depths:
             if 0 <= sx < img_size and 0 <= sy < img_size:
