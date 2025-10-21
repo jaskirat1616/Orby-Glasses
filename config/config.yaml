@@ -102,11 +102,11 @@ performance:
 
 # 3D Mapping Settings
 mapping3d:
-  enabled: false                   # Enable 3D real-time mapping visualization
-  max_depth: 8.0                  # Maximum depth in meters to visualize
-  voxel_size: 0.1                 # Voxel size for downsampling
-  subsample_step: 6               # Subsample every Nth point (balance quality and performance)
-  update_interval: 0.2            # Update 3D map every N seconds for real-time
+  enabled: false                   # Disable 3D mapping for better performance
+  max_depth: 5.0                  # Reduced maximum depth for performance
+  voxel_size: 0.2                 # Larger voxel size for performance
+  subsample_step: 10              # Larger subsample for better performance
+  update_interval: 0.5            # Slower updates for better performance
   fx: 500                         # Camera focal length X (pixels)
   fy: 500                         # Camera focal length Y (pixels)
   skip_bbox: true                 # Skip bounding boxes for better performance
@@ -120,23 +120,23 @@ slam:
   visualize: true                 # Show SLAM visualization window
 
   # Tracking without IMU
-  orb_features: 4000              # More features for better tracking
-  fast_threshold: 8               # More features in low-texture areas
-  min_matches: 12                 # Maintain tracking with fewer matches
+  orb_features: 1000              # Reduced features for better performance
+  fast_threshold: 15              # Higher threshold for fewer features but better performance
+  min_matches: 8                  # Reduced minimum matches for better performance
   motion_model: true              # Use constant velocity motion model
-  pose_smoothing: 0.7             # More aggressive smoothing for stability
+  pose_smoothing: 0.5             # Moderate smoothing for balance of stability and responsiveness
   temporal_consistency_check: true # Check for physically impossible movements
   max_position_jump: 0.3          # Maximum allowed position jump (m)
   max_rotation_jump: 0.3          # Maximum allowed rotation jump (rad)
-  strict_matching: true           # Stricter feature matching
-  min_tracked_features: 10        # Minimum tracked features for good tracking
-  keyframe_threshold: 15          # Insert keyframe every N frames
-  reprojection_threshold: 2.0     # Lower reprojection threshold
+  strict_matching: false          # Less strict matching for better performance
+  min_tracked_features: 5         # Reduced minimum tracked features for better performance
+  keyframe_threshold: 25          # Insert keyframe less frequently for better performance
+  reprojection_threshold: 3.0     # Higher threshold for better performance
   min_depth: 0.1                  # Minimum depth for triangulation (m)
   max_depth: 10.0                 # Maximum depth for triangulation (m)
-  depth_variance: 0.02            # Lower variance for more confidence in depth
-  pose_alpha: 0.8                 # Pose smoothing factor (higher = more smoothing)
-  loop_closure: true              # Enable loop closure detection
+  depth_variance: 0.05            # Higher variance for more flexibility
+  pose_alpha: 0.6                 # Pose smoothing factor (balance of smoothness and responsiveness)
+  loop_closure: false             # Disable loop closure for better performance
   loop_closure_threshold: 0.6     # Loop closure threshold (0-1)
   bundle_adjustment: false        # Enable bundle adjustment (may slow down)
   ba_interval: 10                 # Perform BA every N keyframes
@@ -159,27 +159,27 @@ trajectory_prediction:
 # 3D Occupancy Grid Settings (Voxel Grid Map) - FOR REAL-TIME VISUALIZATION
 occupancy_grid_3d:
   enabled: true                   # Enable voxel grid visualization
-  grid_size: [15.0, 15.0, 3.0]    # Balanced grid size
-  resolution: 0.15                # Better resolution for detail
-  near_resolution: 0.08           # High resolution for nearby area
-  near_distance: 2.0              # High resolution up to 2m
-  far_resolution: 0.25            # Lower resolution beyond 2m
-  max_range: 5.0                  # Maximum sensor range in meters
+  grid_size: [10.0, 10.0, 2.5]    # Smaller grid for better performance
+  resolution: 0.4                 # Lower resolution for better performance
+  near_resolution: 0.2            # Reduced resolution for performance
+  near_distance: 1.5              # Reduced distance for high res for performance
+  far_resolution: 0.4             # Lower resolution beyond 2m
+  max_range: 4.0                  # Reduced maximum sensor range for performance
   min_range: 0.1                  # Minimum sensor range in meters
-  log_odds_occupied: 2.0          # Faster convergence to occupied
-  log_odds_free: -1.0             # Faster free space marking
-  log_odds_min: -4.0              # Better saturation
-  log_odds_max: 4.0               # Better saturation
-  subsample_step: 15              # Balance between speed and quality
-  update_interval: 0.5            # Update more frequently for real-time
+  log_odds_occupied: 1.0          # Moderate convergence speed
+  log_odds_free: -0.6             # Moderate free space marking
+  log_odds_min: -3.0              # Moderate saturation
+  log_odds_max: 3.0               # Moderate saturation
+  subsample_step: 20              # Larger subsample for better performance
+  update_interval: 1.0            # Slower updates for better performance
   visualize: true                 # Show 3D voxel grid visualization window
-  show_2d_slice: true             # Show 2D slice for better understanding
-  temporal_consistency: true      # Maintain consistency over time
-  temporal_filtering: true        # Use temporal filtering
-  min_observations: 2             # Minimum observations for confidence
+  show_2d_slice: false            # Disable 2D slice for better performance
+  temporal_consistency: false     # Disable for better performance
+  temporal_filtering: false       # Disable temporal filtering for performance
+  min_observations: 1             # Minimum observations for better performance
   decay_rate: 0.001               # Slow decay for stability
-  max_history_length: 8           # History length for temporal filtering
-  history_decay: 0.9              # Decay factor for historical observations
+  max_history_length: 5           # Reduced history length for performance
+  history_decay: 0.8              # Lower decay factor for performance
 
 # 3D Point Cloud Viewer Settings (DISABLED - using voxel grid only)
 point_cloud_viewer:
@@ -194,10 +194,10 @@ point_cloud_viewer:
 # Movement Visualizer Settings (NEW)
 movement_visualizer:
   enabled: true                   # Enable movement visualization
-  canvas_size: [800, 800]         # Canvas dimensions (width, height)
-  trail_length: 300               # Longer trail for better path visualization
-  grid_size: 25.0                 # Larger grid for better context
-  show_velocity: true             # Show velocity vector
-  show_orientation: true          # Show orientation indicator
-  show_grid: true                 # Show coordinate grid
-  show_stats: true                # Show movement statistics
+  canvas_size: [600, 600]         # Smaller canvas for better performance
+  trail_length: 150               # Reduced trail length for better performance
+  grid_size: 20.0                 # Smaller grid for better performance
+  show_velocity: false            # Disable velocity vector for performance
+  show_orientation: false         # Disable orientation indicator for performance
+  show_grid: false                # Disable coordinate grid for performance
+  show_stats: true                # Keep stats for user feedback
