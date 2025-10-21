@@ -70,6 +70,7 @@ class OccupancyGrid3D:
         self.total_updates = 0
         self.occupied_voxels = set()
         self.free_voxels = set()
+        self.frame_count = 0
 
         logging.info(f"3D Occupancy Grid initialized:")
         logging.info(f"  Grid size: {self.grid_size} meters")
@@ -134,7 +135,19 @@ class OccupancyGrid3D:
             return  # Skip update to maintain performance
 
         h, w = depth_map.shape
+
+        # Check if SLAM is providing valid pose (not at origin)
         camera_position = camera_pose[:3, 3]
+        pose_magnitude = np.linalg.norm(camera_position)
+
+        # If SLAM hasn't moved much, use simple forward-facing model
+        if pose_magnitude < 0.01:
+            # SLAM not initialized yet - use camera-relative coordinates
+            # This allows immediate voxel grid visualization
+            camera_pose = np.eye(4, dtype=np.float32)
+            camera_pose[2, 3] = self.frame_count * 0.05  # Move forward slightly each frame
+            camera_position = camera_pose[:3, 3]
+            logging.info(f"Using camera-relative mode (SLAM at origin)")
 
         # Subsample depth map for performance (every Nth pixel)
         subsample = self.config.get('occupancy_grid_3d.subsample_step', 4)
@@ -154,8 +167,8 @@ class OccupancyGrid3D:
                 if depth < self.min_range or depth > self.max_range:
                     continue
 
-                # Skip very uncertain depth values (too close to 0 or 1)
-                if depth_normalized < 0.05 or depth_normalized > 0.95:
+                # Accept more depth values for better coverage
+                if depth_normalized < 0.02 or depth_normalized > 0.98:
                     continue
 
                 # Back-project pixel to 3D point in camera frame
@@ -173,10 +186,11 @@ class OccupancyGrid3D:
                 rays_cast += 1
 
         self.total_updates += 1
+        self.frame_count += 1
         self.last_update_time = current_time
 
-        if rays_cast > 0:
-            logging.debug(f"Grid updated: {rays_cast} rays, {voxels_updated} voxels, {len(self.occupied_voxels)} occupied")
+        if rays_cast > 0 and self.frame_count % 10 == 0:
+            logging.info(f"Grid: {rays_cast} rays, {len(self.occupied_voxels)} occupied, {len(self.free_voxels)} free")
 
     def _ray_cast_update(self, start: np.ndarray, end: np.ndarray) -> int:
         """

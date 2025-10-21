@@ -139,19 +139,19 @@ trajectory_prediction:
   visualize: false                # Show trajectory visualization
   collision_warning: true         # Warn about predicted collisions
 
-# 3D Occupancy Grid Settings (Voxel Grid Map) - OPTIMIZED FOR ACCURACY & SPEED
+# 3D Occupancy Grid Settings (Voxel Grid Map) - OPTIMIZED FOR IMMEDIATE RESULTS
 occupancy_grid_3d:
   enabled: true                   # Enable voxel grid visualization
-  grid_size: [20.0, 20.0, 3.0]    # Grid dimensions [x, y, z] in meters
-  resolution: 0.15                # Voxel size (15cm = balance of detail & speed)
+  grid_size: [10.0, 10.0, 3.0]    # Smaller grid = faster, easier to see
+  resolution: 0.2                 # Larger voxels = more visible (20cm)
   max_range: 5.0                  # Maximum sensor range in meters
   min_range: 0.1                  # Minimum sensor range in meters
-  log_odds_occupied: 0.8          # Higher = faster convergence to occupied
-  log_odds_free: -0.5             # Higher magnitude = faster free space updates
-  log_odds_min: -5.0              # Minimum log-odds value (clamping)
-  log_odds_max: 5.0               # Maximum log-odds value (clamping)
-  subsample_step: 4               # Lower = more accurate (process more pixels)
-  update_interval: 0.2            # Faster updates (5 Hz)
+  log_odds_occupied: 1.5          # FAST convergence to occupied
+  log_odds_free: -0.8             # FAST free space marking
+  log_odds_min: -3.0              # Faster saturation
+  log_odds_max: 3.0               # Faster saturation
+  subsample_step: 3               # More rays = better coverage
+  update_interval: 0.1            # Very fast updates (10 Hz)
   visualize: true                 # Show 3D voxel grid visualization window
   show_2d_slice: false            # Also show 2D slice in separate window
 
