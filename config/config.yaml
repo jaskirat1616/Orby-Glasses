@@ -134,20 +134,20 @@ trajectory_prediction:
   visualize: false                # Show trajectory visualization
   collision_warning: true         # Warn about predicted collisions
 
-# 3D Occupancy Grid Settings
+# 3D Occupancy Grid Settings (Voxel Grid Map)
 occupancy_grid_3d:
-  enabled: false                  # Enable 3D occupancy grid mapping (EXPERIMENTAL)
+  enabled: true                   # Enable voxel grid visualization
   grid_size: [20.0, 20.0, 3.0]    # Grid dimensions [x, y, z] in meters
-  resolution: 0.1                 # Voxel size in meters (0.1m = 10cm per voxel)
+  resolution: 0.2                 # Voxel size in meters (20cm = LARGER, more visible)
   max_range: 5.0                  # Maximum sensor range in meters
   min_range: 0.1                  # Minimum sensor range in meters
   log_odds_occupied: 0.7          # Log-odds update for occupied voxels
   log_odds_free: -0.4             # Log-odds update for free space
   log_odds_min: -5.0              # Minimum log-odds value (clamping)
   log_odds_max: 5.0               # Maximum log-odds value (clamping)
-  subsample_step: 8               # Subsample depth map every Nth pixel (higher = faster)
-  update_interval: 0.5            # Update grid every N seconds
-  visualize: true                 # Show 3D occupancy grid visualization window
+  subsample_step: 6               # Subsample depth map every Nth pixel (higher = faster)
+  update_interval: 0.3            # Update grid every N seconds
+  visualize: true                 # Show 3D voxel grid visualization window
   show_2d_slice: false            # Also show 2D slice in separate window
 
 # 3D Point Cloud Viewer Settings (Recommended for dense visualization)

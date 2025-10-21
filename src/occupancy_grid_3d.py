@@ -527,7 +527,7 @@ class OccupancyGrid3D:
         if not hasattr(self, 'view_angle_x'):
             self.view_angle_x = 30.0  # degrees
             self.view_angle_z = 45.0  # degrees
-            self.view_scale = 20.0    # pixels per meter
+            self.view_scale = 30.0    # Increased from 20 for larger voxels
             self.view_offset_x = 0.0
             self.view_offset_y = 0.0
 
@@ -554,13 +554,21 @@ class OccupancyGrid3D:
 
             return screen_x, screen_y, z_final
 
-        # Draw free voxels (smaller, light green on white)
-        for voxel_idx in free_voxels[:500]:  # Limit for performance
+        # Draw free voxels (visible grid cells for empty space)
+        for voxel_idx in free_voxels[:1000]:  # Show more free voxels for grid effect
             sx, sy, depth = project_voxel(voxel_idx)
             if 0 <= sx < img_size and 0 <= sy < img_size:
-                voxel_size = max(2, int(self.view_scale * self.resolution * 0.3))
-                cv2.circle(canvas, (sx, sy), voxel_size, (200, 255, 200), -1)  # Light green
-                cv2.circle(canvas, (sx, sy), voxel_size, (100, 200, 100), 1)   # Green border
+                voxel_size = max(6, int(self.view_scale * self.resolution * 0.8))
+                # Draw as semi-transparent grid cells
+                cv2.rectangle(canvas,
+                            (sx - voxel_size, sy - voxel_size),
+                            (sx + voxel_size, sy + voxel_size),
+                            (220, 250, 220), -1)  # Very light green fill
+                # Thin border for grid effect
+                cv2.rectangle(canvas,
+                            (sx - voxel_size, sy - voxel_size),
+                            (sx + voxel_size, sy + voxel_size),
+                            (180, 220, 180), 1)   # Light green border
 
         # Draw occupied voxels (larger, brighter) - sorted by depth
         voxel_depths = [(v, project_voxel(v)) for v in occupied_voxels]
@@ -568,28 +576,32 @@ class OccupancyGrid3D:
 
         for voxel_idx, (sx, sy, depth) in voxel_depths:
             if 0 <= sx < img_size and 0 <= sy < img_size:
-                # Larger voxel size for better visibility
-                voxel_size = max(4, int(self.view_scale * self.resolution))
+                # MUCH larger voxel size for grid-like appearance
+                voxel_size = max(8, int(self.view_scale * self.resolution * 1.5))
 
                 # Color based on probability
                 log_odds = self.grid.get(voxel_idx, 0.0)
                 prob = 1.0 / (1.0 + np.exp(-log_odds))
 
-                # Red gradient for occupied (darker = more confident)
-                color_intensity = int(prob * 200 + 55)  # 55-255 range
-                color = (50, 50, color_intensity)  # Red (BGR format)
+                # Bright red for occupied voxels (more visible)
+                color_intensity = int(prob * 180 + 75)  # 75-255 range
+                color = (40, 40, color_intensity)  # Bright red (BGR format)
 
-                # Draw voxel as rectangle for better visibility
+                # Draw voxel as THICK rectangle for grid effect
                 cv2.rectangle(canvas,
                             (sx - voxel_size, sy - voxel_size),
                             (sx + voxel_size, sy + voxel_size),
                             color, -1)
 
-                # Add dark border for clarity on white background
+                # Add THICK dark border for strong grid lines
                 cv2.rectangle(canvas,
                             (sx - voxel_size, sy - voxel_size),
                             (sx + voxel_size, sy + voxel_size),
-                            (0, 0, 0), 1)  # Black border
+                            (0, 0, 0), 2)  # Thicker black border
+
+                # Add inner grid lines for 3D cube effect
+                cv2.line(canvas, (sx - voxel_size, sy), (sx + voxel_size, sy), (0, 0, 0), 1)
+                cv2.line(canvas, (sx, sy - voxel_size), (sx, sy + voxel_size), (0, 0, 0), 1)
 
         # Draw camera position if provided (bright blue on white background)
         if camera_position is not None:
@@ -608,17 +620,17 @@ class OccupancyGrid3D:
         cv2.rectangle(canvas, (10, 10), (380, 200), (100, 100, 100), 2)  # Border
 
         # Info text (black on light background)
-        cv2.putText(canvas, "3D Occupancy Grid", (20, 40),
+        cv2.putText(canvas, "Voxel Grid Map", (20, 40),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 0), 2)
-        cv2.putText(canvas, f"Occupied: {len(occupied_voxels)}", (20, 75),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 50, 50), 2)  # Dark red
-        cv2.putText(canvas, f"Free: {len(free_voxels)}", (20, 105),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (50, 150, 50), 2)  # Dark green
-        cv2.putText(canvas, f"Resolution: {self.resolution*100:.0f}cm", (20, 135),
+        cv2.putText(canvas, f"Occupied Voxels: {len(occupied_voxels)}", (20, 75),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 50, 50), 2)  # Dark red
+        cv2.putText(canvas, f"Free Voxels: {len(free_voxels)}", (20, 105),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.55, (50, 150, 50), 2)  # Dark green
+        cv2.putText(canvas, f"Voxel Size: {self.resolution*100:.0f}cm", (20, 135),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (50, 50, 50), 1)  # Dark gray
         cv2.putText(canvas, f"Zoom: {self.view_scale:.1f}x", (20, 165),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (50, 50, 50), 1)
-        cv2.putText(canvas, "CONTROLS:", (20, 190),
+        cv2.putText(canvas, "GRID VIEW:", (20, 190),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 100, 200), 1)  # Blue
 
         # Bottom controls with light background

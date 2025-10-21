@@ -592,7 +592,7 @@ class OrbyGlasses:
 
                     # Setup mouse callbacks for windows (first time only)
                     if self.frame_count == 1:
-                        # Occupancy grid mouse callback
+                        # Voxel grid mouse callback
                         if self.occupancy_grid_enabled and self.occupancy_grid is not None:
                             def occ_mouse_callback(event, x, y, flags, param):
                                 if event == cv2.EVENT_MOUSEWHEEL:
@@ -600,7 +600,7 @@ class OrbyGlasses:
                                         self.occupancy_grid.handle_mouse_wheel(1)
                                     else:
                                         self.occupancy_grid.handle_mouse_wheel(-1)
-                            cv2.setMouseCallback('3D Occupancy Grid', occ_mouse_callback)
+                            cv2.setMouseCallback('Voxel Grid Map', occ_mouse_callback)
 
                         # Point cloud mouse callback
                         if self.point_cloud_enabled and self.point_cloud is not None:
@@ -647,9 +647,9 @@ class OrbyGlasses:
                             if slam_result is not None:
                                 camera_pos = np.array(slam_result['position'])
 
-                            # Show interactive 3D view
+                            # Show interactive voxel grid view
                             occ_vis_3d = self.occupancy_grid.visualize_3d_interactive(camera_pos)
-                            cv2.imshow('3D Occupancy Grid', occ_vis_3d)
+                            cv2.imshow('Voxel Grid Map', occ_vis_3d)
 
                             # Also show 2D slice in separate window
                             if self.config.get('occupancy_grid_3d.show_2d_slice', False):
