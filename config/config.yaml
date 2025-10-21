@@ -136,7 +136,7 @@ trajectory_prediction:
 
 # 3D Occupancy Grid Settings
 occupancy_grid_3d:
-  enabled: true                   # Enable 3D occupancy grid mapping (EXPERIMENTAL)
+  enabled: false                  # Enable 3D occupancy grid mapping (EXPERIMENTAL)
   grid_size: [20.0, 20.0, 3.0]    # Grid dimensions [x, y, z] in meters
   resolution: 0.1                 # Voxel size in meters (0.1m = 10cm per voxel)
   max_range: 5.0                  # Maximum sensor range in meters
@@ -149,3 +149,13 @@ occupancy_grid_3d:
   update_interval: 0.5            # Update grid every N seconds
   visualize: true                 # Show 3D occupancy grid visualization window
   show_2d_slice: false            # Also show 2D slice in separate window
+
+# 3D Point Cloud Viewer Settings (Recommended for dense visualization)
+point_cloud_viewer:
+  enabled: true                   # Enable real-time 3D point cloud visualization
+  max_points: 100000              # Maximum points to store (100K recommended)
+  subsample: 3                    # Subsample every Nth pixel (lower = denser, slower)
+  min_depth: 0.1                  # Minimum depth in meters
+  max_depth: 5.0                  # Maximum depth in meters
+  update_interval: 0.1            # Update frequency in seconds
+  visualize: true                 # Show visualization window

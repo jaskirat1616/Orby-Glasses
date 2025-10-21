@@ -29,6 +29,7 @@ from slam import MonocularSLAM
 from indoor_navigation import IndoorNavigator
 from trajectory_prediction import TrajectoryPredictionSystem
 from occupancy_grid_3d import OccupancyGrid3D
+from point_cloud_viewer import PointCloudViewer
 
 
 class OrbyGlasses:
@@ -121,6 +122,15 @@ class OrbyGlasses:
             self.logger.info("✓ 3D Occupancy Grid enabled")
         else:
             self.occupancy_grid = None
+
+        # 3D Point Cloud Viewer
+        self.point_cloud_enabled = self.config.get('point_cloud_viewer.enabled', False)
+        if self.point_cloud_enabled:
+            self.logger.info("Initializing 3D Point Cloud Viewer...")
+            self.point_cloud = PointCloudViewer(self.config)
+            self.logger.info("✓ 3D Point Cloud Viewer enabled")
+        else:
+            self.point_cloud = None
 
         # Data logging
         self.data_logger = DataLogger()
@@ -255,6 +265,14 @@ class OrbyGlasses:
                 camera_pose = slam_result['pose']
                 self.occupancy_grid.update_from_depth(depth_map, camera_pose)
                 occ_time = self.perf_monitor.stop_timer('occupancy_grid')
+
+        # 3D Point Cloud Update (if enabled)
+        if self.point_cloud_enabled and self.point_cloud is not None:
+            if depth_map is not None:
+                self.perf_monitor.start_timer('point_cloud')
+                camera_pose = slam_result['pose'] if slam_result is not None else None
+                self.point_cloud.add_frame(frame, depth_map, camera_pose)
+                pc_time = self.perf_monitor.stop_timer('point_cloud')
 
         # Path planning (RL prediction) - DISABLED for speed
         self.perf_monitor.start_timer('prediction')
@@ -572,16 +590,27 @@ class OrbyGlasses:
                     display_frame = cv2.resize(annotated_frame, (500, 500))
                     cv2.imshow('OrbyGlasses', display_frame)
 
-                    # Setup mouse callback for occupancy grid window (first time only)
-                    if self.occupancy_grid_enabled and self.occupancy_grid is not None:
-                        if self.frame_count == 1:
-                            def mouse_callback(event, x, y, flags, param):
+                    # Setup mouse callbacks for windows (first time only)
+                    if self.frame_count == 1:
+                        # Occupancy grid mouse callback
+                        if self.occupancy_grid_enabled and self.occupancy_grid is not None:
+                            def occ_mouse_callback(event, x, y, flags, param):
                                 if event == cv2.EVENT_MOUSEWHEEL:
-                                    if flags > 0:  # Scroll up
+                                    if flags > 0:
                                         self.occupancy_grid.handle_mouse_wheel(1)
-                                    else:  # Scroll down
+                                    else:
                                         self.occupancy_grid.handle_mouse_wheel(-1)
-                            cv2.setMouseCallback('3D Occupancy Grid', mouse_callback)
+                            cv2.setMouseCallback('3D Occupancy Grid', occ_mouse_callback)
+
+                        # Point cloud mouse callback
+                        if self.point_cloud_enabled and self.point_cloud is not None:
+                            def pc_mouse_callback(event, x, y, flags, param):
+                                if event == cv2.EVENT_MOUSEWHEEL:
+                                    if flags > 0:
+                                        self.point_cloud.handle_mouse_wheel(1)
+                                    else:
+                                        self.point_cloud.handle_mouse_wheel(-1)
+                            cv2.setMouseCallback('3D Point Cloud', pc_mouse_callback)
 
                     # Show depth map in separate smaller window (only when freshly calculated)
                     if depth_map is not None and self.frame_count % (self.skip_depth_frames + 1) == 0:
@@ -599,6 +628,16 @@ class OrbyGlasses:
                         slam_vis = self.slam.visualize_tracking(frame, slam_result)
                         slam_display = cv2.resize(slam_vis, (400, 400))
                         cv2.imshow('SLAM Tracking', slam_display)
+
+                    # Show 3D Point Cloud visualization if enabled
+                    if self.point_cloud_enabled and self.point_cloud is not None:
+                        if self.config.get('point_cloud_viewer.visualize', True):
+                            camera_pos = None
+                            if slam_result is not None:
+                                camera_pos = np.array(slam_result['position'])
+
+                            pc_vis = self.point_cloud.visualize(camera_pos)
+                            cv2.imshow('3D Point Cloud', pc_vis)
 
                     # Show 3D Occupancy Grid visualization if enabled
                     if self.occupancy_grid_enabled and self.occupancy_grid is not None:
@@ -628,6 +667,11 @@ class OrbyGlasses:
                 # Handle occupancy grid controls
                 if self.occupancy_grid_enabled and self.occupancy_grid is not None:
                     if self.occupancy_grid.update_view_controls(key):
+                        pass  # View updated, will refresh on next frame
+
+                # Handle point cloud controls
+                if self.point_cloud_enabled and self.point_cloud is not None:
+                    if self.point_cloud.update_view_controls(key):
                         pass  # View updated, will refresh on next frame
 
                 if key == ord(emergency_key):

@@ -87,12 +87,14 @@ class MonocularSLAM:
             [0, 0, 1]
         ], dtype=np.float32)
 
-        # ORB feature detector
+        # ORB feature detector (more features, more robust)
         self.orb = cv2.ORB_create(
-            nfeatures=2000,
+            nfeatures=3000,      # Increased from 2000
             scaleFactor=1.2,
             nlevels=8,
-            edgeThreshold=15,
+            edgeThreshold=10,    # Lower edge threshold = more features
+            firstLevel=0,
+            WTA_K=2,
             patchSize=31
         )
 
@@ -112,9 +114,9 @@ class MonocularSLAM:
         self.last_descriptors = None
         self.is_initialized = False
 
-        # Parameters
-        self.min_matches = 50  # Minimum matches for tracking
-        self.keyframe_threshold = 20  # Frames between keyframes
+        # Parameters (more lenient for better tracking)
+        self.min_matches = 30  # Reduced from 50 for better tracking
+        self.keyframe_threshold = 15  # More frequent keyframes
         self.frame_count = 0
 
         # Map saving
@@ -153,9 +155,20 @@ class MonocularSLAM:
         # Detect ORB features
         keypoints, descriptors = self.orb.detectAndCompute(gray, None)
 
-        if descriptors is None or len(keypoints) < 50:
-            logging.warning(f"Insufficient features detected: {len(keypoints) if keypoints else 0}")
-            return self._empty_result()
+        if descriptors is None or len(keypoints) < 20:  # Reduced threshold
+            if self.is_initialized:
+                # If already initialized, keep last pose rather than failing
+                return {
+                    'pose': self.current_pose,
+                    'position': self.current_pose[:3, 3].tolist(),
+                    'tracking_quality': 0.1,
+                    'num_matches': 0,
+                    'is_keyframe': False,
+                    'num_map_points': len(self.map_points)
+                }
+            else:
+                logging.warning(f"Insufficient features for initialization: {len(keypoints) if keypoints else 0}")
+                return self._empty_result()
 
         # Initialize or track
         if not self.is_initialized:
@@ -236,8 +249,10 @@ class MonocularSLAM:
         tracking_quality = 0.0
 
         if num_matches < self.min_matches:
-            logging.warning(f"Lost tracking: only {num_matches} matches")
-            # Keep current position and low quality
+            # Don't spam warnings, keep last pose
+            if num_matches < 10:  # Only warn if very few matches
+                logging.debug(f"Low tracking: only {num_matches} matches (keeping last pose)")
+            tracking_quality = num_matches / self.min_matches  # Proportional quality
         else:
             # Extract matched points
             pts_current = np.float32([keypoints[m.queryIdx].pt for m in good_matches])
