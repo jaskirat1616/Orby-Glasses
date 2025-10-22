@@ -23,7 +23,6 @@ models/rl/*.zip
 data/logs/*.log
 data/test_videos/*.mp4
 data/test_videos/*.avi
-data/logs/rl_experiences/
 
 # IDE
 .vscode/
@@ -42,30 +41,3 @@ models/ollama/
 # Temporary files
 *.tmp
 *.temp
-
-# Files to exclude
-*.jsonl
-debug.log
-yolo12n.pt
-
-# Keep directory structure
-!data/logs/.gitkeep
-!data/test_videos/.gitkeep
-!models/yolo/.gitkeep
-!models/depth/.gitkeep
-!models/rl/.gitkeep
-
-# Logs
-logs/
-*.log
-data/logs/
-data/logs/*
-
-# Docs
-docs/
-*.md
-*.txt
-*.pdf
-
-data/maps/
-data/maps/*

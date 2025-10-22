@@ -160,7 +160,7 @@ class Mapper3D:
         self,
         detection: Dict,
         depth_map: np.ndarray
-    ) -> Optional[o3d.geometry.LineSet]:
+    ) -> Optional['o3d.geometry.LineSet']:
         """
         Create 3D bounding box for a detection.
 
