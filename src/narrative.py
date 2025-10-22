@@ -11,6 +11,7 @@ import ollama
 from typing import List, Dict, Optional
 import json
 import time
+from llm_manager import LLMManager
 
 
 class NarrativeGenerator:
@@ -21,7 +22,7 @@ class NarrativeGenerator:
 
     def __init__(self, config):
         """
-        Initialize narrative generator with single model to prevent duplicate calls.
+        Initialize narrative generator with LLM manager for concurrency control.
 
         Args:
             config: ConfigManager instance
@@ -34,19 +35,14 @@ class NarrativeGenerator:
         self.temperature = config.get('models.llm.temperature', 0.7)
         self.max_tokens = config.get('models.llm.max_tokens', 150)
 
-        # Concurrency control to prevent duplicate model calls
-        self._last_call_time = 0
-        self._min_call_interval = 2.0  # Reduced from 4s to 2s for better responsiveness
-        self._is_call_in_progress = False  # Flag to prevent concurrent calls
-
-        # Check available models
-        self.available_models = self._check_available_models()
-
-        logging.info(f"Narrative generator initialized with single model: {self.primary_model}")
+        # Initialize LLM manager for concurrency control
+        self.llm_manager = LLMManager(config)
 
         # Context window for recent detections
         self.context_history = []
         self.max_context_length = 5
+        
+        logging.info(f"Narrative generator initialized with LLM manager and model: {self.primary_model}")
 
     def _is_model_available(self, model_name: str) -> bool:
         """Check if a model is available in Ollama."""
@@ -97,7 +93,7 @@ class NarrativeGenerator:
 
     def describe_scene_with_vision(self, frame: np.ndarray) -> str:
         """
-        Use the same model for vision description to prevent duplicate calls.
+        Use the same model for vision description via LLM manager to prevent concurrent calls.
 
         Args:
             frame: Input frame
@@ -106,40 +102,7 @@ class NarrativeGenerator:
             Scene description
         """
         try:
-            # Concurrency control - check if a call is already in progress or too recent
-            current_time = time.time()
-            wait_start = current_time
-            original_call_time = self._last_call_time
-            original_in_progress = self._is_call_in_progress
-            time_since_last_call = current_time - self._last_call_time
-            
-            if self._is_call_in_progress or time_since_last_call < self._min_call_interval:
-                wait_duration = 0
-                # Wait for the previous call to complete or minimum interval to pass
-                while (self._is_call_in_progress or 
-                       (time.time() - self._last_call_time < self._min_call_interval)):
-                    time.sleep(0.05)  # Sleep 50ms before checking again
-                    wait_duration = time.time() - wait_start
-                    if wait_duration > 10.0:  # Don't wait more than 10 seconds
-                        logging.warning("Waited too long for model availability, skipping vision call")
-                        return ""
-                
-                actual_wait = time.time() - wait_start
-                if actual_wait > 0.1:  # Log if wait was significant
-                    logging.info(f"Waited {actual_wait:.2f}s for vision model availability (prev_in_progress: {original_in_progress}, prev_call: {original_call_time:.2f}s ago, min_interval: {self._min_call_interval}s)")
-            
-            # Set the in-progress flag
-            self._is_call_in_progress = True
-            start_time = time.time()
-            actual_model_start = time.time()
-
-            # Check if model is available
-            if not self._is_model_available(self.primary_model):  # Use primary model instead of vision_model
-                logging.warning(f"Primary model {self.primary_model} not available")
-                self._is_call_in_progress = False
-                return ""
-
-            logging.debug(f"Starting vision description with primary model at {start_time:.2f}...")
+            logging.debug("Starting vision description request...")
             
             # Encode frame
             image_base64 = self._encode_image(frame)
@@ -156,9 +119,10 @@ Focus on:
 
 Provide 1-2 concise sentences. Be specific about distances and directions when possible."""
 
-            # Query the same model to prevent duplicate calls
-            response = ollama.generate(
-                model=self.primary_model,  # Use same model to prevent duplicate calls
+            # Use LLM manager to handle the call with concurrency control
+            start_time = time.time()
+            response = self.llm_manager.generate(
+                model=self.primary_model,
                 prompt=vision_prompt,
                 images=[image_base64],
                 options={
@@ -168,14 +132,9 @@ Provide 1-2 concise sentences. Be specific about distances and directions when p
             )
 
             description = response.get('response', '').strip()
-            model_time = time.time() - actual_model_start
-            total_elapsed = time.time() - start_time
+            total_time = time.time() - start_time
 
-            # Update call tracking
-            self._last_call_time = time.time()
-            self._is_call_in_progress = False
-
-            logging.info(f"Vision description: model_time={model_time:.2f}s, total_time={total_elapsed:.2f}s, desc='{description[:100]}...'")
+            logging.info(f"Vision description: total_time={total_time:.2f}s, desc='{description[:100]}...'")
             logging.debug(f"Full vision description: {description}")
 
             return description
@@ -184,8 +143,6 @@ Provide 1-2 concise sentences. Be specific about distances and directions when p
             logging.error(f"Vision model error: {e}")
             import traceback
             traceback.print_exc()
-            # Make sure to reset the flag even if there's an error
-            self._is_call_in_progress = False
             return ""
 
     def generate_narrative(self, detections: List[Dict],
@@ -290,7 +247,7 @@ Provide 1-2 concise sentences. Be specific about distances and directions when p
 
     def _generate_with_llm(self, context: str, vision_context: str = "") -> str:
         """
-        Generate narrative using primary LLM with concurrency control.
+        Generate narrative using primary LLM via LLM manager to prevent concurrent calls.
 
         Args:
             context: Detection context
@@ -300,33 +257,6 @@ Provide 1-2 concise sentences. Be specific about distances and directions when p
             Generated narrative
         """
         try:
-            # Concurrency control - check if a call is already in progress or too recent
-            current_time = time.time()
-            wait_start = current_time
-            original_call_time = self._last_call_time
-            original_in_progress = self._is_call_in_progress
-            time_since_last_call = current_time - self._last_call_time
-            
-            if self._is_call_in_progress or time_since_last_call < self._min_call_interval:
-                wait_duration = 0
-                # Wait for the previous call to complete or minimum interval to pass
-                while (self._is_call_in_progress or 
-                       (time.time() - self._last_call_time < self._min_call_interval)):
-                    time.sleep(0.05)  # Sleep 50ms before checking again
-                    wait_duration = time.time() - wait_start
-                    if wait_duration > 10.0:  # Don't wait more than 10 seconds
-                        logging.warning("Waited too long for model availability, using fallback")
-                        return self._fallback_narrative(context)
-                
-                actual_wait = time.time() - wait_start
-                if actual_wait > 0.1:  # Log if wait was significant
-                    logging.info(f"Waited {actual_wait:.2f}s for LLM model availability (prev_in_progress: {original_in_progress}, prev_call: {original_call_time:.2f}s ago, min_interval: {self._min_call_interval}s)")
-            
-            # Set the in-progress flag
-            self._is_call_in_progress = True
-            start_time = time.time()
-            actual_model_start = time.time()
-
             # Build prompt
             prompt = self._build_prompt(context, vision_context)
             logging.debug(f"LLM Prompt:\n{prompt}")
@@ -334,13 +264,12 @@ Provide 1-2 concise sentences. Be specific about distances and directions when p
             # Check if model is available
             if not self._is_model_available(self.primary_model):
                 logging.warning(f"Primary model {self.primary_model} not available, using fallback")
-                self._is_call_in_progress = False
                 return self._fallback_narrative(context)
 
-            # Generate with Ollama
-            logging.debug(f"Calling Ollama {self.primary_model} at {start_time:.2f}...")
-
-            response = ollama.generate(
+            # Generate with Ollama via LLM manager
+            start_time = time.time()
+            
+            response = self.llm_manager.generate(
                 model=self.primary_model,
                 prompt=prompt,
                 options={
@@ -351,15 +280,10 @@ Provide 1-2 concise sentences. Be specific about distances and directions when p
                 }
             )
 
-            model_time = time.time() - actual_model_start
             total_time = time.time() - start_time
             narrative = response.get('response', '').strip()
 
-            # Update call tracking
-            self._last_call_time = time.time()
-            self._is_call_in_progress = False
-
-            logging.info(f"LLM response: model_time={model_time:.2f}s, total_time={total_time:.2f}s, response='{narrative[:100]}...'")
+            logging.info(f"LLM response: total_time={total_time:.2f}s, response='{narrative[:100]}...'")
             logging.debug(f"Raw LLM response: {narrative}")
 
             # Clean up and validate
