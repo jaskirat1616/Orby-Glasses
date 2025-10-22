@@ -63,8 +63,15 @@ class OrbyGlasses:
         # Load configuration
         self.config = ConfigManager(config_path)
 
-        # Initialize logger (console only, no file logging to reduce clutter)
-        self.logger = Logger(log_file=None)
+        # Initialize logger with debug file logging for performance analysis
+        import os
+        os.makedirs("data/logs", exist_ok=True)
+        log_file_path = f"data/logs/orbyglasses_debug_{int(time.time())}.log"
+        # Set logging level based on config
+        log_level_str = self.config.get('logging.level', 'INFO')
+        import logging
+        log_level = getattr(logging, log_level_str.upper(), logging.INFO)
+        self.logger = Logger(log_file=log_file_path, log_level=log_level)
         self.logger.info("=" * 50)
         self.logger.info("OrbyGlasses - Bio-Mimetic Navigation System")
         self.logger.info("=" * 50)
