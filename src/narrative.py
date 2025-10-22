@@ -370,7 +370,7 @@ Provide 1-2 concise sentences. Be specific about distances and directions when p
                 logging.warning(f"Narrative too short ({len(narrative)} chars), using fallback")
                 return self._fallback_narrative(context)
 
-            logging.info(f"✓ LLM narrative generated successfully in {elapsed:.2f}s")
+            logging.info(f"✓ LLM narrative generated successfully in {total_time:.2f}s")
             return narrative
 
         except Exception as e:
