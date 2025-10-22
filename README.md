@@ -2,113 +2,223 @@
 
 **Bio-Mimetic Navigation Engine for Visually Impaired Users**
 
-OrbyGlasses is an innovative, AI-powered navigation assistance system designed to help visually impaired individuals navigate safely using smart glasses with a webcam. The system runs entirely locally on Apple Silicon (M2 Max) using cutting-edge computer vision, depth estimation, spatial audio, and AI-generated contextual guidance.
+OrbyGlasses is an AI-powered navigation assistance system designed to empower visually impaired individuals to navigate safely using smart glasses with a webcam. Running entirely locally on Apple Silicon (M2 Max recommended), it leverages advanced computer vision, depth estimation, spatial audio, and AI-driven contextual guidance for a seamless and private experience. A lightweight Simplified Version is available for users prioritizing speed and ease of setup, omitting advanced features like SLAM and 3D mapping.
+
+## Table of Contents
+
+*   [Features](#features)
+    *   [Core Capabilities (Full Version)](#core-capabilities-full-version)
+    *   [Simplified Version](#simplified-version)
+*   [Requirements](#requirements)
+*   [Installation](#installation)
+*   [Usage](#usage)
+*   [Configuration](#configuration)
+*   [Key Differences from Full Version](#key-differences-from-full-version)
+*   [Features in Depth (Full Version)](#features-in-depth-full-version)
+    *   [Visual SLAM and Indoor Navigation](#visual-slam-and-indoor-navigation)
+    *   [3D Occupancy Grid Mapping](#3d-occupancy-grid-mapping)
+    *   [Trajectory Prediction](#trajectory-prediction)
+    *   [Social Navigation](#social-navigation)
+*   [System Requirements (Full Version)](#system-requirements-full-version)
+    *   [Hardware](#hardware)
+    *   [Software](#software)
+*   [Quick Start (Full Version)](#quick-start-full-version)
+    *   [1. Clone the Repository](#1-clone-the-repository)
+    *   [2. Run Setup Script](#2-run-setup-script)
+    *   [3. Activate Environment](#3-activate-environment)
+    *   [4. Run OrbyGlasses](#4-run-orbyglasses)
+*   [Configuration (Full Version)](#configuration-full-version)
+*   [Architecture (Full Version)](#architecture-full-version)
+    *   [Pipeline Flow](#pipeline-flow)
+    *   [Module Descriptions](#module-descriptions)
+*   [Performance (Full Version)](#performance-full-version)
+*   [Project Structure](#project-structure)
+*   [Testing](#testing)
+*   [User Study](#user-study)
+*   [Ethical Considerations](#ethical-considerations)
+*   [Roadmap](#roadmap)
+*   [Contributing](#contributing)
+*   [License](#license)
 
 ---
 
 ## Features
 
-### Core Capabilities
+### Core Capabilities (Full Version)
 
-- **Real-Time Object Detection**: YOLOv11n optimized for Apple Silicon MPS acceleration.
-- **Depth Estimation**: Apple Depth Pro (with MiDaS fallback) for accurate distance measurement.
-- **Visual SLAM System**: Tracks user position indoors using only a USB webcam (no GPS or IMU needed).
-- **3D Occupancy Grid Mapping**: Real-time volumetric environment representation with probabilistic obstacle detection.
-- **Indoor Navigation System**: Enables goal-oriented navigation (e.g., "Take me to the kitchen").
-- **Trajectory Prediction**: Uses a simplified Graph Neural Network (GNN) to predict the future positions of moving objects.
-- **Social Navigation**: Provides guidance in crowded areas based on social norms and conventions.
-- **Bio-Mimetic Echolocation**: Spatial audio cues simulating bat echolocation using binaural sound.
-- **AI-Powered Narratives**: Contextual navigation guidance using Ollama (Gemma 3 + Moondream vision models).
-- **Predictive Navigation**: Reinforcement learning (PPO) to learn user patterns and predict optimal paths.
-- **Text-to-Speech**: Real-time audio feedback for obstacle alerts and navigation guidance.
-- **Non-blocking Voice Input**: Voice commands work without impacting camera feed performance.
-- **Privacy-First**: 100% local processing, no cloud dependencies.
+*   **Real-Time Object Detection:** Uses `YOLOv11n` optimized for Apple Silicon MPS acceleration to identify obstacles instantly.
+*   **Depth Estimation:** Employs Apple `Depth Pro` (with `MiDaS` fallback) for precise distance measurements.
+*   **Visual SLAM System:** Tracks user position indoors using a USB webcam, eliminating the need for GPS or IMU sensors.
+*   **3D Occupancy Grid Mapping:** Creates real-time volumetric environment maps with probabilistic obstacle detection.
+*   **Indoor Navigation System:** Supports goal-oriented navigation to specific locations (e.g., "kitchen").
+*   **Trajectory Prediction:** Applies a simplified Graph Neural Network (GNN) to forecast moving object paths.
+*   **Social Navigation:** Guides users through crowded areas while respecting regional social norms.
+*   **Bio-Mimetic Echolocation:** Mimics bat echolocation with spatial audio cues via binaural sound.
+*   **AI-Powered Narratives:** Generates contextual guidance using `Ollama` with `Gemma2` (2B parameter model) and `Moondream` vision models.
+*   **Predictive Navigation:** Uses reinforcement learning (PPO) to learn user patterns and optimize paths.
+*   **Text-to-Speech:** Delivers real-time audio feedback for obstacle alerts and navigation instructions.
+*   **Non-Blocking Voice Input:** Supports voice commands without interrupting camera feed processing.
+*   **Privacy-First Design:** Ensures 100% local processing with no cloud dependencies.
 
-### Features in Depth
+### Simplified Version
 
-#### Visual SLAM and Indoor Navigation
+For users seeking a lightweight alternative, the Simplified Version of OrbyGlasses prioritizes performance and ease of setup by omitting complex features like SLAM and 3D mapping.
 
-The latest version of OrbyGlasses introduces a powerful Visual SLAM (Simultaneous Localization and Mapping) system, which, combined with an Indoor Navigation module, transforms the device from a reactive obstacle avoidance tool into a proactive navigation assistant.
+**Features:**
 
--   **Visual SLAM (`src/slam.py`)**:
-    -   Tracks the user's position in 3D space in real-time using a standard webcam.
-    -   Builds and saves maps of indoor environments for persistent navigation.
-    -   Achieves real-time performance (10-50 FPS depending on the environment) on Apple Silicon.
-
--   **Indoor Navigation (`src/indoor_navigation.py`)**:
-    -   Utilizes A* pathfinding on a 2D occupancy grid to plan routes around obstacles.
-    -   Allows users to save and navigate to named locations (e.g., "kitchen," "desk").
-    -   Provides turn-by-turn voice guidance to the destination.
-
-This combination allows for true indoor navigation, enabling users to move from point A to point B with confidence, rather than just reacting to their immediate surroundings.
-
-#### 3D Occupancy Grid Mapping
-
-OrbyGlasses now includes a sophisticated 3D occupancy grid system that creates a volumetric representation of the environment in real-time.
-
--   **Sparse Voxel Storage (`src/occupancy_grid_3d.py`)**:
-    -   Efficiently stores only observed voxels using a probabilistic approach.
-    -   Memory-efficient representation (~1 MB for typical indoor rooms).
-    -   Uses Bayesian log-odds updates for robust obstacle detection.
-
--   **Ray Casting & Sensor Fusion**:
-    -   Combines depth estimation with SLAM camera poses for accurate 3D mapping.
-    -   Marks space along sensor rays as free, endpoints as occupied.
-    -   Handles sensor noise and uncertainty through probabilistic updates.
-
--   **Real-Time Visualization**:
-    -   Displays 2D slices at head height for navigation awareness.
-    -   Color-coded occupancy: Blue (free), Red (occupied), Gray (unknown).
-    -   Updates at 2 Hz with minimal performance impact (<5% FPS reduction).
-
--   **Path Planning Integration**:
-    -   Provides collision-free path planning information.
-    -   Enables spatial memory and environment understanding.
-    -   Supports future features like map persistence and revisit locations.
-
-See `docs/OCCUPANCY_GRID_3D.md` for detailed documentation, API reference, and usage examples.
-
-#### Trajectory Prediction
-
-OrbyGlasses can predict the future movement of objects in the user's environment. This is a crucial feature for proactive navigation, especially in dynamic environments with moving people or vehicles.
-
--   **Object Tracking (`src/trajectory_prediction.py`)**:
-    -   Tracks objects across frames to build a history of their movement.
-    -   Calculates a velocity for each tracked object.
-
--   **Social Force Model & GNN (`src/trajectory_prediction.py`)**:
-    -   A simplified Graph Neural Network (GNN) and a Social Force Model are used to predict the future path of tracked objects.
-    -   The system can anticipate if an object is on a collision course with the user and provide an early warning.
-
-#### Social Navigation
-
-Navigating crowded spaces is a major challenge for visually impaired individuals. The social navigation feature provides guidance that is aware of social norms and conventions.
-
--   **Social Norms (`src/social_navigation.py`)**:
-    -   The system can be configured for different regions (e.g., "stay to the right" in the US, "stay to the left" in the UK).
-    -   It analyzes the density of a crowd and identifies social gaps for safe passage.
--   **Contextual Guidance**:
-    -   Provides advice like "Gap opening in crowd ahead on your right. Safe to proceed to the right."
+*   Real-time object detection using `YOLOv11`.
+*   Depth estimation with `Depth Anything V2` for accurate distance measurements.
+*   Audio feedback via simple text-to-speech for navigation guidance.
+*   Danger alerts for objects within `0.4m`; caution alerts for objects within `1.5m`.
+*   No SLAM, 3D mapping, or occupancy grids for reduced computational load.
+*   Faster startup and response times.
 
 ---
 
-## System Requirements
+## Requirements
+
+*   **OS:** macOS (for text-to-speech) or Linux/Windows with `pyttsx3`.
+*   **Python:** 3.8+.
+*   **Camera:** Built-in webcam or IP camera.
+*   **Ollama:** For local LLM processing.
+
+---
+
+## Installation
+
+1.  Run the setup script:
+    ```bash
+    ./setup_simple.sh
+    ```
+2.  Ensure Ollama is running:
+    ```bash
+    ollama serve
+    ```
+3.  Start the application:
+    ```bash
+    python simple_orbyglasses.py
+    ```
+
+---
+
+## Usage
+
+*   Processes video from the default camera.
+*   Provides audio guidance through system speakers.
+*   Displays objects with bounding boxes.
+*   Issues danger/caution alerts based on object proximity.
+*   Press `q` to quit.
+
+---
+
+## Configuration
+
+Hardcoded settings in `simple_orbyglasses.py` (e.g., detection thresholds, audio intervals, safety distances, camera settings).
+
+---
+
+## Key Differences from Full Version
+
+*   Excludes SLAM, 3D mapping, and occupancy grids.
+*   Uses `Depth Anything V2` instead of size-based estimation.
+*   Simplified audio system (macOS `say` command or `pyttsx3`).
+*   Depth estimation runs every Nth frame to reduce computational load.
+
+---
+
+## Features in Depth (Full Version)
+
+### Visual SLAM and Indoor Navigation
+
+The Visual SLAM (Simultaneous Localization and Mapping) system, paired with the Indoor Navigation module, transforms OrbyGlasses into a proactive navigation assistant.
+
+**Visual SLAM (`src/slam.py`):**
+
+*   Tracks user position in 3D space using a standard webcam.
+*   Builds and saves indoor environment maps for persistent navigation.
+*   Achieves 10-50 FPS on Apple Silicon, depending on the environment.
+
+**Indoor Navigation (`src/indoor_navigation.py`):**
+
+*   Uses A* pathfinding on a 2D occupancy grid to plan obstacle-free routes.
+*   Supports navigation to saved locations (e.g., "kitchen," "desk").
+*   Provides turn-by-turn voice guidance.
+
+### 3D Occupancy Grid Mapping
+
+The system constructs a real-time 3D volumetric map to enhance spatial awareness.
+
+**Sparse Voxel Storage (`src/occupancy_grid_3d.py`):**
+
+*   Stores observed voxels efficiently (~1 MB for typical rooms).
+*   Uses Bayesian log-odds updates for robust obstacle detection.
+
+**Ray Casting & Sensor Fusion:**
+
+*   Combines depth estimation with SLAM camera poses for accurate 3D mapping.
+*   Marks free space along sensor rays and occupied space at endpoints.
+*   Handles sensor noise via probabilistic updates.
+
+**Real-Time Visualization:**
+
+*   Displays 2D slices at head height (Blue: free, Red: occupied, Gray: unknown).
+*   Updates at 2 Hz with minimal performance impact (<5% FPS reduction).
+
+**Path Planning Integration:**
+
+*   Supports collision-free path planning and spatial memory.
+*   Enables map persistence and location revisits.
+
+Refer to `docs/OCCUPANCY_GRID_3D.md` for detailed documentation.
+
+### Trajectory Prediction
+
+Predicts object movements for proactive alerts in dynamic environments.
+
+**Object Tracking (`src/trajectory_prediction.py`):**
+
+*   Tracks objects across frames to build movement histories.
+*   Calculates object velocities.
+
+**Social Force Model & GNN (`src/trajectory_prediction.py`):**
+
+*   Uses a simplified GNN and Social Force Model to forecast paths.
+*   Issues early warnings for potential collisions.
+
+### Social Navigation
+
+Guides users through crowded spaces with culturally aware instructions.
+
+**Social Norms (`src/social_navigation.py`):**
+
+*   Configurable for regional conventions (e.g., "stay to the right" in the US, "stay to the left" in the UK).
+*   Identifies safe passage gaps by analyzing crowd density.
+
+**Contextual Guidance:**
+
+*   Provides instructions like "Gap opening on your right. Safe to proceed."
+
+---
+
+## System Requirements (Full Version)
 
 ### Hardware
-- **Computer**: MacBook with Apple Silicon (M2 Max recommended)
-- **Camera**: Built-in webcam or IP camera (e.g., smart glasses with WiFi streaming)
-- **Audio**: Speakers or headphones for spatial audio output
+
+*   **Computer:** MacBook with Apple Silicon (M2 Max recommended).
+*   **Camera:** Built-in webcam or IP camera (e.g., smart glasses with WiFi streaming).
+*   **Audio:** Speakers or headphones for spatial audio.
 
 ### Software
-- **OS**: macOS 13.0+ (Ventura or later)
-- **Python**: 3.12
-- **Homebrew**: For system dependencies
-- **Ollama**: For LLM inference
-- **Dependencies**: See `requirements.txt` for a full list of Python packages.
+
+*   **OS:** macOS 13.0+ (Ventura or later).
+*   **Python:** 3.12.
+*   **Homebrew:** For system dependencies.
+*   **Ollama:** For local LLM inference.
+*   **Dependencies:** See `requirements.txt`.
 
 ---
 
-## Quick Start
+## Quick Start (Full Version)
 
 ### 1. Clone the Repository
 
@@ -120,20 +230,18 @@ cd OrbyGlasses
 
 ### 2. Run Setup Script
 
-The setup script automates the entire installation process:
-
 ```bash
 chmod +x setup.sh
 ./setup.sh
 ```
 
-This will:
-- Create a Python virtual environment
-- Install all dependencies from `requirements.txt`
-- Install Homebrew packages (portaudio, ffmpeg)
-- Install and start Ollama
-- Download AI models (Gemma 3, Moondream, YOLOv11n)
-- Set up project directories
+This script:
+
+*   Creates a Python virtual environment.
+*   Installs dependencies from `requirements.txt`.
+*   Installs Homebrew packages (`portaudio`, `ffmpeg`).
+*   Sets up Ollama and downloads AI models (`Gemma2`, `Moondream`, `YOLOv11n`).
+*   Configures project directories.
 
 ### 3. Activate Environment
 
@@ -147,13 +255,13 @@ source venv/bin/activate
 python src/main.py
 ```
 
-Press `q` to stop the system.
+Press `q` to stop.
 
 ---
 
-## Configuration
+## Configuration (Full Version)
 
-Edit `config/config.yaml` to customize behavior:
+Edit `config/config.yaml` to customize settings:
 
 ```yaml
 camera:
@@ -185,7 +293,7 @@ social_navigation:
 
 ---
 
-## Architecture
+## Architecture (Full Version)
 
 ### Pipeline Flow
 
@@ -203,11 +311,9 @@ Trajectory Prediction (GNN)
 Navigation Summary
     ↓
 ┌─────────────┬──────────────┬──────────────┬──────────────────┬──────────────────┐
-│             │              │              │                  │                  │
-Echolocation  AI Narrative   RL Prediction  Indoor Navigation  Social Navigation
-(Spatial      (Gemma +       (PPO)          (A* Pathfinding)   (Social Norms)
- Audio)        Moondream)
-│             │              │                  │                  │
+│ Echolocation│ AI Narrative │ RL Prediction│ Indoor Navigation│ Social Navigation│
+│ (Spatial    │ (Gemma2 +    │ (PPO)        │ (A* Pathfinding) │ (Social Norms)   │
+│  Audio)     │ Moondream)   │              │                  │                  │
 └─────────────┴──────────────┴──────────────┴──────────────────┴──────────────────┘
     ↓
 Audio Output (TTS + Beeps)
@@ -215,25 +321,25 @@ Audio Output (TTS + Beeps)
 
 ### Module Descriptions
 
-- **`main.py`**: Main application entry point.
-- **`detection.py`**: YOLO object detection and depth estimation.
-- **`echolocation.py`**: Spatial audio generation.
-- **`narrative.py`**: AI narrative generation with Ollama.
-- **`prediction.py`**: Reinforcement learning path prediction.
-- **`slam.py`**: Visual SLAM for localization and mapping.
-- **`indoor_navigation.py`**: Goal-oriented navigation with A* pathfinding.
-- **`trajectory_prediction.py`**: Predicts the future movement of objects.
-- **`social_navigation.py`**: Provides guidance in crowded areas.
-- **`utils.py`**: Configuration, logging, audio management.
+*   `main.py`: Application entry point.
+*   `detection.py`: YOLO-based object detection and depth estimation.
+*   `echolocation.py`: Spatial audio generation.
+*   `narrative.py`: AI narrative generation via Ollama.
+*   `prediction.py`: Reinforcement learning for path prediction.
+*   `slam.py`: Visual SLAM for localization and mapping.
+*   `indoor_navigation.py`: A* pathfinding for goal-oriented navigation.
+*   `trajectory_prediction.py`: Object movement forecasting.
+*   `social_navigation.py`: Crowd navigation with social norms.
+*   `utils.py`: Configuration, logging, and audio utilities.
 
 ---
 
-## Performance
+## Performance (Full Version)
 
-- **Without SLAM**: ~50ms per frame (~20 FPS)
-- **With SLAM**: ~70-100ms per frame (~10-14 FPS)
+*   **Without SLAM:** 50ms per frame (20 FPS).
+*   **With SLAM:** 70-100ms per frame (10-14 FPS).
 
-SLAM introduces a performance overhead, but enables true indoor navigation. It can be disabled in the `config.yaml` for scenarios where maximum FPS is critical. Trajectory prediction has a negligible performance impact (~0.1ms per frame).
+SLAM enables advanced navigation but adds overhead. Disable it in `config.yaml` for higher FPS. Trajectory prediction has minimal impact (~0.1ms per frame).
 
 ---
 
@@ -268,9 +374,12 @@ OrbyGlasses/
 │   ├── test_trajectory_prediction.py
 │   └── test_utils.py
 ├── docs/
-│   ├── ...
+│   ├── OCCUPANCY_GRID_3D.md
+│   ├── USER_STUDY_GUIDE.md
 ├── requirements.txt
 ├── setup.sh
+├── setup_simple.sh
+├── simple_orbyglasses.py
 └── README.md
 ```
 
@@ -278,21 +387,21 @@ OrbyGlasses/
 
 ## Testing
 
-The project includes a comprehensive suite of unit tests to ensure the reliability of each component.
+A test suite ensures reliability:
 
--   **`test_detection.py`**: Tests for the object detection and depth estimation pipeline.
--   **`test_echolocation.py`**: Tests for the spatial audio generation.
--   **`test_slam.py`**: Tests for the SLAM and indoor navigation system.
--   **`test_trajectory_prediction.py`**: Tests for the trajectory prediction system.
--   **`test_utils.py`**: Tests for the utility functions.
+*   `test_detection.py`: Validates object detection and depth estimation.
+*   `test_echolocation.py`: Verifies spatial audio.
+*   `test_slam.py`: Tests SLAM and navigation.
+*   `test_trajectory_prediction.py`: Checks trajectory prediction.
+*   `test_utils.py`: Tests utility functions.
 
-Run all unit tests:
+Run all tests:
 
 ```bash
 pytest tests/ -v
 ```
 
-Run a specific test file:
+Run a specific test:
 
 ```bash
 pytest tests/test_slam.py -v
@@ -302,48 +411,48 @@ pytest tests/test_slam.py -v
 
 ## User Study
 
-A comprehensive user study protocol has been designed to validate the effectiveness of OrbyGlasses with real users. The study aims to measure the impact of the device on navigation safety, speed, and user confidence. For more details, see the [User Study Guide](docs/USER_STUDY_GUIDE.md).
+A user study protocol evaluates navigation safety, speed, and confidence. See `User Study Guide`.
 
 ---
 
 ## Ethical Considerations
 
-This project has a direct impact on the lives of visually impaired individuals. The following ethical considerations have been taken into account:
+OrbyGlasses prioritizes user well-being:
 
--   **Privacy**: All processing is done locally on the user's device. No data is sent to the cloud.
--   **Safety**: The system is designed to be a navigation aid and not a replacement for traditional mobility tools like a white cane. The user is always in control.
--   **Reliability**: The system is designed to be robust and fail gracefully. In case of a failure, the user is notified with an audio cue.
--   **User-Centered Design**: The development process is guided by feedback from visually impaired users.
+*   **Privacy:** Fully local processing; no cloud data transmission.
+*   **Safety:** Acts as a navigation aid, not a replacement for tools like white canes.
+*   **Reliability:** Graceful failure with audio alerts for issues.
+*   **User-Centered Design:** Developed with feedback from visually impaired users.
 
 ---
 
 ## Roadmap
 
-- [x] Voice command interface (implemented with non-blocking recognition)
-- [x] Visual SLAM and Indoor Navigation
-- [x] Trajectory Prediction
-- [x] Social Navigation
-- [ ] Integration with actual smart glasses (e.g., Vuzix, Xreal)
-- [ ] Multi-user federated learning with Flower
-- [ ] GPS integration for outdoor navigation
-- [ ] Obstacle avoidance path planning
-- [ ] Mobile app companion
-- [ ] Cloud-optional model updates
+*   Voice command interface (non-blocking).
+*   Visual SLAM and Indoor Navigation.
+*   Trajectory Prediction.
+*   Social Navigation.
+*   Smart glasses integration (e.g., Vuzix, Xreal).
+*   Multi-user federated learning with Flower.
+*   GPS for outdoor navigation.
+*   Obstacle avoidance path planning.
+*   Mobile app companion.
+*   Optional cloud-based model updates.
 
 ---
 
 ## Contributing
 
-Contributions are welcome! Please:
+Contributions are welcome! To contribute:
 
-1. Fork the repository
-2. Create a feature branch
-3. Add tests for new functionality
-4. Ensure all tests pass
-5. Submit a pull request
+1.  Fork the repository.
+2.  Create a feature branch.
+3.  Add tests for new functionality.
+4.  Ensure all tests pass.
+5.  Submit a pull request.
 
 ---
 
 ## License
 
-MIT License - See LICENSE file for details.
+MIT License - See `LICENSE` file for details.
