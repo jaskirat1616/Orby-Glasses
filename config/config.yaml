@@ -133,35 +133,39 @@ mapping3d:
   fy: 500                         # Camera focal length Y (pixels)
   skip_bbox: true                 # Skip bounding boxes for better performance
 
-# SLAM Settings (Visual Simultaneous Localization and Mapping - NO IMU)
+# SLAM Settings - Super Accurate Visual Mapping (NO IMU)
 slam:
   enabled: true                   # Enable SLAM for indoor navigation
-  grid_size: [200, 200]           # Occupancy grid size (width, height) in cells
-  grid_resolution: 0.4            # Better resolution for accuracy (was 0.4)
+  grid_size: [300, 300]           # High resolution grid for accuracy
+  grid_resolution: 0.2             # High resolution for detailed mapping
   save_maps: true                 # Save maps for later reuse
   visualize: true                 # Show SLAM visualization window
+  show_map_creation: true         # Show map being created in real-time
+  show_camera_trajectory: true    # Show camera path
+  show_keyframes: true            # Show keyframe positions
+  show_landmarks: true            # Show detected landmarks
 
-  # Tracking without IMU
-  orb_features: 1500              # Moderate features for balance of performance and accuracy
-  fast_threshold: 10              # Moderate threshold for balance of features and performance
-  min_matches: 10                 # Moderate minimum matches for tracking stability
-  motion_model: true              # Use constant velocity motion model
-  pose_smoothing: 0.6             # Moderate smoothing for stability (was 0.5)
+  # High accuracy tracking without IMU
+  orb_features: 2000              # More features for better accuracy
+  fast_threshold: 8               # Lower threshold for more features
+  min_matches: 15                 # More matches for stability
+  motion_model: true              # Use constant velocity model
+  pose_smoothing: 0.8             # Strong smoothing for stability
   temporal_consistency_check: true # Check for physically impossible movements
-  max_position_jump: 0.3          # Maximum allowed position jump (m)
-  max_rotation_jump: 0.3          # Maximum allowed rotation jump (rad)
-  strict_matching: true           # Enable strict matching for better accuracy (was false)
-  min_tracked_features: 8         # Moderate minimum tracked features (was 5)
-  keyframe_threshold: 20          # Insert keyframe moderately frequently (was 25)
-  reprojection_threshold: 2.5     # Moderate threshold for accuracy (was 3.0)
-  min_depth: 0.1                  # Minimum depth for triangulation (m)
-  max_depth: 10.0                 # Maximum depth for triangulation (m)
-  depth_variance: 0.03            # Moderate variance for balance (was 0.05)
-  pose_alpha: 0.7                 # Better smoothing factor (was 0.6)
-  loop_closure: true              # Enable loop closure for accuracy (was false)
-  loop_closure_threshold: 0.6     # Loop closure threshold (0-1)
-  bundle_adjustment: false        # Enable bundle adjustment (may slow down)
-  ba_interval: 10                 # Perform BA every N keyframes
+  max_position_jump: 0.2          # Smaller allowed position jump
+  max_rotation_jump: 0.2          # Smaller allowed rotation jump
+  strict_matching: true           # Enable strict matching for accuracy
+  min_tracked_features: 12         # More tracked features for stability
+  keyframe_threshold: 15          # More frequent keyframes for accuracy
+  reprojection_threshold: 2.0     # Lower threshold for accuracy
+  min_depth: 0.05                 # Very close depth detection
+  max_depth: 15.0                 # Extended depth range
+  depth_variance: 0.02            # Lower variance for accuracy
+  pose_alpha: 0.8                 # Strong smoothing factor
+  loop_closure: true              # Enable loop closure for accuracy
+  loop_closure_threshold: 0.7     # Higher threshold for better loop closure
+  bundle_adjustment: true         # Enable bundle adjustment for accuracy
+  ba_interval: 5                  # More frequent bundle adjustment
 
 # Indoor Navigation Settings
 indoor_navigation:
@@ -178,30 +182,38 @@ trajectory_prediction:
   visualize: false                # Show trajectory visualization
   collision_warning: true         # Warn about predicted collisions
 
-# 3D Occupancy Grid Settings (Voxel Grid Map) - FOR REAL-TIME VISUALIZATION
+# 3D Occupancy Grid Settings - Super Accurate Mapping
 occupancy_grid_3d:
   enabled: true                   # Enable voxel grid visualization
-  grid_size: [12.0, 12.0, 3.0]    # Moderate grid size for balance (was [10.0, 10.0, 2.5])
-  resolution: 0.25                # Better resolution for accuracy (was 0.4)
-  near_resolution: 0.12           # Better resolution for accuracy (was 0.2)
-  near_distance: 1.8              # Better distance for accuracy (was 1.5)
-  far_resolution: 0.3             # Better resolution for accuracy (was 0.4)
-  max_range: 5.0                  # Standard maximum sensor range (was 4.0)
-  min_range: 0.1                  # Minimum sensor range in meters
-  log_odds_occupied: 1.5          # Better convergence speed (was 1.0)
-  log_odds_free: -0.8             # Better free space marking (was -0.6)
-  log_odds_min: -3.5              # Better saturation (was -3.0)
-  log_odds_max: 3.5               # Better saturation (was 3.0)
-  subsample_step: 15              # Moderate subsample (was 20)
-  update_interval: 0.7            # Better update frequency (was 1.0)
+  grid_size: [15.0, 15.0, 4.0]    # Larger grid for better coverage
+  resolution: 0.15                # High resolution for accuracy
+  near_resolution: 0.08           # Very high resolution for close objects
+  near_distance: 2.0              # Distance for high-res mapping
+  far_resolution: 0.2             # Good resolution for far objects
+  max_range: 6.0                  # Extended sensor range
+  min_range: 0.05                 # Very close range detection
+  log_odds_occupied: 2.0          # Strong occupied signal
+  log_odds_free: -1.0             # Strong free space signal
+  log_odds_min: -4.0              # Strong saturation
+  log_odds_max: 4.0               # Strong saturation
+  subsample_step: 8               # Dense sampling for accuracy
+  update_interval: 0.3            # Fast updates for real-time mapping
   visualize: true                 # Show 3D voxel grid visualization window
-  show_2d_slice: false             # Enable 2D slice for better understanding (was false)
-  temporal_consistency: true      # Enable for accuracy (was false)
-  temporal_filtering: true        # Enable temporal filtering for accuracy (was false)
-  min_observations: 2             # Better observations for accuracy (was 1)
-  decay_rate: 0.001               # Slow decay for stability
-  max_history_length: 7           # Better history length for accuracy (was 5)
-  history_decay: 0.85             # Better decay factor (was 0.8)
+  show_2d_slice: true             # Show 2D slice for better understanding
+  temporal_consistency: true      # Enable for accuracy
+  temporal_filtering: true        # Enable temporal filtering for accuracy
+  min_observations: 3             # More observations for accuracy
+  decay_rate: 0.0005              # Very slow decay for stability
+  max_history_length: 10          # Longer history for accuracy
+  history_decay: 0.9              # Better decay factor
+  
+  # Interactive controls
+  interactive: true                # Enable interactive controls
+  mouse_controls: true            # Enable mouse interaction
+  keyboard_controls: true          # Enable keyboard controls
+  auto_rotate: false              # Manual rotation control
+  show_trajectory: true           # Show camera trajectory
+  show_landmarks: true            # Show detected landmarks
 
 # 3D Point Cloud Viewer Settings (DISABLED - using voxel grid only)
 point_cloud_viewer:

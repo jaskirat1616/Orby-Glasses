@@ -752,7 +752,10 @@ class OrbyGlasses:
         self.logger.info(f"Resolution: {self.frame_width}x{self.frame_height} @ {self.config.get('camera.fps', 30)} FPS")
         self.logger.info(f"Audio interval: {self.audio_interval}s | Depth: every {self.skip_depth_frames + 1} frames")
         if self.slam_enabled:
-            self.logger.info("🗺️ SLAM enabled")
+            self.logger.info("🗺️ SLAM enabled - Real-time mapping")
+        if self.occupancy_grid_enabled:
+            self.logger.info("🗺️ 3D Occupancy Map enabled - Interactive controls:")
+            self.logger.info("   R: Reset view | T: Toggle 2D/3D | C: Clear map | S: Save map | L: Load map")
         if self.conversation_enabled:
             activation = self.config.get('conversation.activation_phrase', 'hey glasses')
             self.logger.info(f"💬 Voice: '{activation}'")
@@ -946,14 +949,21 @@ class OrbyGlasses:
                         slam_display = cv2.resize(slam_vis, display_size)
                         cv2.imshow('SLAM Tracking', slam_display)
                         
-                        # Show 3D real-time SLAM map if mapping is enabled
-                        if self.config.get('mapping3d.enabled', False):
-                            # Create a 3D visualization of the SLAM map
-                            if hasattr(self.slam, 'visualize_3d_map'):
-                                slam_3d_vis = self.slam.visualize_3d_map()
-                                if slam_3d_vis is not None:
-                                    slam_3d_display = cv2.resize(slam_3d_vis, display_size)
-                                    cv2.imshow('SLAM 3D Map', slam_3d_display)
+                        # Show real-time SLAM map creation
+                        if self.config.get('slam.show_map_creation', True):
+                            if hasattr(self.slam, 'visualize_map_creation'):
+                                map_creation_vis = self.slam.visualize_map_creation()
+                                if map_creation_vis is not None:
+                                    map_creation_display = cv2.resize(map_creation_vis, display_size)
+                                    cv2.imshow('SLAM Map Creation', map_creation_display)
+                        
+                        # Show camera trajectory
+                        if self.config.get('slam.show_camera_trajectory', True):
+                            if hasattr(self.slam, 'visualize_trajectory'):
+                                trajectory_vis = self.slam.visualize_trajectory()
+                                if trajectory_vis is not None:
+                                    trajectory_display = cv2.resize(trajectory_vis, display_size)
+                                    cv2.imshow('Camera Trajectory', trajectory_display)
 
                     # Show 3D Point Cloud visualization if enabled
                     if self.point_cloud_enabled and self.point_cloud is not None:
@@ -974,16 +984,23 @@ class OrbyGlasses:
                             if slam_result is not None:
                                 camera_pos = np.array(slam_result['position'])
 
-                            # Show interactive voxel grid view
+                            # Show interactive voxel grid view with enhanced controls
                             occ_vis_3d = self.occupancy_grid.visualize_3d_interactive(camera_pos)
                             occ_display_3d = cv2.resize(occ_vis_3d, display_size)
-                            cv2.imshow('Voxel Grid Map', occ_display_3d)
+                            cv2.imshow('3D Occupancy Map', occ_display_3d)
 
-                            # Also show 2D slice in separate window
-                            if self.config.get('occupancy_grid_3d.show_2d_slice', False):
+                            # Show 2D slice for better understanding
+                            if self.config.get('occupancy_grid_3d.show_2d_slice', True):
                                 occ_vis_2d = self.occupancy_grid.visualize_2d_slice(z_height=1.5)
                                 occ_display_2d = cv2.resize(occ_vis_2d, display_size)
-                                cv2.imshow('2D Occupancy Slice', occ_display_2d)
+                                cv2.imshow('2D Map Slice', occ_display_2d)
+                            
+                            # Show map statistics
+                            if self.config.get('occupancy_grid_3d.show_statistics', True):
+                                stats_vis = self.occupancy_grid.visualize_statistics()
+                                if stats_vis is not None:
+                                    stats_display = cv2.resize(stats_vis, display_size)
+                                    cv2.imshow('Map Statistics', stats_display)
 
                     # Show Movement Visualizer if enabled
                     if self.movement_visualizer_enabled and self.movement_visualizer is not None:
@@ -1004,6 +1021,18 @@ class OrbyGlasses:
                 if self.occupancy_grid_enabled and self.occupancy_grid is not None:
                     if self.occupancy_grid.update_view_controls(key):
                         pass  # View updated, will refresh on next frame
+                    
+                    # Interactive controls for occupancy map
+                    if key == ord('r'):  # Reset view
+                        self.occupancy_grid.reset_view()
+                    elif key == ord('t'):  # Toggle 2D/3D view
+                        self.occupancy_grid.toggle_view_mode()
+                    elif key == ord('c'):  # Clear map
+                        self.occupancy_grid.clear_map()
+                    elif key == ord('s'):  # Save map
+                        self.occupancy_grid.save_map()
+                    elif key == ord('l'):  # Load map
+                        self.occupancy_grid.load_map()
 
                 # Handle point cloud controls
                 if self.point_cloud_enabled and self.point_cloud is not None:
