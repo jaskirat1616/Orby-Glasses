@@ -303,7 +303,7 @@ class SocialNavigationAI:
 
     def update_social_context(self, detections: List[Dict]) -> Dict:
         """
-        Update social navigation context and return comprehensive information.
+        Update social navigation context and return detailed information.
         
         Args:
             detections: List of detected objects

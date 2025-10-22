@@ -115,7 +115,7 @@ mapping3d:
 slam:
   enabled: true                   # Enable SLAM for indoor navigation
   grid_size: [200, 200]           # Occupancy grid size (width, height) in cells
-  grid_resolution: 0.2            # Better resolution for accuracy (was 0.4)
+  grid_resolution: 0.4            # Better resolution for accuracy (was 0.4)
   save_maps: true                 # Save maps for later reuse
   visualize: true                 # Show SLAM visualization window
 

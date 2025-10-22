@@ -594,7 +594,7 @@ class ConversationManager:
 
         detected_str = ", ".join([obj['label'] for obj in self.context.get('detected_objects', [])[:5]])
 
-        prompt = f"""You are OrbyGlasses, an AI navigation assistant for blind users. You provide clear, concise, and accurate navigation guidance.
+        prompt = f"""You are OrbyGlasses, an AI navigation assistant for blind users. You provide clear, concise, and precise navigation guidance.
 
 Current Context:
 - Detected objects: {detected_str if detected_str else 'none'}
@@ -614,7 +614,7 @@ Instructions:
 3. Use spatial terms: "ahead", "left", "right", "behind"
 4. Give exact distances when mentioning obstacles
 5. If user asks about destination, help them navigate there
-6. If user asks what you see, describe the scene accurately
+6. If user asks what you see, describe the scene clearly
 7. Always prioritize immediate safety over destination
 
 Respond naturally and helpfully."""

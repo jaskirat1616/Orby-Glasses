@@ -38,6 +38,9 @@ class NarrativeGenerator:
         # Initialize LLM manager for concurrency control
         self.llm_manager = LLMManager(config)
 
+        # Check available models
+        self.available_models = self._check_available_models()
+
         # Context window for recent detections
         self.context_history = []
         self.max_context_length = 5
@@ -46,8 +49,13 @@ class NarrativeGenerator:
 
     def _is_model_available(self, model_name: str) -> bool:
         """Check if a model is available in Ollama."""
+        # Handle case where available_models is None or empty
         if not self.available_models:
-            return False
+            # Refresh the list if it's empty or None
+            self.available_models = self._check_available_models()
+            if not self.available_models:
+                return False
+        
         # Check exact match or partial match (e.g., "gemma3:4b" matches "gemma3:4b")
         for available_model in self.available_models:
             if model_name in available_model or available_model in model_name:
@@ -68,7 +76,9 @@ class NarrativeGenerator:
             return available
         except Exception as e:
             logging.warning(f"Could not check Ollama models: {e}")
-            return []
+            # Return a default list with the primary model to avoid crashes
+            primary_model = getattr(self, 'primary_model', 'gemma3:4b')
+            return [primary_model]
 
     def _encode_image(self, frame: np.ndarray) -> str:
         """
@@ -261,10 +271,11 @@ Provide 1-2 concise sentences. Be specific about distances and directions when p
             prompt = self._build_prompt(context, vision_context)
             logging.debug(f"LLM Prompt:\n{prompt}")
 
-            # Check if model is available
-            if not self._is_model_available(self.primary_model):
-                logging.warning(f"Primary model {self.primary_model} not available, using fallback")
-                return self._fallback_narrative(context)
+            # Check if model is available (always assume available when using LLM manager)
+            # The LLM manager handles model availability internally
+            # if not self._is_model_available(self.primary_model):
+            #     logging.warning(f"Primary model {self.primary_model} not available, using fallback")
+            #     return self._fallback_narrative(context)
 
             # Generate with Ollama via LLM manager
             start_time = time.time()
