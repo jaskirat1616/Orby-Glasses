@@ -239,18 +239,27 @@ class OrbyGlasses:
             # Start timer
             self.perf_monitor.start_timer('total')
 
+            # Log frame processing start
+            if self.frame_count % 30 == 0:  # Log every 30 frames
+                self.logger.info(f"Processing frame {self.frame_count}")
+
             # Detection - always run
             self.perf_monitor.start_timer('detection')
             detections = self.detection_pipeline.detector.detect(frame)
             det_time = self.perf_monitor.stop_timer('detection')
+            if self.frame_count % 100 == 0:  # Log every 100 frames
+                self.logger.debug(f"Detection completed in {det_time:.3f}s, found {len(detections)} objects")
 
             # Depth estimation - run every Nth frame to save performance
             self.perf_monitor.start_timer('depth')
             if self.frame_count % (self.skip_depth_frames + 1) == 0:
+                self.logger.debug(f"Processing depth estimation on frame {self.frame_count}")
                 depth_map = self.detection_pipeline.depth_estimator.estimate_depth(frame)
                 self.last_depth_map = depth_map
             else:
                 depth_map = self.last_depth_map
+                if self.frame_count % 100 == 0:  # Log every 100 frames
+                    self.logger.debug(f"Using cached depth map, frame {self.frame_count}")
             depth_time = self.perf_monitor.stop_timer('depth')
 
             # Add depth to detections
@@ -272,8 +281,12 @@ class OrbyGlasses:
             slam_result = None
             if self.slam_enabled and self.slam is not None:
                 self.perf_monitor.start_timer('slam')
+                self.logger.debug(f"Processing SLAM on frame {self.frame_count}")
                 slam_result = self.slam.process_frame(frame, depth_map)
                 slam_time = self.perf_monitor.stop_timer('slam')
+                if self.frame_count % 50 == 0:  # Log every 50 frames
+                    if slam_result:
+                        self.logger.debug(f"SLAM completed in {slam_time:.3f}s, pos:({slam_result['position'][0]:.2f}, {slam_result['position'][1]:.2f}), q:{slam_result['tracking_quality']:.2f}, pts:{slam_result['num_map_points']}")
 
                 # Update indoor navigator if enabled
                 if self.indoor_nav_enabled and self.indoor_navigator is not None:
@@ -293,6 +306,8 @@ class OrbyGlasses:
                     camera_pose = slam_result['pose']
                     self.occupancy_grid.update_from_depth(depth_map, camera_pose)
                     occ_time = self.perf_monitor.stop_timer('occupancy_grid')
+                    if self.frame_count % 50 == 0:  # Log every 50 frames
+                        self.logger.debug(f"Occupancy grid updated in {occ_time:.3f}s")
 
             # 3D Point Cloud Update (if enabled)
             if self.point_cloud_enabled and self.point_cloud is not None:
@@ -331,14 +346,19 @@ class OrbyGlasses:
 
             # Generate narrative guidance - Re-enabled for Ollama
             self.perf_monitor.start_timer('narrative')
-            if current_time - self.last_audio_time > self.audio_interval:
+            should_generate = current_time - self.last_audio_time > self.audio_interval
+            if should_generate:
+                self.logger.debug(f"Generating narrative guidance at frame {self.frame_count}, time: {current_time:.2f}, last_audio: {self.last_audio_time:.2f}, interval: {self.audio_interval}")
                 # Generate full guidance with Ollama
                 guidance = self.contextual_assistant.get_guidance(
                     detections, frame, nav_summary, path_plan
                 )
+                self.logger.debug(f"Narrative guidance completed: '{guidance['combined'][:50]}...'")
             else:
                 # Skip narrative generation between audio updates
                 guidance = {'narrative': '', 'predictive': '', 'combined': ''}
+                if self.frame_count % 50 == 0:  # Log every 50 frames
+                    self.logger.debug(f"Skipping narrative generation, next at {self.last_audio_time + self.audio_interval:.2f}, current: {current_time:.2f}")
             narr_time = self.perf_monitor.stop_timer('narrative')
 
             # Generate audio cues

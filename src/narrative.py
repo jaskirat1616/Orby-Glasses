@@ -108,13 +108,30 @@ class NarrativeGenerator:
         try:
             # Concurrency control - check if a call is already in progress or too recent
             current_time = time.time()
-            if self._is_call_in_progress or (current_time - self._last_call_time < self._min_call_interval):
-                logging.debug("Skipping vision call - too recent or already in progress")
-                return ""
-
+            wait_start = current_time
+            original_call_time = self._last_call_time
+            original_in_progress = self._is_call_in_progress
+            time_since_last_call = current_time - self._last_call_time
+            
+            if self._is_call_in_progress or time_since_last_call < self._min_call_interval:
+                wait_duration = 0
+                # Wait for the previous call to complete or minimum interval to pass
+                while (self._is_call_in_progress or 
+                       (time.time() - self._last_call_time < self._min_call_interval)):
+                    time.sleep(0.05)  # Sleep 50ms before checking again
+                    wait_duration = time.time() - wait_start
+                    if wait_duration > 10.0:  # Don't wait more than 10 seconds
+                        logging.warning("Waited too long for model availability, skipping vision call")
+                        return ""
+                
+                actual_wait = time.time() - wait_start
+                if actual_wait > 0.1:  # Log if wait was significant
+                    logging.info(f"Waited {actual_wait:.2f}s for vision model availability (prev_in_progress: {original_in_progress}, prev_call: {original_call_time:.2f}s ago, min_interval: {self._min_call_interval}s)")
+            
             # Set the in-progress flag
             self._is_call_in_progress = True
             start_time = time.time()
+            actual_model_start = time.time()
 
             # Check if model is available
             if not self._is_model_available(self.primary_model):  # Use primary model instead of vision_model
@@ -122,7 +139,7 @@ class NarrativeGenerator:
                 self._is_call_in_progress = False
                 return ""
 
-            logging.debug("Starting vision description with primary model...")
+            logging.debug(f"Starting vision description with primary model at {start_time:.2f}...")
             
             # Encode frame
             image_base64 = self._encode_image(frame)
@@ -151,13 +168,14 @@ Provide 1-2 concise sentences. Be specific about distances and directions when p
             )
 
             description = response.get('response', '').strip()
-            elapsed = time.time() - start_time
+            model_time = time.time() - actual_model_start
+            total_elapsed = time.time() - start_time
 
             # Update call tracking
             self._last_call_time = time.time()
             self._is_call_in_progress = False
 
-            logging.info(f"Vision description generated in {elapsed:.2f}s: {description[:100]}...")
+            logging.info(f"Vision description: model_time={model_time:.2f}s, total_time={total_elapsed:.2f}s, desc='{description[:100]}...'")
             logging.debug(f"Full vision description: {description}")
 
             return description
@@ -284,13 +302,30 @@ Provide 1-2 concise sentences. Be specific about distances and directions when p
         try:
             # Concurrency control - check if a call is already in progress or too recent
             current_time = time.time()
-            if self._is_call_in_progress or (current_time - self._last_call_time < self._min_call_interval):
-                logging.debug("Skipping LLM call - too recent or already in progress")
-                return self._fallback_narrative(context)
-
+            wait_start = current_time
+            original_call_time = self._last_call_time
+            original_in_progress = self._is_call_in_progress
+            time_since_last_call = current_time - self._last_call_time
+            
+            if self._is_call_in_progress or time_since_last_call < self._min_call_interval:
+                wait_duration = 0
+                # Wait for the previous call to complete or minimum interval to pass
+                while (self._is_call_in_progress or 
+                       (time.time() - self._last_call_time < self._min_call_interval)):
+                    time.sleep(0.05)  # Sleep 50ms before checking again
+                    wait_duration = time.time() - wait_start
+                    if wait_duration > 10.0:  # Don't wait more than 10 seconds
+                        logging.warning("Waited too long for model availability, using fallback")
+                        return self._fallback_narrative(context)
+                
+                actual_wait = time.time() - wait_start
+                if actual_wait > 0.1:  # Log if wait was significant
+                    logging.info(f"Waited {actual_wait:.2f}s for LLM model availability (prev_in_progress: {original_in_progress}, prev_call: {original_call_time:.2f}s ago, min_interval: {self._min_call_interval}s)")
+            
             # Set the in-progress flag
             self._is_call_in_progress = True
             start_time = time.time()
+            actual_model_start = time.time()
 
             # Build prompt
             prompt = self._build_prompt(context, vision_context)
@@ -303,7 +338,7 @@ Provide 1-2 concise sentences. Be specific about distances and directions when p
                 return self._fallback_narrative(context)
 
             # Generate with Ollama
-            logging.debug(f"Calling Ollama {self.primary_model}...")
+            logging.debug(f"Calling Ollama {self.primary_model} at {start_time:.2f}...")
 
             response = ollama.generate(
                 model=self.primary_model,
@@ -316,14 +351,16 @@ Provide 1-2 concise sentences. Be specific about distances and directions when p
                 }
             )
 
-            elapsed = time.time() - start_time
+            model_time = time.time() - actual_model_start
+            total_time = time.time() - start_time
             narrative = response.get('response', '').strip()
 
             # Update call tracking
             self._last_call_time = time.time()
             self._is_call_in_progress = False
 
-            logging.debug(f"Raw LLM response ({elapsed:.2f}s): {narrative}")
+            logging.info(f"LLM response: model_time={model_time:.2f}s, total_time={total_time:.2f}s, response='{narrative[:100]}...'")
+            logging.debug(f"Raw LLM response: {narrative}")
 
             # Clean up and validate
             narrative = self._clean_narrative(narrative)
@@ -525,23 +562,35 @@ class ContextualAssistant:
         Returns:
             Dict with 'narrative', 'predictive', and 'combined' guidance
         """
+        start_time = time.time()
+        logging.debug(f"get_guidance called with {len(detections)} detections, has_frame: {frame is not None}, has_pred_path: {predicted_path is not None}")
+        
         # Generate main narrative
+        narrative_start = time.time()
         narrative = self.narrative_gen.generate_narrative(
             detections, frame, navigation_summary
         )
+        narrative_time = time.time() - narrative_start
+        logging.debug(f"Narrative generation completed in {narrative_time:.2f}s")
 
         # Generate predictive guidance
         predictive = ""
         if predicted_path:
+            predictive_start = time.time()
             predictive = self.narrative_gen.generate_predictive_guidance(
                 detections, predicted_path
             )
+            predictive_time = time.time() - predictive_start
+            logging.debug(f"Predictive guidance generated in {predictive_time:.2f}s")
 
         # Combine if both exist
         combined = narrative
         if predictive:
             combined = f"{narrative} {predictive}"
 
+        total_time = time.time() - start_time
+        logging.info(f"get_guidance completed: total_time={total_time:.2f}s, narrative_len={len(narrative)}, predictive_len={len(predictive)}")
+        
         return {
             'narrative': narrative,
             'predictive': predictive,
