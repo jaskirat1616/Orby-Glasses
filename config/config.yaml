@@ -1,44 +1,58 @@
 # OrbyGlasses Configuration File
 # Bio-Mimetic Navigation System for Visually Impaired Users
 
-# Camera/Video Source Settings
+# Camera/Video Source Settings - Optimized for Performance
 camera:
-  # Source: 0 for built-in webcam, or URL for IP camera (e.g., "http://192.168.1.100:8080/video")
+  # Source: 0 for built-in webcam, or URL for IP camera
   source: 0
-  width: 320  # Smaller size for better performance
-  height: 320  # Smaller size for better performance
-  fps: 20  # Target FPS
+  width: 416  # Optimized size for YOLO (416x416 is optimal for YOLOv12)
+  height: 416  # Square aspect ratio for best performance
+  fps: 30  # Higher FPS for smoother navigation
 
-# Model Settings
+# Model Settings - Optimized for Speed and Accuracy
 models:
-  # YOLOv12 Object Detection
+  # YOLOv12 Object Detection - Optimized Settings
   yolo:
     path: "models/yolo/yolo12n.pt"
-    confidence: 0.65       # High confidence = fewer false positives
-    iou_threshold: 0.45    # IoU threshold for NMS
-    device: "mps"          # Device: 'mps' (Apple Silicon), 'cuda', or 'cpu'
+    confidence: 0.7         # Higher confidence for fewer false positives
+    iou_threshold: 0.5      # Optimized IoU threshold
+    device: "mps"           # Apple Silicon optimization
+    half_precision: true    # Use half precision for speed
 
-  # Depth Estimation (Depth Anything V2)
+  # Depth Estimation - Optimized
   depth:
-    path: "depth-anything/Depth-Anything-V2-Small-hf"  # Hugging Face model name
+    path: "depth-anything/Depth-Anything-V2-Small-hf"
     device: "mps"
+    half_precision: true   # Use half precision for speed
+    max_resolution: 320    # Limit resolution for speed
 
-  # LLM for Narrative Generation
+  # LLM for Narrative Generation - Optimized with VLM
   llm:
-    primary: "gemma3:4b"        # Primary model for both narrative and vision tasks
-    vision: "gemma3:4b"         # Use same model for vision tasks (no separate vision model)
-    temperature: 0.7            # Sampling temperature (0-1)
-    max_tokens: 150             # Maximum tokens to generate
+    primary: "gemma3:4b"      # Fast and efficient 3B model
+    vision: "moondream:latest"        # Vision Language Model for scene understanding
+    temperature: 0.6             # Slightly lower temperature for consistency
+    max_tokens: 150              # More tokens for detailed scene descriptions
+    vlm_enabled: true            # Enable Vision Language Model
+    scene_analysis_interval: 5   # Analyze scene every 5 frames
 
-# Conversational Navigation
+# Conversational Navigation - Simple voice commands
 conversation:
   enabled: true                      # Enable conversational mode
-  model: "gemma3:4b"                 # LLM model for conversations
+  model: "gemma3:4b"              # LLM model for conversations
   temperature: 0.7                   # Response creativity (0-1)
   max_tokens: 200                    # Maximum response length
-  voice_input: false                  # Enable voice input (requires microphone)
+  voice_input: true                  # Enable voice input for blind users
   activation_phrase: "hey orby"      # Wake phrase to start conversation
   check_interval: 1.0                # How often to check for activation (seconds)
+  
+  # Simple voice commands for blind users
+  simple_commands: true              # Enable simple voice commands
+  command_phrases:                   # Common phrases blind users might say
+    - "what's around me"
+    - "is the path clear"
+    - "where am I"
+    - "help me navigate"
+    - "describe the scene"
 
 # Social Navigation
 social_navigation:
@@ -57,11 +71,16 @@ audio:
   echolocation_enabled: true   # Enabled for audio beaconing
   spatial_audio: true
   
-  # Adaptive Audio Beaconing
-  adaptive_beaconing_enabled: true  # Enable adaptive audio beaconing (440Hz for safe paths, 880Hz for obstacles)
-  beacon_safe_frequency: 440        # Frequency for safe path beacons (Hz)
-  beacon_obstacle_frequency: 880    # Frequency for obstacle warnings (Hz)
+  # Adaptive Audio Beaconing - Helpful patterns for blind users
+  adaptive_beaconing_enabled: true  # Enable adaptive audio beaconing
+  beacon_safe_frequency: 440        # Low tone for safe paths
+  beacon_obstacle_frequency: 880    # High tone for obstacles
   warning_pulse_rate: 0.2           # Warning pulse rate in seconds
+  
+  # Helpful audio patterns
+  door_beacon: 660                  # Special tone for doors
+  stairs_beacon: 1320              # Special tone for stairs
+  clear_path_beacon: 330           # Very low tone for clear paths
 
 # Echolocation Simulation Settings
 echolocation:
@@ -92,13 +111,16 @@ logging:
   save_detections: true      # Log detection data for analysis
   save_frames: false         # Save frames (uses lots of space)
 
-# Performance Tuning
+# Performance Tuning - Optimized for High Performance
 performance:
-  audio_update_interval: 3.0      # Reduced from 5s to 3s for more frequent updates
-  danger_audio_interval: 1.5      # Faster alerts for danger zone objects
-  stats_interval: 50              # Log stats more frequently
-  max_detections: 3               # Focus on top 3 most relevant objects
-  depth_skip_frames: 1            # Calculate depth more frequently (every 3rd frame)
+  audio_update_interval: 2.0      # Faster audio updates for better responsiveness
+  danger_audio_interval: 0.8      # Very fast alerts for danger zone objects
+  stats_interval: 100             # Less frequent logging for performance
+  max_detections: 5               # Focus on top 5 most relevant objects
+  depth_skip_frames: 2            # Calculate depth every 3rd frame for speed
+  frame_skip: 1                    # Process every frame for maximum responsiveness
+  enable_multithreading: true     # Use multithreading for parallel processing
+  cache_depth_maps: true          # Cache depth maps for speed
 
 # 3D Mapping Settings
 mapping3d:

@@ -1,47 +1,34 @@
-# Core Computer Vision and ML
+# Core Computer Vision and ML - Optimized for Performance
 opencv-python>=4.8.0
 ultralytics>=8.0.0
 torch>=2.0.0
 torchvision>=0.15.0
 coremltools>=8.0; python_version >= "3.11"
 
-# Depth Estimation (Depth Anything V2)
+# Depth Estimation (Depth Anything V2) - Optimized
 transformers>=4.36.0
 huggingface_hub>=0.20.0
 timm>=0.9.0
 pillow>=10.0.0
 
-# Audio Processing
-pyroomacoustics>=0.7.0
-pydub>=0.25.0
+# Audio Processing - Optimized
 pyaudio>=0.2.14
 pyttsx3>=2.90
 soundfile>=0.12.0
 scipy>=1.11.0
-SpeechRecognition>=3.10.0  # For voice input in conversational mode
+SpeechRecognition>=3.10.0
 
-# Reinforcement Learning
-stable-baselines3>=2.0.0
-gymnasium>=0.29.0
-
-# LLM Integration
+# LLM Integration - Optimized
 ollama>=0.1.0
 requests>=2.31.0
 
-# Utilities
+# Utilities - Optimized
 pyyaml>=6.0.0
 numpy>=1.24.0
-pandas>=2.0.0
-matplotlib>=3.7.0
+rich>=13.0.0  # For optimized terminal display
 
-# Federated Learning (Optional)
-flwr>=1.7.0
-
-# Testing
+# Testing - Minimal
 pytest>=8.0.0
-pytest-cov>=4.1.0
-pytest-mock>=3.12.0
 
-# Logging and Monitoring
-tqdm>=4.65.0
+# Logging - Optimized
 colorlog>=6.7.0

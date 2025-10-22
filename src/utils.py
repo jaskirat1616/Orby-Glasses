@@ -127,7 +127,7 @@ class Logger:
 
 
 class AudioManager:
-    """Manages text-to-speech and audio playback."""
+    """Optimized audio manager for high-performance TTS and audio playback."""
 
     def __init__(self, config: ConfigManager):
         self.config = config

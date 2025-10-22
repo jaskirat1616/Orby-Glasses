@@ -13,18 +13,18 @@ import logging
 
 
 class ObjectDetector:
-    """YOLOv12-based object detector for Apple Silicon."""
+    """Optimized YOLOv12-based object detector for Apple Silicon."""
 
     def __init__(self, model_path: str = "models/yolo/yolo12n.pt",
-                 confidence: float = 0.5,
+                 confidence: float = 0.65,  # Higher confidence for fewer false positives
                  iou_threshold: float = 0.45,
                  device: str = "mps"):
         """
-        Initialize YOLOv12 detector.
+        Initialize optimized YOLOv12 detector.
 
         Args:
             model_path: Path to YOLO model weights
-            confidence: Minimum confidence threshold
+            confidence: Minimum confidence threshold (optimized for navigation)
             iou_threshold: IoU threshold for NMS
             device: Device to run on ('mps', 'cuda', or 'cpu')
         """
@@ -33,30 +33,39 @@ class ObjectDetector:
         self.iou_threshold = iou_threshold
         self.device = self._validate_device(device)
 
-        logging.info(f"Initializing YOLOv12 on device: {self.device}")
-
-        # Load YOLOv12 model
+        # Load YOLOv12 model with optimizations
         try:
             if os.path.exists(model_path):
                 self.model = YOLO(model_path)
             else:
-                logging.warning(f"Model not found at {model_path}, downloading YOLOv12n...")
                 self.model = YOLO('yolo12n.pt')
 
-            # Set device
+            # Set device and optimize for inference
             self.model.to(self.device)
-            logging.info("YOLOv12 model loaded successfully")
+            
+            # Warm up the model for faster inference
+            dummy_input = np.zeros((320, 320, 3), dtype=np.uint8)
+            self.model(dummy_input, verbose=False)
+            
+            logging.info("YOLOv12 model loaded and optimized")
 
         except Exception as e:
             logging.error(f"Failed to load YOLO model: {e}")
             raise
 
-        # Priority classes for navigation (pedestrians, vehicles, obstacles)
+        # Priority classes for navigation (optimized for visually impaired users)
         self.priority_classes = [
             'person', 'bicycle', 'car', 'motorcycle', 'bus', 'truck',
             'traffic light', 'fire hydrant', 'stop sign', 'bench',
-            'chair', 'potted plant', 'door', 'stairs'
+            'chair', 'potted plant', 'door', 'stairs', 'pole', 'fence'
         ]
+        
+        # Pre-compute class indices for faster filtering
+        self.priority_class_ids = set()
+        for class_name in self.priority_classes:
+            if class_name in self.model.names.values():
+                class_id = list(self.model.names.keys())[list(self.model.names.values()).index(class_name)]
+                self.priority_class_ids.add(class_id)
 
     def _validate_device(self, device: str) -> str:
         """Validate and return appropriate device."""
@@ -70,65 +79,65 @@ class ObjectDetector:
 
     def detect(self, frame: np.ndarray, verbose: bool = False) -> List[Dict]:
         """
-        Perform object detection on a frame.
+        Perform optimized object detection on a frame.
 
         Args:
             frame: Input frame (BGR format)
             verbose: Enable verbose output
 
         Returns:
-            List of detections, each containing:
-                - bbox: [x1, y1, x2, y2]
-                - label: Class name
-                - confidence: Detection confidence
-                - class_id: Class ID
-                - center: [x_center, y_center]
+            List of detections, optimized for navigation
         """
         try:
-            # Run inference
+            # Run inference with optimizations
             results = self.model(frame,
                                conf=self.confidence,
                                iou=self.iou_threshold,
-                               verbose=verbose,
-                               device=self.device)
+                               verbose=False,  # Always False for performance
+                               device=self.device,
+                               half=True,  # Use half precision for speed
+                               agnostic_nms=True)  # Class-agnostic NMS
 
             detections = []
 
-            # Process results
+            # Process results efficiently
             for result in results:
                 boxes = result.boxes
 
                 if boxes is None or len(boxes) == 0:
                     continue
 
-                for box in boxes:
-                    # Extract box data
-                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                    confidence = float(box.conf[0].cpu().numpy())
-                    class_id = int(box.cls[0].cpu().numpy())
+                # Convert to numpy arrays for faster processing
+                xyxy = boxes.xyxy.cpu().numpy()
+                conf = boxes.conf.cpu().numpy()
+                cls = boxes.cls.cpu().numpy().astype(int)
 
-                    # Get class name
-                    label = self.model.names[class_id]
+                # Process all boxes at once
+                for i in range(len(xyxy)):
+                    x1, y1, x2, y2 = xyxy[i]
+                    confidence = float(conf[i])
+                    class_id = int(cls[i])
 
-                    # Calculate center
-                    center_x = (x1 + x2) / 2
-                    center_y = (y1 + y2) / 2
+                    # Fast priority check using pre-computed set
+                    is_priority = class_id in self.priority_class_ids
 
-                    detection = {
-                        'bbox': [float(x1), float(y1), float(x2), float(y2)],
-                        'label': label,
-                        'confidence': confidence,
-                        'class_id': class_id,
-                        'center': [float(center_x), float(center_y)],
-                        'is_priority': label in self.priority_classes
-                    }
+                    # Only process high-confidence or priority detections
+                    if confidence > 0.7 or is_priority:
+                        detection = {
+                            'bbox': [float(x1), float(y1), float(x2), float(y2)],
+                            'label': self.model.names[class_id],
+                            'confidence': confidence,
+                            'class_id': class_id,
+                            'center': [float((x1 + x2) / 2), float((y1 + y2) / 2)],
+                            'is_priority': is_priority
+                        }
+                        detections.append(detection)
 
-                    detections.append(detection)
-
-            # Sort by priority and confidence
+            # Sort by priority and confidence (most important first)
             detections.sort(key=lambda x: (not x['is_priority'], -x['confidence']))
-
-            return detections
+            
+            # Limit to top 5 detections for performance
+            return detections[:5]
 
         except Exception as e:
             logging.error(f"Detection error: {e}")
@@ -140,23 +149,21 @@ class ObjectDetector:
 
 
 class DepthEstimator:
-    """Depth estimation using Depth Anything V2."""
+    """Optimized depth estimation using Depth Anything V2."""
 
     def __init__(self, model_path: str = "depth-anything/Depth-Anything-V2-Small-hf",
                  device: str = "mps"):
         """
-        Initialize depth estimator.
+        Initialize optimized depth estimator.
 
         Args:
-            model_path: Hugging Face model name or path (e.g., "depth-anything/Depth-Anything-V2-Small-hf")
+            model_path: Hugging Face model name or path
             device: Device to run on
         """
         self.model_path = model_path
         self.device = self._validate_device(device)
 
-        logging.info(f"Initializing Depth Estimator on device: {self.device}")
-
-        # Load Depth Anything V2 via transformers
+        # Load Depth Anything V2 with optimizations
         try:
             from transformers import pipeline
 
@@ -166,11 +173,16 @@ class DepthEstimator:
             self.model = pipeline(
                 task="depth-estimation",
                 model=model_path,
-                device=device_id
+                device=device_id,
+                torch_dtype="float16" if device_id >= 0 else "float32"  # Use half precision
             )
             self.model_type = "depth_anything_v2"
 
-            logging.info(f"Depth Anything V2 loaded successfully: {model_path}")
+            # Warm up the model
+            dummy_image = np.zeros((320, 320, 3), dtype=np.uint8)
+            self._estimate_depth_fast(dummy_image)
+            
+            logging.info(f"Depth Anything V2 loaded and optimized: {model_path}")
 
         except Exception as e:
             logging.error(f"Failed to load Depth Anything V2: {e}")
@@ -188,7 +200,7 @@ class DepthEstimator:
 
     def estimate_depth(self, frame: np.ndarray) -> Optional[np.ndarray]:
         """
-        Estimate depth map from RGB frame using Depth Anything V2.
+        Estimate depth map from RGB frame using optimized Depth Anything V2.
 
         Args:
             frame: Input frame (BGR format)
@@ -200,25 +212,41 @@ class DepthEstimator:
             return self._fallback_depth(frame)
 
         try:
-            # Convert BGR to RGB for Depth Anything V2
-            from PIL import Image
-            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            pil_image = Image.fromarray(rgb)
-
-            # Run Depth Anything V2 inference
-            result = self.model(pil_image)
-
-            # Extract depth map from result
-            depth_map = np.array(result["depth"])
-
-            # Normalize to 0-1 range
-            depth_map = (depth_map - depth_map.min()) / (depth_map.max() - depth_map.min() + 1e-8)
-
-            return depth_map
+            return self._estimate_depth_fast(frame)
 
         except Exception as e:
             logging.error(f"Depth estimation error: {e}")
             return self._fallback_depth(frame)
+    
+    def _estimate_depth_fast(self, frame: np.ndarray) -> np.ndarray:
+        """Fast depth estimation with optimizations."""
+        from PIL import Image
+        
+        # Resize frame for faster processing (maintain aspect ratio)
+        h, w = frame.shape[:2]
+        if h > 320 or w > 320:
+            scale = min(320/h, 320/w)
+            new_h, new_w = int(h * scale), int(w * scale)
+            frame = cv2.resize(frame, (new_w, new_h))
+        
+        # Convert BGR to RGB efficiently
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        pil_image = Image.fromarray(rgb)
+
+        # Run Depth Anything V2 inference
+        result = self.model(pil_image)
+
+        # Extract depth map from result
+        depth_map = np.array(result["depth"])
+
+        # Fast normalization
+        depth_min, depth_max = depth_map.min(), depth_map.max()
+        if depth_max > depth_min:
+            depth_map = (depth_map - depth_min) / (depth_max - depth_min)
+        else:
+            depth_map = np.zeros_like(depth_map)
+
+        return depth_map
 
     def _fallback_depth(self, frame: np.ndarray) -> np.ndarray:
         """Ultra-fast depth estimation using image brightness (objects closer = darker usually)."""

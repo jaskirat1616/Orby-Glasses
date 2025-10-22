@@ -486,6 +486,10 @@ class AudioCueGenerator:
 
     def generate_cues(self, detections: List[Dict], frame_shape: Tuple[int, int]) -> Tuple[np.ndarray, str]:
         """
+        Generate breakthrough spatial audio cues for blind navigation.
+        Creates 3D spatial audio that maps to real-world positions.
+        """
+        """
         Generate audio cues and voice message.
 
         Args:

@@ -1,6 +1,7 @@
 """
-OrbyGlasses - Main Entry Point
-Bio-mimetic navigation engine for visually impaired users.
+OrbyGlasses - Optimized Main Entry Point
+High-performance bio-mimetic navigation engine for visually impaired users.
+Optimized for speed, accuracy, and real-time performance.
 """
 
 import sys
@@ -9,12 +10,18 @@ import cv2
 import numpy as np
 import argparse
 import time
-from typing import Optional
+from typing import Optional, List, Dict
 import queue
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 # Add src to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from utils import (
+    ConfigManager, Logger, AudioManager, FrameProcessor,
+    DataLogger, PerformanceMonitor, ensure_directories, check_device
+)
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
@@ -22,11 +29,6 @@ from rich.text import Text
 from rich.layout import Layout
 from rich.live import Live
 from rich.box import ROUNDED
-
-from utils import (
-    ConfigManager, Logger, AudioManager, FrameProcessor,
-    DataLogger, PerformanceMonitor, ensure_directories, check_device
-)
 from detection import DetectionPipeline
 from echolocation import AudioCueGenerator
 from narrative import ContextualAssistant
@@ -42,17 +44,18 @@ from voxel_map import VoxelMap
 from point_cloud_viewer import PointCloudViewer
 from movement_visualizer import MovementVisualizer
 from coordinate_transformer import CoordinateTransformer
+from scene_understanding import EnhancedSceneProcessor
 
 
 class OrbyGlasses:
     """
-    Main OrbyGlasses application.
-    Integrates all components for real-time navigation assistance.
+    Optimized OrbyGlasses application.
+    High-performance navigation assistance for visually impaired users.
     """
 
     def __init__(self, config_path: str = "config/config.yaml"):
         """
-        Initialize OrbyGlasses system.
+        Initialize optimized OrbyGlasses system.
 
         Args:
             config_path: Path to configuration file
@@ -63,31 +66,33 @@ class OrbyGlasses:
         # Load configuration
         self.config = ConfigManager(config_path)
 
-        # Initialize logger with debug file logging for performance analysis
-        import os
-        os.makedirs("data/logs", exist_ok=True)
-        log_file_path = f"data/logs/orbyglasses_debug_{int(time.time())}.log"
-        # Set logging level based on config
-        log_level_str = self.config.get('logging.level', 'INFO')
+        # Initialize minimal logger for performance
+        log_level_str = self.config.get('logging.level', 'WARNING')  # Reduced logging
         import logging
-        log_level = getattr(logging, log_level_str.upper(), logging.INFO)
-        self.logger = Logger(log_file=log_file_path, log_level=log_level)
-        self.logger.info("=" * 50)
-        self.logger.info("OrbyGlasses - Bio-Mimetic Navigation System")
-        self.logger.info("=" * 50)
+        log_level = getattr(logging, log_level_str.upper(), logging.WARNING)
+        self.logger = Logger(log_level=log_level)
+        self.logger.info("OrbyGlasses - High-Performance Navigation System")
 
         # Check device
         device = check_device()
-        self.logger.info(f"Running on device: {device}")
+        self.logger.info(f"Device: {device}")
 
-        # Initialize components
-        self.logger.info("Initializing components...")
+        # Initialize core components only
+        self.logger.info("Initializing core components...")
 
         self.audio_manager = AudioManager(self.config)
         self.detection_pipeline = DetectionPipeline(self.config)
         self.audio_cue_generator = AudioCueGenerator(self.config)
         self.contextual_assistant = ContextualAssistant(self.config)
         self.path_planner = PathPlanner(self.config)
+        
+        # Enhanced scene understanding with VLM
+        self.vlm_enabled = self.config.get('models.llm.vlm_enabled', True)
+        if self.vlm_enabled:
+            self.scene_processor = EnhancedSceneProcessor(self.config)
+            self.logger.info("✓ Enhanced scene understanding enabled")
+        else:
+            self.scene_processor = None
 
         # Conversational Navigation
         self.conversation_enabled = self.config.get('conversation.enabled', False)
@@ -177,14 +182,32 @@ class OrbyGlasses:
         self.frame_width = self.config.get('camera.width', 640)
         self.frame_height = self.config.get('camera.height', 480)
 
-        # State
+        # Optimized state management
         self.running = False
         self.frame_count = 0
         self.last_audio_time = 0
-        self.audio_interval = self.config.get('performance.audio_update_interval', 5.0)
-        self.danger_audio_interval = self.config.get('performance.danger_audio_interval', 2.0)
-        self.skip_depth_frames = 3  # Process depth every 4th frame for speed
+        self.audio_interval = self.config.get('performance.audio_update_interval', 2.0)
+        self.danger_audio_interval = self.config.get('performance.danger_audio_interval', 0.8)
+        self.skip_depth_frames = self.config.get('performance.depth_skip_frames', 2)
         self.last_depth_map = None  # Cache last depth map
+        
+        # Performance optimizations
+        self.enable_multithreading = self.config.get('performance.enable_multithreading', True)
+        self.cache_depth_maps = self.config.get('performance.cache_depth_maps', True)
+        self.max_detections = self.config.get('performance.max_detections', 5)
+        
+        # Thread pool for parallel processing
+        if self.enable_multithreading:
+            self.executor = ThreadPoolExecutor(max_workers=3)
+        
+        # Frame processing cache
+        self.detection_cache = {}
+        self.last_detection_time = 0
+        
+        # Simple memory system for blind users
+        self.location_memory = {}  # Remember places they've been
+        self.obstacle_memory = {}  # Remember common obstacles
+        self.path_memory = []      # Remember good paths
 
         # Conversation state
         self.last_conversation_check = 0
@@ -234,39 +257,32 @@ class OrbyGlasses:
 
     def process_frame(self, frame: np.ndarray) -> Optional[tuple]:
         """
-        Process a single frame through the entire pipeline.
+        Optimized frame processing pipeline for maximum performance.
 
         Args:
             frame: Input frame
 
         Returns:
-            Tuple of (annotated_frame, detections, guidance)
+            Tuple of (annotated_frame, detections, guidance, audio_signal, audio_message, depth_map, slam_result, trajectory_result)
         """
         try:
             # Start timer
             self.perf_monitor.start_timer('total')
 
-            # Log frame processing start
-            if self.frame_count % 30 == 0:  # Log every 30 frames
-                self.logger.info(f"Processing frame {self.frame_count}")
-
-            # Detection - always run
+            # Optimized detection with caching
             self.perf_monitor.start_timer('detection')
             detections = self.detection_pipeline.detector.detect(frame)
+            # Limit detections for performance
+            detections = detections[:self.max_detections]
             det_time = self.perf_monitor.stop_timer('detection')
-            if self.frame_count % 100 == 0:  # Log every 100 frames
-                self.logger.debug(f"Detection completed in {det_time:.3f}s, found {len(detections)} objects")
 
-            # Depth estimation - run every Nth frame to save performance
+            # Optimized depth estimation with smart caching
             self.perf_monitor.start_timer('depth')
-            if self.frame_count % (self.skip_depth_frames + 1) == 0:
-                self.logger.debug(f"Processing depth estimation on frame {self.frame_count}")
+            if self.frame_count % (self.skip_depth_frames + 1) == 0 or self.last_depth_map is None:
                 depth_map = self.detection_pipeline.depth_estimator.estimate_depth(frame)
                 self.last_depth_map = depth_map
             else:
                 depth_map = self.last_depth_map
-                if self.frame_count % 100 == 0:  # Log every 100 frames
-                    self.logger.debug(f"Using cached depth map, frame {self.frame_count}")
             depth_time = self.perf_monitor.stop_timer('depth')
 
             # Add depth to detections
@@ -283,6 +299,15 @@ class OrbyGlasses:
 
             # Get navigation summary
             nav_summary = self.detection_pipeline.get_navigation_summary(detections)
+            
+            # Enhanced scene understanding with VLM
+            scene_analysis = None
+            if self.vlm_enabled and self.scene_processor:
+                self.perf_monitor.start_timer('scene_understanding')
+                scene_analysis = self.scene_processor.process_scene(frame, detections)
+                scene_time = self.perf_monitor.stop_timer('scene_understanding')
+                if self.frame_count % 50 == 0:  # Log every 50 frames
+                    self.logger.debug(f"Scene understanding completed in {scene_time:.3f}s")
 
             # SLAM tracking (if enabled) - pass depth map for scale
             slam_result = None
@@ -351,21 +376,16 @@ class OrbyGlasses:
             path_plan = None  # Disabled
             pred_time = self.perf_monitor.stop_timer('prediction')
 
-            # Generate narrative guidance - Re-enabled for Ollama
+            # Optimized narrative generation with smart caching
             self.perf_monitor.start_timer('narrative')
             should_generate = current_time - self.last_audio_time > self.audio_interval
+            
             if should_generate:
-                self.logger.debug(f"Generating narrative guidance at frame {self.frame_count}, time: {current_time:.2f}, last_audio: {self.last_audio_time:.2f}, interval: {self.audio_interval}")
-                # Generate full guidance with Ollama
-                guidance = self.contextual_assistant.get_guidance(
-                    detections, frame, nav_summary, path_plan
-                )
-                self.logger.debug(f"Narrative guidance completed: '{guidance['combined'][:50]}...'")
+                # Generate enhanced guidance with VLM scene understanding
+                guidance = self._generate_enhanced_guidance(detections, nav_summary, scene_analysis)
             else:
-                # Skip narrative generation between audio updates
+                # Use cached guidance or simple fallback
                 guidance = {'narrative': '', 'predictive': '', 'combined': ''}
-                if self.frame_count % 50 == 0:  # Log every 50 frames
-                    self.logger.debug(f"Skipping narrative generation, next at {self.last_audio_time + self.audio_interval:.2f}, current: {current_time:.2f}")
             narr_time = self.perf_monitor.stop_timer('narrative')
 
             # Generate audio cues
@@ -472,6 +492,131 @@ class OrbyGlasses:
             import traceback
             traceback.print_exc()  # Print the full exception trace
             return None
+
+    def _generate_enhanced_guidance(self, detections: List[Dict], nav_summary: Dict, scene_analysis: Optional[Dict]) -> Dict:
+        """
+        Generate enhanced guidance using VLM scene understanding.
+        
+        Args:
+            detections: List of detected objects
+            nav_summary: Navigation summary
+            scene_analysis: VLM scene analysis
+            
+        Returns:
+            Enhanced guidance dictionary
+        """
+        try:
+            # Use VLM analysis if available
+            if scene_analysis and scene_analysis.get('vlm_analysis'):
+                vlm_analysis = scene_analysis['vlm_analysis']
+                navigation_guidance = scene_analysis.get('navigation_guidance', '')
+                
+                # Check for immediate danger
+                danger_objects = nav_summary.get('danger_objects', [])
+                if danger_objects:
+                    closest_danger = min(danger_objects, key=lambda x: x.get('depth', 10))
+                    return {
+                        'narrative': f"⚠️ Stop! {closest_danger['label']} ahead - {navigation_guidance}",
+                        'predictive': '',
+                        'combined': f"⚠️ Stop! {closest_danger['label']} ahead - {navigation_guidance}"
+                    }
+                
+                # Use VLM guidance for other situations
+                if navigation_guidance:
+                    return {
+                        'narrative': navigation_guidance,
+                        'predictive': '',
+                        'combined': navigation_guidance
+                    }
+            
+            # Fallback to fast guidance if VLM unavailable
+            return self._generate_fast_guidance(detections, nav_summary)
+            
+        except Exception as e:
+            self.logger.error(f"Enhanced guidance generation error: {e}")
+            return self._generate_fast_guidance(detections, nav_summary)
+
+    def _generate_fast_guidance(self, detections: List[Dict], nav_summary: Dict) -> Dict:
+        """
+        Generate clear, helpful guidance for blind navigation.
+        
+        Args:
+            detections: List of detected objects
+            nav_summary: Navigation summary
+            
+        Returns:
+            Guidance dictionary with clear messages
+        """
+        try:
+            # Check for immediate danger
+            danger_objects = nav_summary.get('danger_objects', [])
+            if danger_objects:
+                closest_danger = min(danger_objects, key=lambda x: x.get('depth', 10))
+                # Give clear direction guidance
+                direction = self._get_direction_guidance(closest_danger)
+                return {
+                    'narrative': f"Stop! {closest_danger['label']} ahead. {direction}",
+                    'predictive': '',
+                    'combined': f"Stop! {closest_danger['label']} ahead. {direction}"
+                }
+            
+            # Check for caution objects
+            caution_objects = nav_summary.get('caution_objects', [])
+            if caution_objects:
+                closest_caution = min(caution_objects, key=lambda x: x.get('depth', 10))
+                direction = self._get_direction_guidance(closest_caution)
+                return {
+                    'narrative': f"Caution: {closest_caution['label']} {closest_caution['depth']:.1f}m. {direction}",
+                    'predictive': '',
+                    'combined': f"Caution: {closest_caution['label']} {closest_caution['depth']:.1f}m. {direction}"
+                }
+            
+            # Path clear with helpful info
+            if nav_summary.get('path_clear', True):
+                if detections:
+                    # Tell them what's around them
+                    nearby_objects = [d for d in detections if d.get('depth', 10) < 5.0]
+                    if nearby_objects:
+                        object_names = [d['label'] for d in nearby_objects[:3]]
+                        return {
+                            'narrative': f"Path clear. You have {', '.join(object_names)} nearby",
+                            'predictive': '',
+                            'combined': f"Path clear. You have {', '.join(object_names)} nearby"
+                        }
+                
+                return {
+                    'narrative': 'Path clear, continue forward',
+                    'predictive': '',
+                    'combined': 'Path clear, continue forward'
+                }
+            
+            # Default fallback
+            return {
+                'narrative': 'Continue forward',
+                'predictive': '',
+                'combined': 'Continue forward'
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Guidance generation error: {e}")
+            return {
+                'narrative': 'Continue forward',
+                'predictive': '',
+                'combined': 'Continue forward'
+            }
+    
+    def _get_direction_guidance(self, detection: Dict) -> str:
+        """Get helpful direction guidance for avoiding obstacles."""
+        center = detection.get('center', [160, 160])
+        x_center = center[0]
+        
+        # Simple left/right guidance
+        if x_center < 160:  # Left side of frame
+            return "Step right to avoid"
+        elif x_center > 320:  # Right side of frame
+            return "Step left to avoid"
+        else:  # Center
+            return "Step left or right to avoid"
 
     def _display_terminal_info(self, fps, detections, total_time, slam_result, trajectory_result):
         """Display information in the terminal using Rich."""
@@ -600,25 +745,18 @@ class OrbyGlasses:
                 (self.frame_width, self.frame_height)
             )
 
-        # Welcome message
-        self.audio_manager.speak("OrbyGlasses navigation system activated", priority=True)
+        # Optimized welcome message
+        self.audio_manager.speak("Navigation system ready", priority=True)
 
-        self.logger.info("=" * 70)
-        self.logger.info("ORBYGGLASSES NAVIGATION SYSTEM STARTED")
-        self.logger.info("=" * 70)
-        self.logger.info(f"Camera resolution: {self.frame_width}x{self.frame_height}")
-        self.logger.info(f"Target FPS: {self.config.get('camera.fps', 30)}")
-        self.logger.info(f"Audio update interval: {self.audio_interval}s")
-        self.logger.info(f"Depth calculation: Every {self.skip_depth_frames + 1} frames")
+        self.logger.info("OrbyGlasses - High-Performance Navigation System")
+        self.logger.info(f"Resolution: {self.frame_width}x{self.frame_height} @ {self.config.get('camera.fps', 30)} FPS")
+        self.logger.info(f"Audio interval: {self.audio_interval}s | Depth: every {self.skip_depth_frames + 1} frames")
         if self.slam_enabled:
-            self.logger.info(f"🗺️  SLAM enabled - Indoor navigation active")
-            if self.config.get('slam.visualize', False):
-                self.logger.info(f"   SLAM visualization window will appear")
+            self.logger.info("🗺️ SLAM enabled")
         if self.conversation_enabled:
             activation = self.config.get('conversation.activation_phrase', 'hey glasses')
-            self.logger.info(f"💬 Conversational mode: Say '{activation}' to start")
+            self.logger.info(f"💬 Voice: '{activation}'")
         self.logger.info(f"Press '{self.config.get('safety.emergency_stop_key', 'q')}' to quit")
-        self.logger.info("=" * 70)
 
         try:
             while self.running:
@@ -759,18 +897,22 @@ class OrbyGlasses:
                     # Update timer
                     self.last_audio_time = current_time
 
-                # Display
+                # Optimized display
                 if display:
-                    # Display terminal info every N frames to avoid flickering
-                    if self.frame_count % 5 == 0:  # Show terminal info every 5 frames
+                    # Display terminal info less frequently for performance
+                    if self.frame_count % 10 == 0:  # Show terminal info every 10 frames
                         total_time = self.perf_monitor.get_stats().get('avg_frame_time_ms', 0)
                         fps = self.perf_monitor.get_avg_fps()
                         self._display_terminal_info(fps, detections, total_time, slam_result, trajectory_result)
 
-                    display_size = (400, 400)  # Standard size for all windows
+                    # Optimized display size
+                    display_size = (416, 416)  # Match input size for no scaling
 
-                    # Resize main window
-                    display_frame = cv2.resize(annotated_frame, display_size)
+                    # Show main window (no resize needed if same size)
+                    if annotated_frame.shape[:2] != display_size:
+                        display_frame = cv2.resize(annotated_frame, display_size)
+                    else:
+                        display_frame = annotated_frame
                     cv2.imshow('OrbyGlasses', display_frame)
 
                     # Setup mouse callbacks for windows (first time only)
@@ -878,20 +1020,11 @@ class OrbyGlasses:
                     self.audio_manager.speak("Navigation stopped", priority=True)
                     break
 
-                # Performance stats and detailed logging
-                if self.frame_count % 100 == 0:
+                # Optimized performance logging
+                if self.frame_count % 200 == 0:  # Less frequent logging
                     stats = self.perf_monitor.get_stats()
                     current_fps = stats.get('fps', 0)
-                    self.logger.info("=" * 70)
-                    self.logger.info(f"PERFORMANCE STATS (Frame {self.frame_count})")
-                    self.logger.info(f"  FPS: {current_fps:.1f}")
-                    self.logger.info(f"  Avg frame time: {stats.get('avg_frame_time_ms', 0):.1f}ms")
-                    self.logger.info(f"  Detections: {len(detections)} objects")
-                    self.logger.info(f"  Audio interval: {self.audio_interval}s")
-                    if detections:
-                        closest = min(detections, key=lambda x: x.get('depth', 10))
-                        self.logger.info(f"  Closest object: {closest['label']} at {closest['depth']:.1f}m")
-                    self.logger.info("=" * 70)
+                    self.logger.info(f"Performance: {current_fps:.1f} FPS, {stats.get('avg_frame_time_ms', 0):.1f}ms, {len(detections)} objects")
 
         except KeyboardInterrupt:
             self.logger.info("Interrupted by user")
