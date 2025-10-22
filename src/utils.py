@@ -68,9 +68,11 @@ class ConfigManager:
 class Logger:
     """Custom logger with color output and file logging."""
 
-    def __init__(self, name: str = "OrbyGlasses", log_file: str = None):
+    def __init__(self, name: str = "OrbyGlasses", log_file: str = None, log_level: int = None):
         self.logger = logging.getLogger(name)
-        self.logger.setLevel(logging.INFO)
+        # Set level based on parameter, default to INFO if not specified
+        level_to_use = log_level if log_level is not None else logging.INFO
+        self.logger.setLevel(level_to_use)
 
         # Clear existing handlers to prevent duplicates
         self.logger.handlers.clear()
@@ -80,7 +82,7 @@ class Logger:
 
         # Console handler with colors
         console_handler = logging.StreamHandler()
-        console_handler.setLevel(logging.INFO)
+        console_handler.setLevel(level_to_use)
         console_formatter = colorlog.ColoredFormatter(
             '%(log_color)s%(asctime)s - %(levelname)s - %(message)s',
             datefmt='%H:%M:%S',

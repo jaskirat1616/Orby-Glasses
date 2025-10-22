@@ -11,6 +11,7 @@ import ollama
 from typing import List, Dict, Optional
 import json
 import time
+from llm_manager import LLMManager
 
 
 class NarrativeGenerator:
@@ -21,32 +22,40 @@ class NarrativeGenerator:
 
     def __init__(self, config):
         """
-        Initialize narrative generator.
+        Initialize narrative generator with LLM manager for concurrency control.
 
         Args:
             config: ConfigManager instance
         """
         self.config = config
 
-        # Model configuration
-        self.primary_model = config.get('models.llm.primary', 'gemma2:2b')
-        self.vision_model = config.get('models.llm.vision', 'moondream')
+        # Model configuration - use single model for both vision and narrative
+        self.primary_model = config.get('models.llm.primary', 'gemma3:4b')
+        self.vision_model = self.primary_model  # Use same model to prevent duplicate calls
         self.temperature = config.get('models.llm.temperature', 0.7)
         self.max_tokens = config.get('models.llm.max_tokens', 150)
+
+        # Initialize LLM manager for concurrency control
+        self.llm_manager = LLMManager(config)
 
         # Check available models
         self.available_models = self._check_available_models()
 
-        logging.info(f"Narrative generator initialized with models: {self.available_models}")
-
         # Context window for recent detections
         self.context_history = []
         self.max_context_length = 5
+        
+        logging.info(f"Narrative generator initialized with LLM manager and model: {self.primary_model}")
 
     def _is_model_available(self, model_name: str) -> bool:
         """Check if a model is available in Ollama."""
+        # Handle case where available_models is None or empty
         if not self.available_models:
-            return False
+            # Refresh the list if it's empty or None
+            self.available_models = self._check_available_models()
+            if not self.available_models:
+                return False
+        
         # Check exact match or partial match (e.g., "gemma3:4b" matches "gemma3:4b")
         for available_model in self.available_models:
             if model_name in available_model or available_model in model_name:
@@ -67,7 +76,9 @@ class NarrativeGenerator:
             return available
         except Exception as e:
             logging.warning(f"Could not check Ollama models: {e}")
-            return []
+            # Return a default list with the primary model to avoid crashes
+            primary_model = getattr(self, 'primary_model', 'gemma3:4b')
+            return [primary_model]
 
     def _encode_image(self, frame: np.ndarray) -> str:
         """
@@ -92,7 +103,7 @@ class NarrativeGenerator:
 
     def describe_scene_with_vision(self, frame: np.ndarray) -> str:
         """
-        Use vision model (Moondream) to describe the scene.
+        Use the same model for vision description via LLM manager to prevent concurrent calls.
 
         Args:
             frame: Input frame
@@ -101,14 +112,8 @@ class NarrativeGenerator:
             Scene description
         """
         try:
-            # Check if vision model is available
-            if not self._is_model_available(self.vision_model):
-                logging.warning(f"Vision model {self.vision_model} not available")
-                return ""
-
-            logging.debug("Starting vision model scene description...")
-            start_time = time.time()
-
+            logging.debug("Starting vision description request...")
+            
             # Encode frame
             image_base64 = self._encode_image(frame)
             logging.debug(f"Frame encoded to base64 ({len(image_base64)} chars)")
@@ -124,9 +129,10 @@ Focus on:
 
 Provide 1-2 concise sentences. Be specific about distances and directions when possible."""
 
-            # Query vision model
-            response = ollama.generate(
-                model=self.vision_model,
+            # Use LLM manager to handle the call with concurrency control
+            start_time = time.time()
+            response = self.llm_manager.generate(
+                model=self.primary_model,
                 prompt=vision_prompt,
                 images=[image_base64],
                 options={
@@ -136,15 +142,17 @@ Provide 1-2 concise sentences. Be specific about distances and directions when p
             )
 
             description = response.get('response', '').strip()
-            elapsed = time.time() - start_time
+            total_time = time.time() - start_time
 
-            logging.info(f"Vision description generated in {elapsed:.2f}s: {description[:100]}...")
+            logging.info(f"Vision description: total_time={total_time:.2f}s, desc='{description[:100]}...'")
             logging.debug(f"Full vision description: {description}")
 
             return description
 
         except Exception as e:
-            logging.error(f"Vision model error: {e}", exc_info=True)
+            logging.error(f"Vision model error: {e}")
+            import traceback
+            traceback.print_exc()
             return ""
 
     def generate_narrative(self, detections: List[Dict],
@@ -249,7 +257,7 @@ Provide 1-2 concise sentences. Be specific about distances and directions when p
 
     def _generate_with_llm(self, context: str, vision_context: str = "") -> str:
         """
-        Generate narrative using primary LLM.
+        Generate narrative using primary LLM via LLM manager to prevent concurrent calls.
 
         Args:
             context: Detection context
@@ -263,16 +271,16 @@ Provide 1-2 concise sentences. Be specific about distances and directions when p
             prompt = self._build_prompt(context, vision_context)
             logging.debug(f"LLM Prompt:\n{prompt}")
 
-            # Check if model is available
-            if not self._is_model_available(self.primary_model):
-                logging.warning(f"Primary model {self.primary_model} not available, using fallback")
-                return self._fallback_narrative(context)
+            # Check if model is available (always assume available when using LLM manager)
+            # The LLM manager handles model availability internally
+            # if not self._is_model_available(self.primary_model):
+            #     logging.warning(f"Primary model {self.primary_model} not available, using fallback")
+            #     return self._fallback_narrative(context)
 
-            # Generate with Ollama
-            logging.debug(f"Calling Ollama {self.primary_model}...")
+            # Generate with Ollama via LLM manager
             start_time = time.time()
-
-            response = ollama.generate(
+            
+            response = self.llm_manager.generate(
                 model=self.primary_model,
                 prompt=prompt,
                 options={
@@ -283,10 +291,11 @@ Provide 1-2 concise sentences. Be specific about distances and directions when p
                 }
             )
 
-            elapsed = time.time() - start_time
+            total_time = time.time() - start_time
             narrative = response.get('response', '').strip()
 
-            logging.debug(f"Raw LLM response ({elapsed:.2f}s): {narrative}")
+            logging.info(f"LLM response: total_time={total_time:.2f}s, response='{narrative[:100]}...'")
+            logging.debug(f"Raw LLM response: {narrative}")
 
             # Clean up and validate
             narrative = self._clean_narrative(narrative)
@@ -296,19 +305,21 @@ Provide 1-2 concise sentences. Be specific about distances and directions when p
                 logging.warning(f"Narrative too short ({len(narrative)} chars), using fallback")
                 return self._fallback_narrative(context)
 
-            logging.info(f"✓ LLM narrative generated successfully in {elapsed:.2f}s")
+            logging.info(f"✓ LLM narrative generated successfully in {total_time:.2f}s")
             return narrative
 
         except Exception as e:
-            logging.error(f"LLM generation error: {e}", exc_info=True)
+            logging.error(f"LLM generation error: {e}")
+            import traceback
+            traceback.print_exc()
             return self._fallback_narrative(context)
 
     def _build_prompt(self, context: str, vision_context: str = "") -> str:
-        """Build prompt for LLM with enhanced engineering for better outputs."""
+        """Build prompt for LLM with engineering for better outputs."""
 
-        # Enhanced prompt with specific instructions and examples
+        # Prompt with specific instructions and examples
         if vision_context:
-            # Vision-enhanced prompt
+            # Vision-based prompt
             base_prompt = """You are a navigation guide for BLIND users. Give clear, actionable directions.
 
 DETECTION DATA:
@@ -486,23 +497,35 @@ class ContextualAssistant:
         Returns:
             Dict with 'narrative', 'predictive', and 'combined' guidance
         """
+        start_time = time.time()
+        logging.debug(f"get_guidance called with {len(detections)} detections, has_frame: {frame is not None}, has_pred_path: {predicted_path is not None}")
+        
         # Generate main narrative
+        narrative_start = time.time()
         narrative = self.narrative_gen.generate_narrative(
             detections, frame, navigation_summary
         )
+        narrative_time = time.time() - narrative_start
+        logging.debug(f"Narrative generation completed in {narrative_time:.2f}s")
 
         # Generate predictive guidance
         predictive = ""
         if predicted_path:
+            predictive_start = time.time()
             predictive = self.narrative_gen.generate_predictive_guidance(
                 detections, predicted_path
             )
+            predictive_time = time.time() - predictive_start
+            logging.debug(f"Predictive guidance generated in {predictive_time:.2f}s")
 
         # Combine if both exist
         combined = narrative
         if predictive:
             combined = f"{narrative} {predictive}"
 
+        total_time = time.time() - start_time
+        logging.info(f"get_guidance completed: total_time={total_time:.2f}s, narrative_len={len(narrative)}, predictive_len={len(predictive)}")
+        
         return {
             'narrative': narrative,
             'predictive': predictive,

@@ -25,8 +25,8 @@ models:
 
   # LLM for Narrative Generation
   llm:
-    primary: "gemma3:4b"        # Primary model for narrative
-    vision: "moondream:latest"  # Vision model for scene understanding
+    primary: "gemma3:4b"        # Primary model for both narrative and vision tasks
+    vision: "gemma3:4b"         # Use same model for vision tasks (no separate vision model)
     temperature: 0.7            # Sampling temperature (0-1)
     max_tokens: 150             # Maximum tokens to generate
 
@@ -55,7 +55,7 @@ audio:
 
   # Echolocation/Spatial Audio
   echolocation_enabled: true   # Enabled for audio beaconing
-  spatial_audio: false
+  spatial_audio: true
   
   # Adaptive Audio Beaconing
   adaptive_beaconing_enabled: true  # Enable adaptive audio beaconing (440Hz for safe paths, 880Hz for obstacles)
@@ -87,26 +87,26 @@ safety:
 
 # Logging Settings
 logging:
-  level: "INFO"              # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  level: "DEBUG"              # DEBUG, INFO, WARNING, ERROR, CRITICAL - Changed to DEBUG for performance analysis
   log_file: "data/logs/orbyglass.log"
   save_detections: true      # Log detection data for analysis
   save_frames: false         # Save frames (uses lots of space)
 
 # Performance Tuning
 performance:
-  audio_update_interval: 5.0      # Seconds between audio updates (ensures sentences complete)
-  danger_audio_interval: 3.0      # Faster alerts for danger zone objects (increased to reduce spam)
-  stats_interval: 100             # Log stats every N frames
+  audio_update_interval: 3.0      # Reduced from 5s to 3s for more frequent updates
+  danger_audio_interval: 1.5      # Faster alerts for danger zone objects
+  stats_interval: 50              # Log stats more frequently
   max_detections: 3               # Focus on top 3 most relevant objects
-  depth_skip_frames: 3            # Calculate depth every Nth frame (3 = every 4th frame)
+  depth_skip_frames: 1            # Calculate depth more frequently (every 3rd frame)
 
 # 3D Mapping Settings
 mapping3d:
-  enabled: false                   # Enable 3D real-time mapping visualization (set to true to enable)
-  max_depth: 10.0                 # Maximum depth in meters to visualize
-  voxel_size: 0.1                 # Voxel size for downsampling (larger = faster, less detail)
-  subsample_step: 8               # Subsample every Nth point (higher = faster, less detail)
-  update_interval: 0.3            # Update 3D map every N seconds (slower updates = better performance)
+  enabled: false                    # Enable 3D mapping for spatial awareness (was false)
+  max_depth: 6.0                  # Better maximum depth (was 5.0)
+  voxel_size: 0.15                # Better voxel size for balance (was 0.2)
+  subsample_step: 8               # Moderate subsample (was 10)
+  update_interval: 0.3            # Better update frequency (was 0.5)
   fx: 500                         # Camera focal length X (pixels)
   fy: 500                         # Camera focal length Y (pixels)
   skip_bbox: true                 # Skip bounding boxes for better performance
@@ -115,14 +115,31 @@ mapping3d:
 slam:
   enabled: true                   # Enable SLAM for indoor navigation
   grid_size: [200, 200]           # Occupancy grid size (width, height) in cells
-  grid_resolution: 0.1            # Grid cell size in meters (0.1m = 10cm per cell)
+  grid_resolution: 0.4            # Better resolution for accuracy (was 0.4)
   save_maps: true                 # Save maps for later reuse
   visualize: true                 # Show SLAM visualization window
 
-  # Advanced tracking without IMU
+  # Tracking without IMU
+  orb_features: 1500              # Moderate features for balance of performance and accuracy
+  fast_threshold: 10              # Moderate threshold for balance of features and performance
+  min_matches: 10                 # Moderate minimum matches for tracking stability
   motion_model: true              # Use constant velocity motion model
-  pose_smoothing: 0.3             # Smoothing factor (0=no smooth, 1=max smooth)
-  strict_matching: true           # Stricter feature matching for accuracy
+  pose_smoothing: 0.6             # Moderate smoothing for stability (was 0.5)
+  temporal_consistency_check: true # Check for physically impossible movements
+  max_position_jump: 0.3          # Maximum allowed position jump (m)
+  max_rotation_jump: 0.3          # Maximum allowed rotation jump (rad)
+  strict_matching: true           # Enable strict matching for better accuracy (was false)
+  min_tracked_features: 8         # Moderate minimum tracked features (was 5)
+  keyframe_threshold: 20          # Insert keyframe moderately frequently (was 25)
+  reprojection_threshold: 2.5     # Moderate threshold for accuracy (was 3.0)
+  min_depth: 0.1                  # Minimum depth for triangulation (m)
+  max_depth: 10.0                 # Maximum depth for triangulation (m)
+  depth_variance: 0.03            # Moderate variance for balance (was 0.05)
+  pose_alpha: 0.7                 # Better smoothing factor (was 0.6)
+  loop_closure: true              # Enable loop closure for accuracy (was false)
+  loop_closure_threshold: 0.6     # Loop closure threshold (0-1)
+  bundle_adjustment: false        # Enable bundle adjustment (may slow down)
+  ba_interval: 10                 # Perform BA every N keyframes
 
 # Indoor Navigation Settings
 indoor_navigation:
@@ -139,21 +156,30 @@ trajectory_prediction:
   visualize: false                # Show trajectory visualization
   collision_warning: true         # Warn about predicted collisions
 
-# 3D Occupancy Grid Settings (Voxel Grid Map) - OPTIMIZED FOR IMMEDIATE RESULTS
+# 3D Occupancy Grid Settings (Voxel Grid Map) - FOR REAL-TIME VISUALIZATION
 occupancy_grid_3d:
   enabled: true                   # Enable voxel grid visualization
-  grid_size: [10.0, 10.0, 3.0]    # Smaller grid = faster, easier to see
-  resolution: 0.2                 # Larger voxels = more visible (20cm)
-  max_range: 5.0                  # Maximum sensor range in meters
+  grid_size: [12.0, 12.0, 3.0]    # Moderate grid size for balance (was [10.0, 10.0, 2.5])
+  resolution: 0.25                # Better resolution for accuracy (was 0.4)
+  near_resolution: 0.12           # Better resolution for accuracy (was 0.2)
+  near_distance: 1.8              # Better distance for accuracy (was 1.5)
+  far_resolution: 0.3             # Better resolution for accuracy (was 0.4)
+  max_range: 5.0                  # Standard maximum sensor range (was 4.0)
   min_range: 0.1                  # Minimum sensor range in meters
-  log_odds_occupied: 1.5          # FAST convergence to occupied
-  log_odds_free: -0.8             # FAST free space marking
-  log_odds_min: -3.0              # Faster saturation
-  log_odds_max: 3.0               # Faster saturation
-  subsample_step: 20              # MUCH fewer rays for SPEED
-  update_interval: 1.0            # Slow updates to maintain FPS
+  log_odds_occupied: 1.5          # Better convergence speed (was 1.0)
+  log_odds_free: -0.8             # Better free space marking (was -0.6)
+  log_odds_min: -3.5              # Better saturation (was -3.0)
+  log_odds_max: 3.5               # Better saturation (was 3.0)
+  subsample_step: 15              # Moderate subsample (was 20)
+  update_interval: 0.7            # Better update frequency (was 1.0)
   visualize: true                 # Show 3D voxel grid visualization window
-  show_2d_slice: false            # Also show 2D slice in separate window
+  show_2d_slice: false             # Enable 2D slice for better understanding (was false)
+  temporal_consistency: true      # Enable for accuracy (was false)
+  temporal_filtering: true        # Enable temporal filtering for accuracy (was false)
+  min_observations: 2             # Better observations for accuracy (was 1)
+  decay_rate: 0.001               # Slow decay for stability
+  max_history_length: 7           # Better history length for accuracy (was 5)
+  history_decay: 0.85             # Better decay factor (was 0.8)
 
 # 3D Point Cloud Viewer Settings (DISABLED - using voxel grid only)
 point_cloud_viewer:
@@ -164,3 +190,14 @@ point_cloud_viewer:
   max_depth: 5.0                  # Maximum depth in meters
   update_interval: 0.1            # Update frequency in seconds
   visualize: false                # Show visualization window
+
+# Movement Visualizer Settings (NEW)
+movement_visualizer:
+  enabled: false                   # Enable movement visualization
+  canvas_size: [700, 700]         # Moderate canvas size for balance (was [600, 600])
+  trail_length: 200               # Better trail length for accuracy (was 150)
+  grid_size: 22.0                 # Better grid for spatial context (was 20.0)
+  show_velocity: true             # Enable velocity for movement info (was false)
+  show_orientation: true          # Enable orientation for direction info (was false)
+  show_grid: true                 # Enable grid for spatial reference (was false)
+  show_stats: true                # Show movement statistics

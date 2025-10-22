@@ -53,6 +53,11 @@ class PointCloudViewer:
         self.view_offset_x = 0.0
         self.view_offset_y = 0.0
 
+        # Mouse control state
+        self.mouse_is_pressed = False
+        self.last_mouse_x = 0
+        self.last_mouse_y = 0
+
         # Update control
         self.last_update = 0
         self.update_interval = config.get('point_cloud_viewer.update_interval', 0.1)
@@ -64,6 +69,36 @@ class PointCloudViewer:
         logging.info("Point Cloud Viewer initialized")
         logging.info(f"  Max points: {self.max_points:,}")
         logging.info(f"  Subsample: every {self.subsample} pixels")
+
+    def handle_mouse_events(self, event, x, y, flags, param):
+        """Handle mouse events for interactive control."""
+        if event == cv2.EVENT_LBUTTONDOWN:
+            self.mouse_is_pressed = True
+            self.last_mouse_x = x
+            self.last_mouse_y = y
+        elif event == cv2.EVENT_LBUTTONUP:
+            self.mouse_is_pressed = False
+        elif event == cv2.EVENT_MOUSEMOVE:
+            if self.mouse_is_pressed:
+                dx = x - self.last_mouse_x
+                dy = y - self.last_mouse_y
+
+                if flags & cv2.EVENT_FLAG_SHIFTKEY:
+                    # Pan
+                    self.view_offset_x += dx * 0.1
+                    self.view_offset_y += dy * 0.1
+                else:
+                    # Rotate
+                    self.view_angle_z += dx * 0.5
+                    self.view_angle_x += dy * 0.5
+
+                self.last_mouse_x = x
+                self.last_mouse_y = y
+        elif event == cv2.EVENT_MOUSEWHEEL:
+            if flags > 0:
+                self.handle_mouse_wheel(1)
+            else:
+                self.handle_mouse_wheel(-1)
 
     def add_frame(self, rgb_frame: np.ndarray, depth_map: np.ndarray,
                   camera_pose: Optional[np.ndarray] = None):
@@ -230,17 +265,6 @@ class PointCloudViewer:
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (100, 100, 100), 1)
         cv2.putText(canvas, f"Zoom: {self.view_scale:.1f}x", (20, 115),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (100, 100, 100), 1)
-
-        # Controls
-        overlay2 = canvas.copy()
-        cv2.rectangle(overlay2, (10, img_size - 90), (790, img_size - 10), (240, 240, 240), -1)
-        cv2.addWeighted(overlay2, 0.85, canvas, 0.15, 0, canvas)
-        cv2.rectangle(canvas, (10, img_size - 90), (790, img_size - 10), (100, 100, 100), 2)
-
-        cv2.putText(canvas, "Mouse Wheel: Zoom   Arrows: Pan   Q/E: Rotate   W/S: Tilt   R: Reset",
-                   (20, img_size - 55), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
-        cv2.putText(canvas, "C: Clear point cloud   SPACE: Pause/Resume updates",
-                   (20, img_size - 25), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
 
         return canvas
 

@@ -13,7 +13,7 @@ import logging
 
 
 class ObjectDetector:
-    """YOLOv12-based object detector optimized for Apple Silicon."""
+    """YOLOv12-based object detector for Apple Silicon."""
 
     def __init__(self, model_path: str = "models/yolo/yolo12n.pt",
                  confidence: float = 0.5,
@@ -263,7 +263,7 @@ class DepthEstimator:
         if depth_region.size == 0:
             return 10.0
 
-        # Get median depth in the region (more robust than mean)
+        # Get median depth in the region (more stable than mean)
         median_depth = np.median(depth_region)
 
         # Convert normalized depth (0-1) to meters

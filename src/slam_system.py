@@ -1,18 +1,14 @@
 """
-OrbyGlasses - Simplified Visual SLAM for Indoor Navigation
-Advanced monocular SLAM using ORB features with improved accuracy for camera-only localization and mapping.
-No IMU required - works with just a USB webcam with tracking accuracy.
+SLAM for OrbyGlasses
+Camera-only SLAM with accuracy and performance
 """
-
 import cv2
 import numpy as np
 import logging
 from typing import List, Dict, Tuple, Optional
-from collections import deque, defaultdict
-import json
-import os
-from dataclasses import dataclass, asdict
+from collections import deque
 import time
+from dataclasses import dataclass
 
 
 @dataclass
@@ -25,23 +21,12 @@ class MapPoint:
     reprojection_error: float = float('inf')  # Reprojection error
     last_observed_frame: int = 0  # Frame number of last observation
     is_tracked: bool = True  # Whether the point is currently being tracked
-
-    def to_dict(self):
-        """Convert to dictionary for serialization."""
-        return {
-            'id': self.id,
-            'position': self.position.tolist(),
-            'descriptor': self.descriptor.tolist(),
-            'observations': self.observations,
-            'reprojection_error': self.reprojection_error,
-            'last_observed_frame': self.last_observed_frame,
-            'is_tracked': self.is_tracked
-        }
+    keyframe_ref: int = -1 # Reference to the keyframe where it was created
 
 
 @dataclass
 class KeyFrame:
-    """Simplified Key frame with pose and features."""
+    """Key frame with pose and features."""
     id: int
     timestamp: float
     pose: np.ndarray  # 4x4 transformation matrix
@@ -52,30 +37,13 @@ class KeyFrame:
     feature_quality: float = 0.0  # Quality score of features
     motion_consistency: float = 0.0  # How consistent this frame's motion is
 
-    def to_dict(self):
-        """Convert to dictionary for serialization."""
-        return {
-            'id': self.id,
-            'timestamp': self.timestamp,
-            'pose': self.pose.tolist(),
-            'keypoints': [(kp.pt[0], kp.pt[1], kp.size, kp.angle) for kp in self.keypoints],
-            'descriptors': self.descriptors.tolist(),
-            'tracked_features': self.tracked_features,
-            'feature_quality': self.feature_quality,
-            'motion_consistency': self.motion_consistency
-        }
 
-
-class MonocularSLAM:
+class SLAMSystem:
     """
-    Simplified monocular SLAM for indoor navigation with better accuracy.
-    Uses ORB features with tracking and mapping without IMU.
-    Includes temporal consistency, scale estimation, and tracking.
-
-    This implementation focuses on accuracy and stability for navigation purposes
-    without requiring IMU data.
+    SLAM with accuracy for navigation without IMU.
+    Uses feature tracking, temporal consistency, and pose estimation.
     """
-
+    
     def __init__(self, config):
         """
         Initialize SLAM system.
@@ -86,7 +54,7 @@ class MonocularSLAM:
         self.config = config
         self.enabled = config.get('slam.enabled', True)
 
-        # Camera intrinsics (estimated from config)
+        # Camera intrinsics
         self.fx = config.get('mapping3d.fx', 500)
         self.fy = config.get('mapping3d.fy', 500)
         self.cx = config.get('camera.width', 320) / 2
@@ -99,37 +67,38 @@ class MonocularSLAM:
             [0, 0, 1]
         ], dtype=np.float32)
         
-        self.K_inv = np.linalg.inv(self.K)  # For back-projection
+        self.K_inv = np.linalg.inv(self.K)
 
-        # ORB feature detector
-        nfeatures = config.get('slam.orb_features', 2000)  # Configurable number of features
+        # Feature detector with parameters
+        nfeatures = config.get('slam.orb_features', 3000)
         self.orb = cv2.ORB_create(
             nfeatures=nfeatures,
-            scaleFactor=config.get('slam.scale_factor', 1.2),
-            nlevels=config.get('slam.nlevels', 8),
-            edgeThreshold=config.get('slam.edge_threshold', 10),
+            scaleFactor=1.1,  # Smaller scale factor for more precise features
+            nlevels=16,       # More levels for better scale invariance
+            edgeThreshold=31,
             firstLevel=0,
             WTA_K=2,
             patchSize=31,
-            fastThreshold=config.get('slam.fast_threshold', 20)
+            fastThreshold=10,  # Lower threshold for more features
+            scoreType=cv2.ORB_HARRIS_SCORE
         )
 
-        # Feature matcher with multiple strategies
-        self.matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
-        # FLANN matcher for better performance with many features
+        # Multiple matcher strategies
+        self.bf_matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
+        
+        # FLANN matcher for performance with many features
         FLANN_INDEX_LSH = 6
-        index_params = dict(algorithm=FLANN_INDEX_LSH, table_number=6, key_size=12, multi_probe_level=1)
-        search_params = dict(checks=50)
-        self.flann = cv2.FlannBasedMatcher(index_params, search_params)
+        index_params = dict(algorithm=FLANN_INDEX_LSH, table_number=12, key_size=20, multi_probe_level=2)
+        search_params = dict(checks=100)
+        self.flann_matcher = cv2.FlannBasedMatcher(index_params, search_params)
 
         # SLAM state
         self.map_points = {}  # id -> MapPoint
-        self.keyframes = []  # List of KeyFrame
-        self.current_pose = np.eye(4, dtype=np.float32)  # Current camera pose
-        self.previous_pose = np.eye(4, dtype=np.float32)  # Previous camera pose
+        self.keyframes = []   # List of KeyFrame
+        self.current_pose = np.eye(4, dtype=np.float32)
+        self.previous_pose = np.eye(4, dtype=np.float32)
         self.next_point_id = 0
         self.next_keyframe_id = 0
-        self.reference_keyframe_id = 0
 
         # Tracking state
         self.last_frame = None
@@ -138,40 +107,35 @@ class MonocularSLAM:
         self.is_initialized = False
 
         # Parameters for accuracy
-        self.min_matches = config.get('slam.min_matches', 20)
-        self.min_tracked_features = config.get('slam.min_tracked_features', 15)
-        self.keyframe_threshold = config.get('slam.keyframe_threshold', 25)
-        self.scale_threshold = config.get('slam.scale_threshold', 0.1)
-        self.reprojection_threshold = config.get('slam.reprojection_threshold', 3.0)
+        self.min_matches = config.get('slam.min_matches', 15)
+        self.min_tracked_features = config.get('slam.min_tracked_features', 10)
+        self.keyframe_threshold = config.get('slam.keyframe_threshold', 20)
+        self.reprojection_threshold = 3.0
         self.min_depth = config.get('slam.min_depth', 0.1)
         self.max_depth = config.get('slam.max_depth', 10.0)
-        self.depth_variance = config.get('slam.depth_variance', 0.05)  # For uncertainty modeling
 
-        # Motion model for pose prediction (no IMU needed)
+        # Motion model for pose prediction
         self.velocity = np.zeros(6)  # [vx, vy, vz, wx, wy, wz]
         self.last_pose_update_time = time.time()
 
         # Pose smoothing parameters
-        self.pose_alpha = config.get('slam.pose_alpha', 0.7)  # More aggressive smoothing for stability
+        self.pose_alpha = config.get('slam.pose_alpha', 0.8)  # More aggressive smoothing for stability
         self.smoothed_pose = np.eye(4, dtype=np.float32)
 
         # Loop closure detection
         self.enable_loop_closure = config.get('slam.loop_closure', False)
-        self.loop_closure_threshold = config.get('slam.loop_closure_threshold', 0.5)
+        self.loop_closure_threshold = config.get('slam.loop_closure_threshold', 0.6)
         self.keyframe_database = []  # For loop closure detection
-
-        # Bundle adjustment (simplified)
-        self.enable_bundle_adjustment = config.get('slam.bundle_adjustment', False)
-        self.ba_interval = config.get('slam.ba_interval', 10)  # Perform BA every N keyframes
 
         # Map saving
         self.map_save_dir = "data/maps"
+        import os
         os.makedirs(self.map_save_dir, exist_ok=True)
 
-        # Position and trajectory history for navigation
-        self.position_history = deque(maxlen=1000)  # Longer history for trajectory analysis
-        self.pose_history = deque(maxlen=100)  # Keep last 100 poses for analysis
-        self.relative_poses = deque(maxlen=20)  # Store relative poses for motion analysis
+        # Position and trajectory history
+        self.position_history = deque(maxlen=1000)
+        self.pose_history = deque(maxlen=100)
+        self.relative_poses = deque(maxlen=20)
 
         # Feature tracking statistics
         self.frame_count = 0
@@ -185,10 +149,10 @@ class MonocularSLAM:
         self.max_rotation_jump = config.get('slam.max_rotation_jump', 0.5)  # radians
 
         # Statistics
-        self.last_positions = deque(maxlen=5)  # For velocity estimation
-        self.velocity_history = deque(maxlen=10)  # For velocity smoothing
+        self.last_positions = deque(maxlen=5)
+        self.velocity_history = deque(maxlen=10)
 
-        logging.info("Monocular SLAM initialized (camera-only, no IMU)")
+        logging.info("SLAM System initialized (camera-only, no IMU)")
         logging.info(f"Camera matrix: fx={self.fx}, fy={self.fy}, cx={self.cx:.1f}, cy={self.cy:.1f}")
         logging.info(f"ORB features: {nfeatures}, Min matches: {self.min_matches}")
         logging.info(f"Temporal consistency: {self.temporal_consistency_check}")
@@ -202,13 +166,7 @@ class MonocularSLAM:
             depth_map: Optional depth map for scale initialization (H x W, normalized 0-1)
 
         Returns:
-            Dictionary with tracking info:
-                - pose: Current 4x4 pose matrix
-                - position: [x, y, z] position
-                - tracking_quality: 0-1 quality score
-                - num_matches: Number of feature matches
-                - is_keyframe: Whether this is a keyframe
-                - relative_movement: [dx, dy, dz, drx, dry, drz]
+            Dictionary with tracking info
         """
         if not self.enabled:
             return self._empty_result()
@@ -218,13 +176,13 @@ class MonocularSLAM:
         # Convert to grayscale
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-        # Detect ORB features
+        # Detect ORB features with parameters
         keypoints, descriptors = self.orb.detectAndCompute(gray, None)
 
         if descriptors is None or len(keypoints) < 10:
             if self.is_initialized:
-                # If already initialized, try to predict pose based on motion model
-                predicted_pose = self._predict_pose(0.1)  # Assume 0.1s since last frame
+                # Predict pose based on motion model
+                predicted_pose = self._predict_pose(0.1)
                 position = predicted_pose[:3, 3].tolist()
                 
                 # Calculate relative movement
@@ -232,7 +190,7 @@ class MonocularSLAM:
                 if len(self.position_history) > 0:
                     prev_pos = self.position_history[-1]
                     translation = np.array(position) - prev_pos
-                    rotation = np.zeros(3)  # Assume no rotation if no tracking
+                    rotation = np.zeros(3)
                     relative_movement = np.concatenate([translation, rotation])
                 
                 return {
@@ -285,7 +243,7 @@ class MonocularSLAM:
             rotation_vec = cv2.Rodrigues(rotation_matrix)[0].flatten()
             
             relative_movement = np.concatenate([translation, rotation_vec])
-        
+
         # Update result with relative movement
         if not np.all(np.isfinite(relative_movement)):
             logging.warning(f"Non-finite relative movement calculated: {relative_movement}. Resetting to zero.")
@@ -324,20 +282,16 @@ class MonocularSLAM:
         # Initialize map points with proper depth
         for kp, desc in zip(keypoints[:500], descriptors[:500]):
             depth = 2.0  # Default depth
-            # Use depth map if available for initialization
             if depth_map is not None:
                 u, v = int(kp.pt[0]), int(kp.pt[1])
                 if 0 <= v < depth_map.shape[0] and 0 <= u < depth_map.shape[1]:
                     depth_norm = depth_map[v, u]
-                    estimated_depth = depth_norm * 5.0  # Convert to meters (assuming max 5m)
+                    estimated_depth = depth_norm * 5.0  # Convert to meters
                     if np.isfinite(estimated_depth) and estimated_depth > 0.1:
                         depth = estimated_depth
-                    else:
-                        logging.debug(f"Invalid depth value ({estimated_depth}) at ({u},{v}), using default.")
 
             point_3d = self._pixel_to_3d(kp.pt, depth=depth)
             if not np.all(np.isfinite(point_3d)):
-                logging.warning(f"Failed to create valid 3D point for kp at {kp.pt}. Skipping.")
                 continue
 
             map_point = MapPoint(
@@ -367,24 +321,17 @@ class MonocularSLAM:
                depth_map: Optional[np.ndarray] = None) -> Dict:
         """
         Simplified track camera motion by matching features with previous frame.
-        Includes temporal consistency checks, multiple matcher strategies, and pose estimation.
+        Includes temporal consistency checks and pose estimation.
         """
-        # Try multiple matcher strategies
-        try:
-            # Try FLANN matcher first (better performance with many features)
-            matches = self.flann.knnMatch(descriptors, self.last_descriptors, k=2)
-        except:
-            # Fallback to brute force matcher
-            matches = self.matcher.knnMatch(descriptors, self.last_descriptors, k=2)
+        # Use FLANN-based matcher for better performance
+        matches = self.flann_matcher.knnMatch(descriptors, self.last_descriptors, k=2)
 
-        # Apply Lowe's ratio test with adaptive threshold
+        # Apply Lowe's ratio test to filter out bad matches
         good_matches = []
         for match_pair in matches:
             if len(match_pair) == 2:
                 m, n = match_pair
-                # Adaptive threshold based on image content
-                adaptive_threshold = 0.75
-                if m.distance < adaptive_threshold * n.distance:
+                if m.distance < 0.7 * n.distance:
                     good_matches.append(m)
 
         num_matches = len(good_matches)
@@ -410,94 +357,55 @@ class MonocularSLAM:
                 self.current_pose = predicted_pose
                 tracking_quality = 0.1
                 self.lost_frames += 1
-                logging.debug(f"Low tracking: {num_matches} matches (using motion prediction)")
         else:
             # Good tracking - estimate pose from features
-            if len(good_matches) >= 5:  # Need at least 5 points for Essential matrix
-                # Get matched points
-                pts_current = np.float32([keypoints[m.queryIdx].pt for m in good_matches])
-                pts_last = np.float32([self.last_keypoints[m.trainIdx].pt for m in good_matches])
+            if len(good_matches) >= 5:  # Need at least 5 points for PnP
+                # Get 3D-2D correspondences
+                object_points = []
+                image_points = []
+                for m in good_matches:
+                    if m.trainIdx in self.map_points:
+                        object_points.append(self.map_points[m.trainIdx].position)
+                        image_points.append(keypoints[m.queryIdx].pt)
 
-                # Estimate essential matrix with RANSAC and better parameters
-                E, mask = cv2.findEssentialMat(
-                    pts_current, pts_last, self.K,
-                    method=cv2.RANSAC, 
-                    prob=0.999, 
-                    threshold=1.0  # Was 0.8, increased for more stability
-                )
+                if len(object_points) >= 5:
+                    object_points = np.float32(object_points)
+                    image_points = np.float32(image_points)
 
-                if E is not None and mask is not None:
-                    # Count inliers
-                    inliers = np.sum(mask)
-                    
-                    if inliers >= self.min_tracked_features:  # Use a configurable threshold
-                        # Recover pose from essential matrix
-                        success, R, t, mask_pose = cv2.recoverPose(
-                            E, pts_current, pts_last, self.K, mask=mask
-                        )
+                    # Estimate pose with PnP
+                    success, rvec, tvec, inliers = cv2.solvePnPRansac(
+                        object_points, image_points, self.K, None,
+                        iterationsCount=100, reprojectionError=self.reprojection_threshold
+                    )
 
-                        if success and t is not None and np.all(np.isfinite(t)):
-                            # Scale estimation for monocular SLAM using depth information
-                            scale = self._estimate_scale_from_depth(
-                                pts_current, pts_last, t.flatten(), depth_map
-                            )
+                    if success:
+                        # Create transformation matrix
+                        R, _ = cv2.Rodrigues(rvec)
+                        T = np.eye(4, dtype=np.float32)
+                        T[:3, :3] = R
+                        T[:3, 3] = tvec.flatten()
 
-                            # Apply scale to translation
-                            t_scaled = t * scale
+                        # Update pose
+                        self.current_pose = T
 
-                            # Create transformation matrix
-                            T = np.eye(4, dtype=np.float32)
-                            T[:3, :3] = R
-                            T[:3, 3] = t_scaled.flatten()
+                        # Update velocity for motion model
+                        if dt > 0.001:
+                            self._update_velocity(dt)
+                            self.last_pose_update_time = current_time
 
-                            # Update pose (relative to last pose)
-                            new_pose = self.current_pose @ T
+                        # Extract position
+                        position = self.current_pose[:3, 3].tolist()
+                        
+                        # Update statistics
+                        self.tracked_features += len(inliers)
+                        self.total_features += len(good_matches)
 
-                            # Apply temporal consistency check
-                            if self.temporal_consistency_check:
-                                if self._is_pose_consistent(new_pose):
-                                    self.current_pose = new_pose
-                                    # Apply pose smoothing
-                                    self.current_pose = self._smooth_pose(new_pose)
-                                else:
-                                    # Use prediction instead of inconsistent pose
-                                    self.current_pose = predicted_pose
-                                    tracking_quality = 0.4  # Lower quality for inconsistent tracking
-                            else:
-                                # Apply pose smoothing
-                                self.current_pose = self._smooth_pose(new_pose)
-
-                            # Update velocity for motion model
-                            if dt > 0.001:  # Avoid division by zero
-                                self._update_velocity(dt)
-                                self.last_pose_update_time = current_time
-
-                            # Extract position
-                            position = self.current_pose[:3, 3].tolist()
-                            
-                            # Update statistics
-                            self.tracked_features += inliers
-                            self.total_features += len(good_matches)
-
-                            # Tracking quality based on inliers and matches
-                            tracking_quality = min(1.0, (inliers / self.min_matches) * 0.7 + 
-                                                 (len(good_matches) / (self.min_matches * 2)) * 0.3)
-                        else:
-                            # Pose recovery failed
-                            logging.warning(f"Pose recovery failed. Success: {success}, t: {t}. Inliers: {inliers}")
-                            if E is not None:
-                                logging.debug(f"Essential matrix:\n{E}")
-                            self.current_pose = predicted_pose
-                            tracking_quality = 0.3
+                        # Tracking quality based on inliers and matches
+                        tracking_quality = min(1.0, (len(inliers) / self.min_matches) * 0.7 + 
+                                             (len(good_matches) / (self.min_matches * 2)) * 0.3)
                     else:
-                        # Not enough inliers
-                        logging.debug(f"Not enough inliers ({inliers}) to recover pose.")
                         self.current_pose = predicted_pose
                         tracking_quality = 0.3
-                else:
-                    # Essential matrix estimation failed
-                    self.current_pose = predicted_pose
-                    tracking_quality = 0.3
             else:
                 # Not enough matches to estimate pose
                 self.current_pose = predicted_pose
@@ -525,13 +433,16 @@ class MonocularSLAM:
         """
         if depth_map is None:
             # Default scale for monocular SLAM
-            return 0.1  # meters per frame (baseline scale)
+            return 0.1
 
-        # Estimate scale based on depth information
         default_scale = 0.1
         
         if len(pts_current) < 3 or not np.all(np.isfinite(translation)):
             return default_scale
+
+        # Use a sliding window of recent scale estimates
+        if not hasattr(self, 'scale_history'):
+            self.scale_history = deque(maxlen=10)
 
         # Calculate distances in current frame
         current_depths = []
@@ -544,6 +455,8 @@ class MonocularSLAM:
                     current_depths.append(depth)
         
         if not current_depths:
+            if len(self.scale_history) > 0:
+                return np.median(self.scale_history)
             return default_scale
 
         avg_depth = np.mean(current_depths)
@@ -554,19 +467,17 @@ class MonocularSLAM:
             expected_translation = translation_norm * avg_depth
             # Use this to estimate scale
             scale = np.clip(expected_translation, 0.01, 0.5) # Limit scale to reasonable range
-            return scale
+            self.scale_history.append(scale)
+            return np.median(self.scale_history)
+
+        if len(self.scale_history) > 0:
+            return np.median(self.scale_history)
 
         return default_scale
 
     def _is_pose_consistent(self, new_pose: np.ndarray) -> bool:
         """
         Check if the new pose is temporally consistent with previous poses.
-        
-        Args:
-            new_pose: New 4x4 pose matrix
-            
-        Returns:
-            True if pose is consistent, False otherwise
         """
         if len(self.pose_history) < 2:
             return True  # Not enough history to check consistency
@@ -622,15 +533,15 @@ class MonocularSLAM:
             return False
 
         # Always insert if quality is very high but not done recently
-        if tracking_quality > 0.7 and self.frame_count % 50 == 0:
+        if tracking_quality > 0.8 and self.frame_count % 30 == 0:
             return True
 
         # Insert if tracking quality is low and matches are few
-        if tracking_quality < 0.3 and num_matches < self.min_matches:
+        if tracking_quality < 0.4 and num_matches < self.min_matches:
             return True
 
         # Insert if we have enough good matches and quality is decent
-        if num_matches > self.min_matches * 2 and tracking_quality > 0.5:
+        if num_matches > self.min_matches * 3 and tracking_quality > 0.6:
             return True
 
         # Check if camera moved significantly
@@ -640,7 +551,7 @@ class MonocularSLAM:
                 prev_pos = np.array(self.position_history[-2])
                 if np.all(np.isfinite(last_pos)) and np.all(np.isfinite(prev_pos)):
                     displacement = np.linalg.norm(last_pos - prev_pos)
-                    if displacement > 0.3:  # 30cm movement threshold
+                    if displacement > 0.5:  # 50cm movement threshold
                         return True
             except IndexError:
                 pass  # Not enough history
@@ -680,7 +591,6 @@ class MonocularSLAM:
             point_3d = self._pixel_to_3d(kp.pt, depth=avg_depth, pose=self.current_pose)
 
             if not np.all(np.isfinite(point_3d)):
-                logging.warning(f"Skipping non-finite 3D point for keypoint at {kp.pt}")
                 continue
 
             map_point = MapPoint(
@@ -778,94 +688,9 @@ class MonocularSLAM:
             return np.zeros((0, 3))
         return np.array(list(self.position_history))
 
-    def save_map(self, filename: str = None):
-        """
-        Save map to file.
-
-        Args:
-            filename: Output filename (default: auto-generated)
-        """
-        if filename is None:
-            timestamp = int(time.time())
-            filename = f"map_{timestamp}.json"
-
-        filepath = os.path.join(self.map_save_dir, filename)
-
-        # Prepare data
-        map_data = {
-            'timestamp': time.time(),
-            'num_keyframes': len(self.keyframes),
-            'num_map_points': len(self.map_points),
-            'keyframes': [kf.to_dict() for kf in self.keyframes],
-            'map_points': [mp.to_dict() for mp in self.map_points.values()],
-            'camera_matrix': self.K.tolist()
-        }
-
-        # Save
-        with open(filepath, 'w') as f:
-            json.dump(map_data, f, indent=2)
-
-        logging.info(f"Map saved to {filepath}")
-        return filepath
-
-    def load_map(self, filepath: str) -> bool:
-        """
-        Load map from file.
-
-        Args:
-            filepath: Path to map file
-
-        Returns:
-            True if successful
-        """
-        try:
-            with open(filepath, 'r') as f:
-                map_data = json.load(f)
-
-            # Reconstruct map points
-            self.map_points = {}
-            for mp_data in map_data['map_points']:
-                mp = MapPoint(
-                    id=mp_data['id'],
-                    position=np.array(mp_data['position']),
-                    descriptor=np.array(mp_data['descriptor'], dtype=np.uint8),
-                    observations=mp_data['observations']
-                )
-                self.map_points[mp.id] = mp
-
-            # Reconstruct keyframes
-            self.keyframes = []
-            for kf_data in map_data['keyframes']:
-                # Reconstruct keypoints
-                keypoints = [
-                    cv2.KeyPoint(x=pt[0], y=pt[1], size=pt[2], angle=pt[3])
-                    for pt in kf_data['keypoints']
-                ]
-
-                kf = KeyFrame(
-                    id=kf_data['id'],
-                    timestamp=kf_data['timestamp'],
-                    pose=np.array(kf_data['pose']),
-                    keypoints=keypoints,
-                    descriptors=np.array(kf_data['descriptors'], dtype=np.uint8)
-                )
-                self.keyframes.append(kf)
-
-            self.is_initialized = True
-            self.next_point_id = max(self.map_points.keys()) + 1 if self.map_points else 0
-            self.next_keyframe_id = len(self.keyframes)
-
-            logging.info(f"Map loaded: {len(self.keyframes)} keyframes, {len(self.map_points)} points")
-            return True
-
-        except Exception as e:
-            logging.error(f"Failed to load map: {e}")
-            return False
-
     def _predict_pose(self, dt: float) -> np.ndarray:
         """
-        Predict next pose using constant velocity motion model.
-        No IMU needed - uses previous motion.
+        Predict next pose using a Kalman filter-based motion model.
 
         Args:
             dt: Time since last update
@@ -873,28 +698,40 @@ class MonocularSLAM:
         Returns:
             Predicted 4x4 pose matrix
         """
-        if not np.all(np.isfinite(self.velocity)):
-            logging.warning("Non-finite velocity in prediction, returning current pose.")
-            return self.current_pose.copy()
+        if not hasattr(self, 'kalman_filter'):
+            # Initialize Kalman filter
+            self.kalman_filter = cv2.KalmanFilter(18, 6, 0)
+            self.kalman_filter.transitionMatrix = np.eye(18, dtype=np.float32)
+            for i in range(6):
+                self.kalman_filter.transitionMatrix[i, i+6] = dt
+                self.kalman_filter.transitionMatrix[i+6, i+12] = dt
+            self.kalman_filter.measurementMatrix = np.zeros((6, 18), dtype=np.float32)
+            for i in range(6):
+                self.kalman_filter.measurementMatrix[i, i] = 1
+            self.kalman_filter.processNoiseCov = np.eye(18, dtype=np.float32) * 1e-5
+            self.kalman_filter.measurementNoiseCov = np.eye(6, dtype=np.float32) * 1e-4
+            self.kalman_filter.errorCovPost = np.eye(18, dtype=np.float32)
 
-        # Predict translation
-        predicted_pose = self.current_pose.copy()
-        translation_delta = self.velocity[:3] * dt
-        predicted_pose[:3, 3] += translation_delta
+            # Initialize state
+            self.kalman_filter.statePost = np.zeros(18, dtype=np.float32)
+            self.kalman_filter.statePost[0:3] = self.current_pose[:3, 3]
+            rvec, _ = cv2.Rodrigues(self.current_pose[:3, :3])
+            self.kalman_filter.statePost[3:6] = rvec.flatten()
 
-        # Predict rotation (small angle approximation)
-        angular_velocity_norm = np.linalg.norm(self.velocity[3:])
-        if angular_velocity_norm > 1e-6:
-            angle = angular_velocity_norm * dt
-            axis = self.velocity[3:] / angular_velocity_norm
+        # Predict
+        predicted_state = self.kalman_filter.predict()
 
-            # Rodrigues rotation formula
-            K = np.array([[0, -axis[2], axis[1]],
-                         [axis[2], 0, -axis[0]],
-                         [-axis[1], axis[0], 0]])
-            R_delta = np.eye(3) + np.sin(angle) * K + (1 - np.cos(angle)) * (K @ K)
+        # Update transition matrix with new dt
+        for i in range(6):
+            self.kalman_filter.transitionMatrix[i, i+6] = dt
+            self.kalman_filter.transitionMatrix[i+6, i+12] = dt
 
-            predicted_pose[:3, :3] = predicted_pose[:3, :3] @ R_delta
+        # Create predicted pose
+        predicted_pose = np.eye(4, dtype=np.float32)
+        predicted_pose[:3, 3] = predicted_state[0:3].flatten()
+        rvec = predicted_state[3:6].flatten()
+        R, _ = cv2.Rodrigues(rvec)
+        predicted_pose[:3, :3] = R
 
         return predicted_pose
 
@@ -914,13 +751,11 @@ class MonocularSLAM:
             prev_pos = np.array(self.position_history[-2])
 
             if not np.all(np.isfinite(current_pos)) or not np.all(np.isfinite(prev_pos)):
-                logging.warning("Non-finite position in velocity update, skipping.")
                 return
             
             linear_vel = (current_pos - prev_pos) / dt
 
             if not np.all(np.isfinite(linear_vel)):
-                logging.warning(f"Non-finite linear velocity calculated, resetting to zero.")
                 linear_vel = np.zeros(3)
 
             # Exponential moving average for smoothing
@@ -936,7 +771,6 @@ class MonocularSLAM:
             curr_rot = self.current_pose[:3, :3]
 
             if not np.all(np.isfinite(prev_rot)) or not np.all(np.isfinite(curr_rot)):
-                logging.warning("Non-finite rotation in velocity update, skipping.")
                 return
             
             # Compute rotation difference
@@ -944,13 +778,11 @@ class MonocularSLAM:
             try:
                 rot_vec = cv2.Rodrigues(rot_diff)[0].flatten()
             except cv2.error:
-                logging.warning("Failed to compute Rodrigues vector, skipping angular velocity update.")
                 return
             
             angular_vel = rot_vec / dt
 
             if not np.all(np.isfinite(angular_vel)):
-                logging.warning("Non-finite angular velocity calculated, resetting to zero.")
                 angular_vel = np.zeros(3)
             
             # Apply smoothing to angular velocity as well
@@ -959,7 +791,6 @@ class MonocularSLAM:
     def _smooth_pose(self, new_pose: np.ndarray) -> np.ndarray:
         """
         Apply pose smoothing with rotation handling.
-        Reduces jitter without IMU.
 
         Args:
             new_pose: Newly estimated pose
@@ -979,14 +810,12 @@ class MonocularSLAM:
         R_diff = np.dot(R_new, R_old.T)
 
         if not np.all(np.isfinite(R_diff)):
-            logging.warning("Non-finite rotation difference in pose smoothing. Returning unsmoothed pose.")
             return new_pose
         
         # Convert to axis-angle representation and blend
         angle, axis = self._matrix_to_axis_angle(R_diff)
 
         if not np.isfinite(angle) or not np.all(np.isfinite(axis)):
-            logging.warning("Non-finite angle or axis in pose smoothing. Returning unsmoothed pose.")
             return new_pose
         
         # Apply blending to the rotation
@@ -1001,12 +830,6 @@ class MonocularSLAM:
     def _matrix_to_axis_angle(self, R: np.ndarray) -> Tuple[float, np.ndarray]:
         """
         Convert rotation matrix to axis-angle representation.
-        
-        Args:
-            R: 3x3 rotation matrix
-            
-        Returns:
-            Tuple of (angle, axis)
         """
         # Calculate rotation angle
         angle = np.arccos(np.clip((np.trace(R) - 1) / 2, -1, 1))
@@ -1030,13 +853,6 @@ class MonocularSLAM:
     def _axis_angle_to_matrix(self, axis: np.ndarray, angle: float) -> np.ndarray:
         """
         Convert axis-angle representation to rotation matrix (Rodrigues formula).
-        
-        Args:
-            axis: 3D rotation axis (normalized)
-            angle: Rotation angle in radians
-            
-        Returns:
-            3x3 rotation matrix
         """
         norm = np.linalg.norm(axis)
         if np.isclose(norm, 0):
@@ -1051,19 +867,6 @@ class MonocularSLAM:
         R = np.eye(3) + np.sin(angle) * K + (1 - np.cos(angle)) * (K @ K)
         
         return R
-
-    def reset(self):
-        """Reset SLAM to initial state."""
-        self.map_points = {}
-        self.keyframes = []
-        self.current_pose = np.eye(4, dtype=np.float32)
-        self.next_point_id = 0
-        self.next_keyframe_id = 0
-        self.is_initialized = False
-        self.position_history.clear()
-        self.velocity = np.zeros(6)
-        self.smoothed_pose = np.eye(4, dtype=np.float32)
-        logging.info("SLAM reset")
 
     def get_movement_summary(self) -> Dict:
         """Get summary of movement and trajectory for visualization with enhanced accuracy."""
@@ -1168,18 +971,6 @@ class MonocularSLAM:
             'displacement_magnitude': 0.0
         }
 
-    def _empty_result(self) -> Dict:
-        """Return empty result when SLAM is disabled or fails."""
-        return {
-            'pose': np.eye(4, dtype=np.float32),
-            'position': [0, 0, 0],
-            'tracking_quality': 0.0,
-            'num_matches': 0,
-            'is_keyframe': False,
-            'num_map_points': 0,
-            'relative_movement': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        }
-
     def visualize_tracking(self, frame: np.ndarray, tracking_result: Dict) -> np.ndarray:
         """
         Simplified visualization of SLAM tracking on frame with movement information.
@@ -1192,12 +983,41 @@ class MonocularSLAM:
             Annotated frame
         """
         vis_frame = frame.copy()
-
+        
         # Draw features if available
         if self.last_keypoints:
             for kp in self.last_keypoints[:50]:  # Draw top 50 features
                 x, y = int(kp.pt[0]), int(kp.pt[1])
                 cv2.circle(vis_frame, (x, y), 2, (0, 255, 0), -1)
+
+        # Draw SLAM status information
+        h, w = vis_frame.shape[:2]
+        
+        # Position
+        position = tracking_result.get('position', [0, 0, 0])
+        cv2.putText(vis_frame, f"Pos: ({position[0]:.2f}, {position[1]:.2f}, {position[2]:.2f})", 
+                   (w - 200, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+        
+        # Quality
+        quality = tracking_result.get('tracking_quality', 0.0)
+        quality_color = (0, 255, 0) if quality > 0.7 else (0, 165, 255) if quality > 0.4 else (0, 0, 255)
+        cv2.putText(vis_frame, f"Quality: {quality:.2f}", 
+                   (w - 200, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.4, quality_color, 1)
+        
+        # Number of matches
+        num_matches = tracking_result.get('num_matches', 0)
+        cv2.putText(vis_frame, f"Matches: {num_matches}", 
+                   (w - 200, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+        
+        # Number of map points
+        num_map_points = tracking_result.get('num_map_points', 0)
+        cv2.putText(vis_frame, f"Map Points: {num_map_points}", 
+                   (w - 200, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+        
+        # Keyframe indicator
+        if tracking_result.get('is_keyframe', False):
+            cv2.putText(vis_frame, "KEYFRAME", 
+                       (w - 200, 110), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 255), 1)
 
         return vis_frame
 
@@ -1294,3 +1114,15 @@ class MonocularSLAM:
                    (20, 75), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
         
         return vis_map
+
+    def _empty_result(self) -> Dict:
+        """Return empty result when SLAM is disabled or fails."""
+        return {
+            'pose': np.eye(4, dtype=np.float32),
+            'position': [0, 0, 0],
+            'tracking_quality': 0.0,
+            'num_matches': 0,
+            'is_keyframe': False,
+            'num_map_points': 0,
+            'relative_movement': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        }

@@ -46,6 +46,10 @@ class OccupancyGrid:
 
     def world_to_grid(self, world_pos: np.ndarray) -> Tuple[int, int]:
         """Convert world coordinates to grid indices."""
+        if not np.all(np.isfinite(world_pos)):
+            logging.warning(f"Received non-finite world position: {world_pos}. Returning default grid position.")
+            return (self.width // 2, self.height // 2)  # Return center of the grid
+
         x = int((world_pos[0] - self.origin_x) / self.resolution)
         y = int((world_pos[1] - self.origin_y) / self.resolution)
         return (x, y)
@@ -82,16 +86,23 @@ class OccupancyGrid:
             detections: List of detected objects with positions
             camera_pos: Current camera position [x, y, z]
         """
+        if not np.all(np.isfinite(camera_pos)):
+            logging.warning(f"Invalid camera position: {camera_pos}. Skipping occupancy grid update.")
+            return
+
         # Mark obstacles in grid
         for det in detections:
             depth = det.get('depth', 0)
-            if depth == 0 or depth > 5.0:  # Skip invalid or far objects
+            if depth == 0 or depth > 5.0 or not np.isfinite(depth):  # Skip invalid or far objects
                 continue
 
             # Estimate object position (simplified - assumes object is in front of camera)
             obj_x = camera_pos[0] + depth  # Simplified: assumes facing +X
             obj_y = camera_pos[1]
             obj_pos = np.array([obj_x, obj_y, 0])
+
+            if not np.all(np.isfinite(obj_pos)):
+                continue
 
             # Mark as occupied
             grid_pos = self.world_to_grid(obj_pos)
@@ -107,6 +118,10 @@ class OccupancyGrid:
 
     def clear_around_position(self, world_pos: np.ndarray, radius: float = 0.5):
         """Clear grid cells around a position (assumed free space)."""
+        if not np.all(np.isfinite(world_pos)):
+            logging.warning(f"Invalid world position for clearing: {world_pos}. Skipping.")
+            return
+
         grid_pos = self.world_to_grid(world_pos)
         cell_radius = int(radius / self.resolution)
 
@@ -169,6 +184,9 @@ class AStarPlanner:
         if self.grid.is_occupied(start) or self.grid.is_occupied(goal):
             logging.warning("Start or goal position occupied")
             return None
+
+        if start == goal:
+            return [start]
 
         # Priority queue: (f_score, counter, position)
         open_set = [(0, 0, start)]
@@ -254,6 +272,10 @@ class IndoorNavigator:
         # Get current position
         position = np.array(slam_result['position'])
 
+        if not np.all(np.isfinite(position)):
+            logging.warning(f"Received non-finite position from SLAM: {position}. Skipping navigation update.")
+            return
+
         # Update occupancy grid
         self.occupancy_grid.clear_around_position(position, radius=0.5)
         self.occupancy_grid.update_from_detections(detections, position)
@@ -299,6 +321,10 @@ class IndoorNavigator:
         # Get current position from SLAM
         current_pos = self.slam.get_position()
 
+        if not np.all(np.isfinite(current_pos)):
+            logging.error(f"Cannot plan path with non-finite start position: {current_pos}")
+            return False
+
         # Convert to grid coordinates
         start_grid = self.occupancy_grid.world_to_grid(current_pos)
         goal_grid = self.occupancy_grid.world_to_grid(self.current_goal.position)
@@ -318,6 +344,10 @@ class IndoorNavigator:
     def _check_and_replan(self, current_pos: np.ndarray):
         """Check if current path is blocked and replan if needed."""
         if not self.current_path or self.path_index >= len(self.current_path):
+            return
+
+        if not np.all(np.isfinite(current_pos)):
+            logging.warning("Cannot check for replan with non-finite position.")
             return
 
         # Check next few waypoints for obstacles
@@ -340,6 +370,10 @@ class IndoorNavigator:
 
         # Get current position
         current_pos = self.slam.get_position()
+        if not np.all(np.isfinite(current_pos)):
+            logging.warning("Cannot get navigation guidance with non-finite position.")
+            return "Current position is unknown."
+
         current_grid = self.occupancy_grid.world_to_grid(current_pos)
 
         # Check if we reached goal
@@ -391,6 +425,10 @@ class IndoorNavigator:
         if position is None:
             position = self.slam.get_position()
 
+        if not np.all(np.isfinite(position)):
+            logging.error(f"Attempted to save non-finite position for location '{name}'. Location not saved.")
+            return
+
         self.saved_locations[name] = position.copy()
         logging.info(f"Location saved: {name} at {position}")
 
@@ -423,11 +461,12 @@ class IndoorNavigator:
 
         # Draw current position
         current_pos = self.slam.get_position()
-        current_grid = self.occupancy_grid.world_to_grid(current_pos)
-        cv2.circle(grid_bgr, current_grid, 5, (0, 255, 0), -1)  # Green
+        if np.all(np.isfinite(current_pos)):
+            current_grid = self.occupancy_grid.world_to_grid(current_pos)
+            cv2.circle(grid_bgr, current_grid, 5, (0, 255, 0), -1)  # Green
 
         # Draw goal if exists
-        if self.current_goal:
+        if self.current_goal and np.all(np.isfinite(self.current_goal.position)):
             goal_grid = self.occupancy_grid.world_to_grid(self.current_goal.position)
             cv2.circle(grid_bgr, goal_grid, 5, (0, 0, 255), -1)  # Red
 
