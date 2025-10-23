@@ -324,13 +324,31 @@ class OrbyGlasses:
                     priority = AudioPriorityManager.PRIORITY_CRITICAL if 'STOP' in audio_msg else AudioPriorityManager.PRIORITY_MEDIUM
                     self.audio_manager.speak(audio_msg, priority=(priority >= 8))
 
-                # Display
+                # Display main window
                 cv2.imshow('OrbyGlasses', result['annotated_frame'])
 
-                # Show SLAM if enabled
+                # Show depth map
+                if result['depth_map'] is not None:
+                    depth_map = result['depth_map']
+                    # Convert to colorful visualization
+                    depth_colored = cv2.applyColorMap(
+                        (depth_map * 255).astype(np.uint8),
+                        cv2.COLORMAP_MAGMA
+                    )
+                    cv2.imshow('Depth Map', depth_colored)
+
+                # Show SLAM map (top-down view like robots)
                 if self.slam_enabled and result['slam_result']:
-                    slam_vis = self.slam.visualize_tracking(frame, result['slam_result'])
-                    cv2.imshow('SLAM', slam_vis)
+                    # Import map viewer if not already
+                    if not hasattr(self, 'slam_map_viewer'):
+                        from slam_map_viewer import SLAMMapViewer
+                        self.slam_map_viewer = SLAMMapViewer(map_size=600, meters_per_pixel=0.02)
+                        self.slam_map_viewer.draw_grid(grid_spacing=1.0)
+
+                    # Update and show map
+                    self.slam_map_viewer.update(result['slam_result'], self.slam.map_points)
+                    map_image = self.slam_map_viewer.get_map_image()
+                    cv2.imshow('SLAM Map (Top View)', map_image)
 
                 # Check for quit
                 key = cv2.waitKey(1) & 0xFF
