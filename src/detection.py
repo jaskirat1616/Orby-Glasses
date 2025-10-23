@@ -225,9 +225,6 @@ class DepthEstimator:
         """Fast depth estimation with optimizations."""
         from PIL import Image
 
-        # Store original size for later
-        original_h, original_w = frame.shape[:2]
-
         # Resize frame for depth model (maintain aspect ratio)
         max_res = self.max_resolution
         h, w = frame.shape[:2]
@@ -253,10 +250,8 @@ class DepthEstimator:
         else:
             depth_map = np.zeros_like(depth_map)
 
-        # Resize back to original frame size with NEAREST for sharper result
-        if depth_map.shape[0] != original_h or depth_map.shape[1] != original_w:
-            depth_map = cv2.resize(depth_map, (original_w, original_h), interpolation=cv2.INTER_NEAREST)
-
+        # Keep depth at native model resolution (don't upscale - causes blur)
+        # Resize only happens once for display, maintaining sharpness
         return depth_map
 
     def _fallback_depth(self, frame: np.ndarray) -> np.ndarray:
@@ -273,13 +268,14 @@ class DepthEstimator:
         depth = depth.astype(np.float32) / 255.0
         return depth
 
-    def get_depth_at_bbox(self, depth_map: np.ndarray, bbox: List[float]) -> float:
+    def get_depth_at_bbox(self, depth_map: np.ndarray, bbox: List[float], frame_size: tuple = None) -> float:
         """
         Get estimated depth from depth map at bbox location with outlier filtering.
 
         Args:
             depth_map: Depth map (normalized 0-1, where higher values = farther)
-            bbox: [x1, y1, x2, y2]
+            bbox: [x1, y1, x2, y2] in frame coordinates
+            frame_size: (width, height) of original frame for scaling
 
         Returns:
             Estimated depth in meters
@@ -287,14 +283,29 @@ class DepthEstimator:
         if depth_map is None:
             return 10.0
 
-        x1, y1, x2, y2 = map(int, bbox)
+        x1, y1, x2, y2 = bbox
+
+        # Get depth map dimensions
+        depth_h, depth_w = depth_map.shape
+
+        # Scale bbox to depth map coordinates if frame size is different
+        if frame_size is not None:
+            frame_w, frame_h = frame_size
+            if depth_w != frame_w or depth_h != frame_h:
+                scale_x = depth_w / frame_w
+                scale_y = depth_h / frame_h
+                x1 = int(x1 * scale_x)
+                x2 = int(x2 * scale_x)
+                y1 = int(y1 * scale_y)
+                y2 = int(y2 * scale_y)
+        else:
+            x1, y1, x2, y2 = map(int, bbox)
 
         # Ensure coordinates are within bounds
-        h, w = depth_map.shape
-        x1 = max(0, min(x1, w-1))
-        x2 = max(0, min(x2, w-1))
-        y1 = max(0, min(y1, h-1))
-        y2 = max(0, min(y2, h-1))
+        x1 = max(0, min(x1, depth_w-1))
+        x2 = max(0, min(x2, depth_w-1))
+        y1 = max(0, min(y1, depth_h-1))
+        y2 = max(0, min(y2, depth_h-1))
 
         # Extract depth in bbox region
         depth_region = depth_map[y1:y2, x1:x2]
@@ -411,9 +422,10 @@ class DetectionPipeline:
 
         # Add depth to detections
         if depth_map is not None:
+            frame_size = (frame.shape[1], frame.shape[0])  # (width, height)
             for detection in detections:
                 bbox = detection['bbox']
-                depth = self.depth_estimator.get_depth_at_bbox(depth_map, bbox)
+                depth = self.depth_estimator.get_depth_at_bbox(depth_map, bbox, frame_size)
                 detection['depth'] = depth
                 detection['is_danger'] = depth < self.min_safe_distance
         else:

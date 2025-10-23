@@ -147,9 +147,10 @@ class OrbyGlasses:
 
             # 3. ADD DEPTH TO DETECTIONS
             if depth_map is not None:
+                frame_size = (frame.shape[1], frame.shape[0])  # (width, height)
                 for det in detections:
                     bbox = det['bbox']
-                    depth = self.detection_pipeline.depth_estimator.get_depth_at_bbox(depth_map, bbox)
+                    depth = self.detection_pipeline.depth_estimator.get_depth_at_bbox(depth_map, bbox, frame_size)
                     det['depth'] = depth
             else:
                 for det in detections:

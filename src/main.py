@@ -295,9 +295,10 @@ class OrbyGlasses:
 
             # Add depth to detections
             if depth_map is not None:
+                frame_size = (frame.shape[1], frame.shape[0])  # (width, height)
                 for detection in detections:
                     bbox = detection['bbox']
-                    depth = self.detection_pipeline.depth_estimator.get_depth_at_bbox(depth_map, bbox)
+                    depth = self.detection_pipeline.depth_estimator.get_depth_at_bbox(depth_map, bbox, frame_size)
                     detection['depth'] = depth
                     detection['is_danger'] = depth < self.detection_pipeline.min_safe_distance
             else:
