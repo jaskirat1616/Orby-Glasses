@@ -4,7 +4,7 @@
 # Camera/Video Source Settings - Optimized for Performance
 camera:
   # Source: 0 for built-in webcam, or URL for IP camera
-  source: 1
+  source: 0
   width: 416  # Optimized size for YOLO (416x416 is optimal for YOLOv12)
   height: 416  # Square aspect ratio for best performance
   fps: 30  # Higher FPS for smoother navigation
@@ -37,7 +37,7 @@ models:
 
 # Conversational Navigation - Simple voice commands
 conversation:
-  enabled: true                      # Enable conversational mode
+  enabled: false                     # Disabled for speed
   model: "gemma3:4b"              # LLM model for conversations
   temperature: 0.7                   # Response creativity (0-1)
   max_tokens: 200                    # Maximum response length
@@ -106,7 +106,7 @@ safety:
 
 # Logging Settings
 logging:
-  level: "DEBUG"              # DEBUG, INFO, WARNING, ERROR, CRITICAL - Changed to DEBUG for performance analysis
+  level: "WARNING"            # WARNING for speed (less logging)
   log_file: "data/logs/orbyglass.log"
   save_detections: true      # Log detection data for analysis
   save_frames: false         # Save frames (uses lots of space)
@@ -117,7 +117,7 @@ performance:
   danger_audio_interval: 0.8      # Very fast alerts for danger zone objects
   stats_interval: 100             # Less frequent logging for performance
   max_detections: 5               # Focus on top 5 most relevant objects
-  depth_skip_frames: 1            # Calculate depth every 2nd frame (better accuracy)
+  depth_skip_frames: 3            # Calculate depth every 4th frame (faster)
   frame_skip: 0                   # Process every frame for maximum responsiveness
   enable_multithreading: true     # Use multithreading for parallel processing
   cache_depth_maps: true          # Cache depth maps for speed
@@ -139,16 +139,16 @@ slam:
   grid_size: [300, 300]           # High resolution grid for accuracy
   grid_resolution: 0.2             # High resolution for detailed mapping
   save_maps: true                 # Save maps for later reuse
-  visualize: true                 # Show SLAM visualization window
-  show_map_creation: true         # Show map being created in real-time
-  show_camera_trajectory: true    # Show camera path
-  show_keyframes: true            # Show keyframe positions
-  show_landmarks: true            # Show detected landmarks
+  visualize: false                # Disabled for speed
+  show_map_creation: false        # Disabled for speed
+  show_camera_trajectory: false   # Disabled for speed
+  show_keyframes: false           # Disabled for speed
+  show_landmarks: false           # Disabled for speed
 
   # High accuracy tracking without IMU
-  orb_features: 1000              # Good number of features
-  fast_threshold: 5               # Lower threshold for more features (better for low-res)
-  min_matches: 15                 # More matches for stability
+  orb_features: 500               # Fewer features for speed
+  fast_threshold: 10              # Higher threshold for speed
+  min_matches: 10                 # Fewer matches needed
   motion_model: true              # Use constant velocity model
   pose_smoothing: 0.8             # Strong smoothing for stability
   temporal_consistency_check: true # Check for physically impossible movements
@@ -162,10 +162,10 @@ slam:
   max_depth: 15.0                 # Extended depth range
   depth_variance: 0.02            # Lower variance for accuracy
   pose_alpha: 0.8                 # Strong smoothing factor
-  loop_closure: true              # Enable loop closure for accuracy
+  loop_closure: false             # Disabled for speed
   loop_closure_threshold: 0.7     # Higher threshold for better loop closure
-  bundle_adjustment: true         # Enable bundle adjustment for accuracy
-  ba_interval: 5                  # More frequent bundle adjustment
+  bundle_adjustment: false        # Disabled for speed (too slow)
+  ba_interval: 10                 # Less frequent
 
 # Indoor Navigation Settings
 indoor_navigation:
@@ -184,7 +184,7 @@ trajectory_prediction:
 
 # 3D Occupancy Grid Settings - Balanced Accuracy and Speed
 occupancy_grid_3d:
-  enabled: true                   # Enable voxel grid visualization
+  enabled: false                  # Disabled for speed (too slow)
   grid_size: [10.0, 10.0, 3.0]    # Smaller grid for speed
   resolution: 0.1                 # Good balance
   near_resolution: 0.05           # High resolution for close objects
