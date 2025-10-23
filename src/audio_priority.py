@@ -135,12 +135,13 @@ class AudioPriorityManager:
 
         return highest_priority_msg.message
 
-    def create_safety_message(self, warnings: List[Dict]) -> Optional[Dict]:
+    def create_safety_message(self, warnings: List[Dict], detections: List[Dict] = None) -> Optional[Dict]:
         """
-        Create prioritized safety message from warnings.
+        Create prioritized safety message from warnings with tracking intelligence.
 
         Args:
             warnings: List of safety warnings
+            detections: Full detections for context (optional)
 
         Returns:
             Message dict with priority or None
@@ -154,12 +155,25 @@ class AudioPriorityManager:
         obj = top_warning['object']
         dist = top_warning['distance']
 
+        # Get tracking info if available
+        is_approaching = False
+        is_moving = False
+        if detections:
+            for det in detections:
+                if det.get('label') == obj and abs(det.get('depth', 10) - dist) < 0.5:
+                    is_approaching = det.get('is_approaching', False)
+                    is_moving = det.get('is_moving', False)
+                    break
+
         # Determine priority and message
         if level == 'IMMEDIATE_DANGER':
             # Critical - immediate threat
             position = self._get_position_description(top_warning['position'])
+            msg = f"STOP! {obj} {position} at {dist:.1f} meters"
+            if is_approaching:
+                msg += " - approaching!"
             return {
-                'message': f"STOP! {obj} {position} at {dist:.1f} meters",
+                'message': msg,
                 'priority': self.PRIORITY_CRITICAL,
                 'category': 'danger'
             }
@@ -167,16 +181,27 @@ class AudioPriorityManager:
         elif level == 'DANGER':
             # High priority - close obstacle
             position = self._get_position_description(top_warning['position'])
+            msg = f"Caution: {obj} {position}, {dist:.1f} meters"
+            if is_approaching:
+                msg = f"Warning: {obj} approaching {position}, {dist:.1f} meters"
+                priority = self.PRIORITY_CRITICAL  # Upgrade if approaching
+            else:
+                priority = self.PRIORITY_HIGH
+
             return {
-                'message': f"Caution: {obj} {position}, {dist:.1f} meters away",
-                'priority': self.PRIORITY_HIGH,
+                'message': msg,
+                'priority': priority,
                 'category': 'warning'
             }
 
         elif level == 'CAUTION':
             # Medium priority - obstacle ahead but not immediate
+            msg = f"{obj} detected {dist:.1f} meters ahead"
+            if is_moving:
+                msg = f"{obj} moving, {dist:.1f} meters away"
+
             return {
-                'message': f"{obj} detected {dist:.1f} meters ahead",
+                'message': msg,
                 'priority': self.PRIORITY_MEDIUM,
                 'category': 'warning'
             }

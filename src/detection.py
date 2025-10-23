@@ -266,7 +266,7 @@ class DepthEstimator:
 
     def get_depth_at_bbox(self, depth_map: np.ndarray, bbox: List[float]) -> float:
         """
-        Get estimated depth from depth map at bbox location.
+        Get estimated depth from depth map at bbox location with outlier filtering.
 
         Args:
             depth_map: Depth map (normalized 0-1, where higher values = farther)
@@ -293,20 +293,40 @@ class DepthEstimator:
         if depth_region.size == 0:
             return 10.0
 
-        # Get median depth in the region (more stable than mean)
-        median_depth = np.median(depth_region)
+        # Use center region for more accurate depth (avoid edges)
+        h_region, w_region = depth_region.shape
+        if h_region > 10 and w_region > 10:
+            h_pad = h_region // 4
+            w_pad = w_region // 4
+            center_region = depth_region[h_pad:-h_pad, w_pad:-w_pad]
+            if center_region.size > 0:
+                depth_region = center_region
+
+        # Remove outliers using IQR method
+        q1 = np.percentile(depth_region, 25)
+        q3 = np.percentile(depth_region, 75)
+        iqr = q3 - q1
+        lower_bound = q1 - 1.5 * iqr
+        upper_bound = q3 + 1.5 * iqr
+
+        # Filter outliers
+        filtered = depth_region[(depth_region >= lower_bound) & (depth_region <= upper_bound)]
+
+        # Get median depth (robust to remaining outliers)
+        if filtered.size > 0:
+            median_depth = np.median(filtered)
+        else:
+            median_depth = np.median(depth_region)
 
         # Convert normalized depth (0-1) to meters
-        # Depth Anything V2 gives relative depth (higher = farther)
         # Better calibration: 0 (very close) -> 0.2m, 1 (far) -> 10m
-        # More accurate mapping for indoor navigation
         depth_meters = 0.2 + (median_depth * 9.8)
 
         return float(np.clip(depth_meters, 0.2, 10.0))
 
 
 class DetectionPipeline:
-    """Combined detection and depth estimation pipeline with safety system."""
+    """Combined detection and depth estimation pipeline with safety system and tracking."""
 
     def __init__(self, config):
         """
@@ -343,6 +363,15 @@ class DetectionPipeline:
             logging.warning(f"Safety system initialization failed: {e}, using basic safety")
             self.safety_system = None
 
+        # Initialize object tracker for temporal consistency
+        try:
+            from object_tracker import ObjectTracker
+            self.object_tracker = ObjectTracker(max_distance=50.0, max_depth_diff=1.0)
+            logging.info("Object tracker initialized")
+        except Exception as e:
+            logging.warning(f"Object tracker initialization failed: {e}")
+            self.object_tracker = None
+
     def process_frame(self, frame: np.ndarray, current_fps: float = 15.0) -> Tuple[List[Dict], Optional[np.ndarray], List[Dict]]:
         """
         Process frame through detection and depth estimation with safety checks.
@@ -372,6 +401,17 @@ class DetectionPipeline:
             for detection in detections:
                 detection['depth'] = 0.0
                 detection['is_danger'] = False
+
+        # Apply object tracking for temporal consistency
+        if self.object_tracker:
+            try:
+                detections = self.object_tracker.update(detections)
+                # Use smoothed depth from tracking
+                for det in detections:
+                    if 'smoothed_depth' in det and det['frames_tracked'] > 2:
+                        det['depth'] = det['smoothed_depth']  # More accurate
+            except Exception as e:
+                logging.error(f"Object tracking error: {e}")
 
         # Apply safety system calibration and get warnings
         safety_warnings = []
