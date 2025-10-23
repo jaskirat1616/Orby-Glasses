@@ -134,17 +134,23 @@ class MinimalUI:
 
         # Draw robot position
         if slam_result:
-            pos = slam_result.get('position', [0, 0, 0])
-            robot_x = int(center + pos[0] * scale)
-            robot_y = int(center - pos[2] * scale)
+            try:
+                pos = slam_result.get('position', [0, 0, 0])
+                robot_x = int(float(center + pos[0] * scale))
+                robot_y = int(float(center - pos[2] * scale))
 
-            # Robot marker
-            cv2.circle(map_img, (robot_x, robot_y), 8, (0, 255, 0), -1)
-            cv2.circle(map_img, (robot_x, robot_y), 12, (0, 255, 0), 2)
+                # Make sure coordinates are valid
+                if 0 <= robot_x < size and 0 <= robot_y < size:
+                    # Robot marker
+                    cv2.circle(map_img, (robot_x, robot_y), 8, (0, 255, 0), -1)
+                    cv2.circle(map_img, (robot_x, robot_y), 12, (0, 255, 0), 2)
 
-            # Direction indicator
-            cv2.arrowedLine(map_img, (robot_x, robot_y),
-                          (robot_x, robot_y - 20), (0, 255, 0), 2)
+                    # Direction indicator
+                    end_y = max(0, min(size - 1, robot_y - 20))
+                    cv2.arrowedLine(map_img, (robot_x, robot_y),
+                                  (robot_x, end_y), (0, 255, 0), 2)
+            except (ValueError, TypeError):
+                pass  # Skip if position data is invalid
 
         # Title
         cv2.putText(map_img, "MAP", (10, 25),
