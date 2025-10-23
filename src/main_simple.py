@@ -327,14 +327,23 @@ class OrbyGlasses:
                 # Display main window
                 cv2.imshow('OrbyGlasses', result['annotated_frame'])
 
-                # Show depth map
+                # Show depth map with better visualization
                 if result['depth_map'] is not None:
                     depth_map = result['depth_map']
-                    # Convert to colorful visualization
-                    depth_colored = cv2.applyColorMap(
-                        (depth_map * 255).astype(np.uint8),
-                        cv2.COLORMAP_MAGMA
-                    )
+
+                    # Apply bilateral filter to smooth while preserving edges
+                    depth_for_display = (depth_map * 255).astype(np.uint8)
+                    depth_filtered = cv2.bilateralFilter(depth_for_display, 9, 75, 75)
+
+                    # Convert to colorful visualization with MAGMA colormap
+                    depth_colored = cv2.applyColorMap(depth_filtered, cv2.COLORMAP_MAGMA)
+
+                    # Add depth legend
+                    cv2.putText(depth_colored, "Close", (10, 30),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                    cv2.putText(depth_colored, "Far", (10, depth_colored.shape[0] - 10),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+
                     cv2.imshow('Depth Map', depth_colored)
 
                 # Show SLAM map (top-down view like robots)

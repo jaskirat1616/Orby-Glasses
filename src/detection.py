@@ -222,9 +222,12 @@ class DepthEstimator:
         """Fast depth estimation with optimizations."""
         from PIL import Image
 
-        # Resize frame for faster processing (maintain aspect ratio)
-        # Use higher resolution for better accuracy (480 instead of 320)
-        max_res = 480
+        # Store original size for later
+        original_h, original_w = frame.shape[:2]
+
+        # Resize frame for depth model (maintain aspect ratio)
+        # Use 518x518 for better quality (Depth Anything V2 optimal size)
+        max_res = 518
         h, w = frame.shape[:2]
         if h > max_res or w > max_res:
             scale = min(max_res/h, max_res/w)
@@ -247,6 +250,10 @@ class DepthEstimator:
             depth_map = (depth_map - depth_min) / (depth_max - depth_min)
         else:
             depth_map = np.zeros_like(depth_map)
+
+        # Resize back to original frame size for better visualization
+        if depth_map.shape[0] != original_h or depth_map.shape[1] != original_w:
+            depth_map = cv2.resize(depth_map, (original_w, original_h), interpolation=cv2.INTER_LINEAR)
 
         return depth_map
 

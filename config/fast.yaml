@@ -19,7 +19,7 @@ models:
     path: "depth-anything/Depth-Anything-V2-Small-hf"
     device: "mps"
     half_precision: true
-    max_resolution: 320
+    max_resolution: 518  # Higher resolution for better quality
 
   llm:
     primary: "gemma3:4b"
