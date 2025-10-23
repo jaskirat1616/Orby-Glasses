@@ -28,7 +28,7 @@ class RobotUI:
     def draw_clean_overlay(self, frame: np.ndarray, detections: List[Dict],
                           fps: float, safe_direction: str) -> np.ndarray:
         """
-        Draw clean robot-style overlay.
+        Draw futuristic robot-style overlay - BREAKTHROUGH UI.
 
         Args:
             frame: Input frame
@@ -42,21 +42,26 @@ class RobotUI:
         overlay = frame.copy()
         h, w = frame.shape[:2]
 
-        # Draw center crosshair (robot's focus point)
+        # Calculate scaling factor for larger display
+        scale = max(w / 640, 1.0)
+
+        # Draw enhanced center crosshair (robot's focus point)
         center_x, center_y = w // 2, h // 2
-        cv2.line(overlay, (center_x - 20, center_y), (center_x + 20, center_y),
-                self.GREEN, 1)
-        cv2.line(overlay, (center_x, center_y - 20), (center_x, center_y + 20),
-                self.GREEN, 1)
-        cv2.circle(overlay, (center_x, center_y), 30, self.GREEN, 1)
+        crosshair_size = int(30 * scale)
+        cv2.line(overlay, (center_x - crosshair_size, center_y),
+                (center_x + crosshair_size, center_y), self.GREEN, 2)
+        cv2.line(overlay, (center_x, center_y - crosshair_size),
+                (center_x, center_y + crosshair_size), self.GREEN, 2)
+        cv2.circle(overlay, (center_x, center_y), crosshair_size, self.GREEN, 2)
+        cv2.circle(overlay, (center_x, center_y), crosshair_size + 10, self.GREEN, 1)
 
         # Draw zone indicators (left, center, right)
         left_bound = w // 3
         right_bound = 2 * w // 3
-        cv2.line(overlay, (left_bound, 0), (left_bound, h), self.GRAY, 1)
-        cv2.line(overlay, (right_bound, 0), (right_bound, h), self.GRAY, 1)
+        cv2.line(overlay, (left_bound, 0), (left_bound, h), self.GRAY, 2)
+        cv2.line(overlay, (right_bound, 0), (right_bound, h), self.GRAY, 2)
 
-        # Draw detections with clean boxes
+        # Draw detections with enhanced boxes
         danger_count = 0
         caution_count = 0
 
@@ -69,80 +74,154 @@ class RobotUI:
             label = det.get('label', 'object')
             depth = det.get('depth', 0.0)
 
-            # Color by risk
+            # Color by risk with glow effect
             if depth < 1.0:
                 color = self.RED
                 danger_count += 1
+                thickness = 4
             elif depth < 2.5:
                 color = self.YELLOW
                 caution_count += 1
+                thickness = 3
             else:
                 color = self.GREEN
+                thickness = 2
 
-            # Clean box
-            cv2.rectangle(overlay, (x1, y1), (x2, y2), color, 2)
+            # Enhanced box with corners
+            cv2.rectangle(overlay, (x1, y1), (x2, y2), color, thickness)
 
-            # Label
-            text = f"{label} {depth:.1f}m"
-            cv2.putText(overlay, text, (x1, y1 - 5),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+            # Corner brackets for futuristic look
+            corner_len = int(20 * scale)
+            cv2.line(overlay, (x1, y1), (x1 + corner_len, y1), color, thickness + 1)
+            cv2.line(overlay, (x1, y1), (x1, y1 + corner_len), color, thickness + 1)
+            cv2.line(overlay, (x2, y1), (x2 - corner_len, y1), color, thickness + 1)
+            cv2.line(overlay, (x2, y1), (x2, y1 + corner_len), color, thickness + 1)
 
-        # Top status bar
-        status_h = 60
-        cv2.rectangle(overlay, (0, 0), (w, status_h), self.BLACK, -1)
+            # Large, clear label with background
+            text = f"{label.upper()} {depth:.1f}m"
+            font_scale = 0.9 * scale
+            font_thickness = int(2 * scale)
+            (text_w, text_h), baseline = cv2.getTextSize(
+                text, cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_thickness
+            )
 
-        # FPS indicator
+            # Background for text
+            text_y = max(y1 - 10, text_h + 10)
+            cv2.rectangle(overlay,
+                         (x1, text_y - text_h - 8),
+                         (x1 + text_w + 10, text_y + 5),
+                         color, -1)
+
+            # Text
+            cv2.putText(overlay, text, (x1 + 5, text_y),
+                       cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 0), font_thickness)
+
+        # ENHANCED TOP STATUS BAR - Much larger and clearer
+        status_h = int(80 * scale)
+        # Semi-transparent dark background
+        overlay_bg = overlay.copy()
+        cv2.rectangle(overlay_bg, (0, 0), (w, status_h), self.BLACK, -1)
+        cv2.addWeighted(overlay_bg, 0.7, overlay, 0.3, 0, overlay)
+
+        # Large FPS indicator
         fps_color = self.GREEN if fps > 15 else self.YELLOW if fps > 10 else self.RED
-        cv2.putText(overlay, f"FPS: {fps:.0f}", (10, 30),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.8, fps_color, 2)
+        fps_scale = 1.2 * scale
+        fps_thick = int(3 * scale)
+        cv2.putText(overlay, f"FPS: {fps:.0f}", (int(15 * scale), int(45 * scale)),
+                   cv2.FONT_HERSHEY_SIMPLEX, fps_scale, fps_color, fps_thick)
 
-        # Object counts
-        cv2.putText(overlay, f"DANGER: {danger_count}", (150, 30),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, self.RED if danger_count > 0 else self.WHITE, 2)
-        cv2.putText(overlay, f"CAUTION: {caution_count}", (300, 30),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, self.YELLOW if caution_count > 0 else self.WHITE, 2)
+        # Object counts with larger text
+        count_scale = 0.9 * scale
+        count_thick = int(2 * scale)
+        danger_x = int(200 * scale)
+        cv2.putText(overlay, f"DANGER: {danger_count}", (danger_x, int(45 * scale)),
+                   cv2.FONT_HERSHEY_SIMPLEX, count_scale,
+                   self.RED if danger_count > 0 else self.WHITE, count_thick)
 
-        # Safe direction arrow
-        self._draw_direction_arrow(overlay, safe_direction, center_x, status_h + 30)
+        caution_x = int(450 * scale)
+        cv2.putText(overlay, f"CAUTION: {caution_count}", (caution_x, int(45 * scale)),
+                   cv2.FONT_HERSHEY_SIMPLEX, count_scale,
+                   self.YELLOW if caution_count > 0 else self.WHITE, count_thick)
 
-        # Status text
+        # Enhanced direction arrow
+        self._draw_direction_arrow(overlay, safe_direction, center_x, status_h + int(40 * scale))
+
+        # LARGE status text
         if danger_count > 0:
-            status = "STOP"
+            status = "⚠ STOP"
             status_color = self.RED
         elif caution_count > 0:
-            status = "CAUTION"
+            status = "⚠ CAUTION"
             status_color = self.YELLOW
         else:
-            status = "CLEAR"
+            status = "✓ CLEAR"
             status_color = self.GREEN
 
-        cv2.putText(overlay, status, (w - 150, 30),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.8, status_color, 2)
+        status_scale = 1.2 * scale
+        status_thick = int(3 * scale)
+        # Get text size to position from right
+        (status_w, status_h_text), _ = cv2.getTextSize(
+            status, cv2.FONT_HERSHEY_SIMPLEX, status_scale, status_thick
+        )
+        cv2.putText(overlay, status, (w - status_w - int(20 * scale), int(50 * scale)),
+                   cv2.FONT_HERSHEY_SIMPLEX, status_scale, status_color, status_thick)
+
+        # Add corner frame markers for futuristic look
+        frame_size = int(40 * scale)
+        frame_thick = 3
+        # Top-left
+        cv2.line(overlay, (0, 0), (frame_size, 0), self.BLUE, frame_thick)
+        cv2.line(overlay, (0, 0), (0, frame_size), self.BLUE, frame_thick)
+        # Top-right
+        cv2.line(overlay, (w, 0), (w - frame_size, 0), self.BLUE, frame_thick)
+        cv2.line(overlay, (w, 0), (w, frame_size), self.BLUE, frame_thick)
+        # Bottom-left
+        cv2.line(overlay, (0, h), (frame_size, h), self.BLUE, frame_thick)
+        cv2.line(overlay, (0, h), (0, h - frame_size), self.BLUE, frame_thick)
+        # Bottom-right
+        cv2.line(overlay, (w, h), (w - frame_size, h), self.BLUE, frame_thick)
+        cv2.line(overlay, (w, h), (w, h - frame_size), self.BLUE, frame_thick)
 
         return overlay
 
     def _draw_direction_arrow(self, frame: np.ndarray, direction: str,
                              center_x: int, y: int):
-        """Draw directional arrow indicator."""
-        arrow_length = 40
+        """Draw LARGE directional arrow indicator."""
+        h, w = frame.shape[:2]
+        scale = max(w / 640, 1.0)
+        arrow_length = int(60 * scale)
+        arrow_thick = int(5 * scale)
 
         if direction == 'forward':
-            # Up arrow
+            # Large up arrow
             cv2.arrowedLine(frame, (center_x, y + arrow_length), (center_x, y),
-                          self.GREEN, 3, tipLength=0.3)
+                          self.GREEN, arrow_thick, tipLength=0.4)
+            # Text below
+            cv2.putText(frame, "FORWARD", (center_x - 50, y + arrow_length + 30),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7 * scale, self.GREEN, 2)
         elif direction == 'left':
-            # Left arrow
+            # Large left arrow
             cv2.arrowedLine(frame, (center_x + arrow_length, y), (center_x - arrow_length, y),
-                          self.BLUE, 3, tipLength=0.3)
+                          self.BLUE, arrow_thick, tipLength=0.4)
+            cv2.putText(frame, "← GO LEFT", (center_x - 80, y + 40),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.8 * scale, self.BLUE, 2)
         elif direction == 'right':
-            # Right arrow
+            # Large right arrow
             cv2.arrowedLine(frame, (center_x - arrow_length, y), (center_x + arrow_length, y),
-                          self.BLUE, 3, tipLength=0.3)
+                          self.BLUE, arrow_thick, tipLength=0.4)
+            cv2.putText(frame, "GO RIGHT →", (center_x - 80, y + 40),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.8 * scale, self.BLUE, 2)
         elif direction == 'stop':
-            # Stop indicator
-            cv2.circle(frame, (center_x, y), 20, self.RED, 3)
-            cv2.line(frame, (center_x - 15, y - 15), (center_x + 15, y + 15), self.RED, 3)
-            cv2.line(frame, (center_x - 15, y + 15), (center_x + 15, y - 15), self.RED, 3)
+            # Large stop indicator
+            radius = int(30 * scale)
+            cv2.circle(frame, (center_x, y), radius, self.RED, arrow_thick)
+            cross_size = int(22 * scale)
+            cv2.line(frame, (center_x - cross_size, y - cross_size),
+                    (center_x + cross_size, y + cross_size), self.RED, arrow_thick)
+            cv2.line(frame, (center_x - cross_size, y + cross_size),
+                    (center_x + cross_size, y - cross_size), self.RED, arrow_thick)
+            cv2.putText(frame, "STOP!", (center_x - 40, y + radius + 35),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.9 * scale, self.RED, 3)
 
     def create_mini_map(self, slam_result: Optional[Dict], size: int = 300) -> np.ndarray:
         """
