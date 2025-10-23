@@ -119,6 +119,13 @@ class OrbyGlasses:
             # Use the new SLAM system by default
             self.logger.info("Initializing SLAM system...")
             self.slam = SLAMSystem(self.config)
+
+            # Initialize SLAM map viewer (always-visible 2D map like robots)
+            from slam_map_viewer import SLAMMapViewer
+            self.slam_map_viewer = SLAMMapViewer(map_size=600, meters_per_pixel=0.02)
+            self.slam_map_viewer.draw_grid(grid_spacing=1.0)
+            self.logger.info("✓ SLAM map viewer initialized")
+
             self.indoor_nav_enabled = self.config.get('indoor_navigation.enabled', False)
             if self.indoor_nav_enabled:
                 self.indoor_navigator = IndoorNavigator(self.slam, self.config)
@@ -128,6 +135,7 @@ class OrbyGlasses:
                 self.logger.info("✓ SLAM enabled (indoor navigation disabled)")
         else:
             self.slam = None
+            self.slam_map_viewer = None
             self.indoor_navigator = None
 
         # Trajectory Prediction (GNN)
@@ -948,22 +956,21 @@ class OrbyGlasses:
                         slam_vis = self.slam.visualize_tracking(frame, slam_result)
                         slam_display = cv2.resize(slam_vis, display_size)
                         cv2.imshow('SLAM Tracking', slam_display)
-                        
-                        # Show real-time SLAM map creation
-                        if self.config.get('slam.show_map_creation', True):
-                            if hasattr(self.slam, 'visualize_map_creation'):
-                                map_creation_vis = self.slam.visualize_map_creation()
-                                if map_creation_vis is not None:
-                                    map_creation_display = cv2.resize(map_creation_vis, display_size)
-                                    cv2.imshow('SLAM Map Creation', map_creation_display)
-                        
-                        # Show camera trajectory
-                        if self.config.get('slam.show_camera_trajectory', True):
-                            if hasattr(self.slam, 'visualize_trajectory'):
-                                trajectory_vis = self.slam.visualize_trajectory()
-                                if trajectory_vis is not None:
-                                    trajectory_display = cv2.resize(trajectory_vis, display_size)
-                                    cv2.imshow('Camera Trajectory', trajectory_display)
+
+                    # Always show SLAM map (like robots do)
+                    if self.slam_enabled and self.slam_map_viewer and slam_result:
+                        # Update map with current position and landmarks
+                        self.slam_map_viewer.update(slam_result, self.slam.map_points)
+                        map_image = self.slam_map_viewer.get_map_image()
+                        cv2.imshow('SLAM Map (Top View)', map_image)
+
+                    # Show other SLAM visualizations if enabled
+                    if slam_result is not None and self.config.get('slam.show_map_creation', False):
+                        if hasattr(self.slam, 'visualize_map_creation'):
+                            map_creation_vis = self.slam.visualize_map_creation()
+                            if map_creation_vis is not None:
+                                map_creation_display = cv2.resize(map_creation_vis, display_size)
+                                cv2.imshow('SLAM Map Creation', map_creation_display)
 
                     # Show 3D Point Cloud visualization if enabled
                     if self.point_cloud_enabled and self.point_cloud is not None:

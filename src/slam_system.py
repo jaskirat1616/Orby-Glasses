@@ -221,33 +221,60 @@ class SLAMSystem:
         self.last_keypoints = current_keypoints
         self.last_descriptors = current_descriptors
 
+        # Check pose is valid before using it
+        if not np.all(np.isfinite(self.current_pose)):
+            logging.warning("Non-finite pose detected! Resetting to previous valid pose.")
+            if len(self.pose_history) > 0:
+                self.current_pose = self.pose_history[-1].copy()
+            else:
+                self.current_pose = np.eye(4, dtype=np.float32)
+
         # Update position history
         position = self.current_pose[:3, 3]
+
+        # Validate position before using
+        if not np.all(np.isfinite(position)):
+            logging.warning(f"Non-finite position detected: {position}. Resetting to origin.")
+            position = np.array([0.0, 0.0, 0.0], dtype=np.float32)
+            self.current_pose[:3, 3] = position
+
         self.position_history.append(position.copy())
         self.pose_history.append(self.current_pose.copy())
-        
+
         # Calculate relative movement from previous pose
         relative_movement = np.zeros(6)
         if len(self.pose_history) > 1:
-            prev_pose = self.pose_history[-2]
-            curr_pose = self.current_pose
-            
-            # Calculate relative transformation
-            rel_transform = np.linalg.inv(prev_pose) @ curr_pose
-            
-            # Extract translation
-            translation = rel_transform[:3, 3]
-            
-            # Extract rotation using Rodrigues formula
-            rotation_matrix = rel_transform[:3, :3]
-            rotation_vec = cv2.Rodrigues(rotation_matrix)[0].flatten()
-            
-            relative_movement = np.concatenate([translation, rotation_vec])
+            try:
+                prev_pose = self.pose_history[-2]
+                curr_pose = self.current_pose
 
-        # Update result with relative movement
-        if not np.all(np.isfinite(relative_movement)):
-            logging.warning(f"Non-finite relative movement calculated: {relative_movement}. Resetting to zero.")
-            relative_movement = np.zeros(6)
+                # Calculate relative transformation safely
+                prev_pose_inv = np.linalg.inv(prev_pose)
+                if not np.all(np.isfinite(prev_pose_inv)):
+                    raise np.linalg.LinAlgError("Inverse pose has non-finite values")
+
+                rel_transform = prev_pose_inv @ curr_pose
+
+                # Check transform is valid
+                if not np.all(np.isfinite(rel_transform)):
+                    raise ValueError("Relative transform has non-finite values")
+
+                # Extract translation
+                translation = rel_transform[:3, 3]
+
+                # Extract rotation using Rodrigues formula
+                rotation_matrix = rel_transform[:3, :3]
+                rotation_vec = cv2.Rodrigues(rotation_matrix)[0].flatten()
+
+                relative_movement = np.concatenate([translation, rotation_vec])
+
+                # Final check
+                if not np.all(np.isfinite(relative_movement)):
+                    raise ValueError("Relative movement has non-finite values")
+
+            except (np.linalg.LinAlgError, ValueError, cv2.error) as e:
+                logging.warning(f"Error calculating relative movement: {e}. Using zero.")
+                relative_movement = np.zeros(6)
 
         result['relative_movement'] = relative_movement.tolist()
         result['position'] = position.tolist()
