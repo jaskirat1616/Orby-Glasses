@@ -117,7 +117,7 @@ performance:
   danger_audio_interval: 0.8      # Very fast alerts for danger zone objects
   stats_interval: 100             # Less frequent logging for performance
   max_detections: 5               # Focus on top 5 most relevant objects
-  depth_skip_frames: 8            # Calculate depth every 9th frame (faster)
+  depth_skip_frames: 2            # Calculate depth every 3rd frame
   frame_skip: 0                   # Process every frame for maximum responsiveness
   enable_multithreading: true     # Use multithreading for parallel processing
   cache_depth_maps: true          # Cache depth maps for speed
