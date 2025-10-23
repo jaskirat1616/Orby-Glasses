@@ -109,13 +109,28 @@ class MinimalUI:
         scale = 20  # pixels per meter
 
         # Draw map points
-        if map_points is not None and len(map_points) > 0:
-            for point in map_points[:500]:  # Limit for performance
-                if len(point) >= 3:
-                    x = int(center + point[0] * scale)
-                    y = int(center - point[2] * scale)  # Flip Y for display
-                    if 0 <= x < size and 0 <= y < size:
-                        cv2.circle(map_img, (x, y), 2, (100, 100, 100), -1)
+        if map_points is not None:
+            try:
+                # Handle different map_points formats
+                if isinstance(map_points, np.ndarray):
+                    points_to_draw = map_points[:500] if len(map_points) > 500 else map_points
+                    for point in points_to_draw:
+                        if len(point) >= 3:
+                            x = int(center + point[0] * scale)
+                            y = int(center - point[2] * scale)  # Flip Y for display
+                            if 0 <= x < size and 0 <= y < size:
+                                cv2.circle(map_img, (x, y), 2, (100, 100, 100), -1)
+                elif isinstance(map_points, dict):
+                    # Handle dict format
+                    points_list = list(map_points.values())[:500]
+                    for point in points_list:
+                        if hasattr(point, '__len__') and len(point) >= 3:
+                            x = int(center + point[0] * scale)
+                            y = int(center - point[2] * scale)
+                            if 0 <= x < size and 0 <= y < size:
+                                cv2.circle(map_img, (x, y), 2, (100, 100, 100), -1)
+            except Exception:
+                pass  # Skip if map points format is unexpected
 
         # Draw robot position
         if slam_result:
