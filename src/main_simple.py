@@ -341,8 +341,9 @@ class OrbyGlasses:
                     # Convert to colormap
                     depth_colored = cv2.applyColorMap(depth_sharpened, cv2.COLORMAP_MAGMA)
 
-                    # Resize with high-quality interpolation
-                    depth_display = cv2.resize(depth_colored, (640, 480), interpolation=cv2.INTER_CUBIC)
+                    # Resize to match camera resolution for clean display
+                    display_size = (self.frame_width, self.frame_height)
+                    depth_display = cv2.resize(depth_colored, display_size, interpolation=cv2.INTER_CUBIC)
 
                     # Add depth legend
                     cv2.putText(depth_display, "Close", (10, 30),

@@ -3,8 +3,8 @@
 
 camera:
   source: 0
-  width: 640
-  height: 480
+  width: 416  # Square resolution for optimal YOLO and depth quality
+  height: 416
   fps: 30
 
 models:
