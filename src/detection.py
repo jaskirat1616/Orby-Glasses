@@ -152,16 +152,19 @@ class DepthEstimator:
     """Optimized depth estimation using Depth Anything V2."""
 
     def __init__(self, model_path: str = "depth-anything/Depth-Anything-V2-Small-hf",
-                 device: str = "mps"):
+                 device: str = "mps",
+                 max_resolution: int = 480):
         """
         Initialize optimized depth estimator.
 
         Args:
             model_path: Hugging Face model name or path
             device: Device to run on
+            max_resolution: Maximum resolution for depth processing
         """
         self.model_path = model_path
         self.device = self._validate_device(device)
+        self.max_resolution = max_resolution
 
         # Load Depth Anything V2 with optimizations
         try:
@@ -226,14 +229,13 @@ class DepthEstimator:
         original_h, original_w = frame.shape[:2]
 
         # Resize frame for depth model (maintain aspect ratio)
-        # Use 518x518 for better quality (Depth Anything V2 optimal size)
-        max_res = 518
+        max_res = self.max_resolution
         h, w = frame.shape[:2]
         if h > max_res or w > max_res:
             scale = min(max_res/h, max_res/w)
             new_h, new_w = int(h * scale), int(w * scale)
             frame = cv2.resize(frame, (new_w, new_h))
-        
+
         # Convert BGR to RGB efficiently
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         pil_image = Image.fromarray(rgb)
@@ -251,9 +253,9 @@ class DepthEstimator:
         else:
             depth_map = np.zeros_like(depth_map)
 
-        # Resize back to original frame size for better visualization
+        # Resize back to original frame size with NEAREST for sharper result
         if depth_map.shape[0] != original_h or depth_map.shape[1] != original_w:
-            depth_map = cv2.resize(depth_map, (original_w, original_h), interpolation=cv2.INTER_LINEAR)
+            depth_map = cv2.resize(depth_map, (original_w, original_h), interpolation=cv2.INTER_NEAREST)
 
         return depth_map
 
@@ -365,7 +367,8 @@ class DetectionPipeline:
         # Initialize Depth Anything V2 estimator
         self.depth_estimator = DepthEstimator(
             model_path=config.get('models.depth.path', 'depth-anything/Depth-Anything-V2-Small-hf'),
-            device=config.get('models.depth.device', 'mps')
+            device=config.get('models.depth.device', 'mps'),
+            max_resolution=config.get('models.depth.max_resolution', 480)
         )
 
         self.min_safe_distance = config.get('safety.min_safe_distance', 1.5)
