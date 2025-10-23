@@ -61,8 +61,8 @@ echo ""
 echo "Press 'q' to stop"
 echo ""
 
-# Run simple pipeline with fast config
-python3 src/main_simple.py --config config/fast.yaml
+# Run full pipeline with fast config (better accuracy)
+python3 src/main.py --config config/fast.yaml
 
 # Cleanup
 echo ""
