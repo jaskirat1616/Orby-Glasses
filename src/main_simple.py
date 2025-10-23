@@ -18,6 +18,7 @@ from detection import DetectionPipeline
 from safety_system import SafetySystem
 from audio_priority import AudioPriorityManager
 from blind_navigation import BlindNavigationAssistant
+from demo_overlay import DemoOverlay
 
 
 class OrbyGlasses:
@@ -54,6 +55,13 @@ class OrbyGlasses:
             frame_height=self.frame_height
         )
         self.logger.info("✓ Blind navigation assistant initialized")
+
+        # Demo overlay for impressive visualizations
+        self.demo_overlay = DemoOverlay(
+            frame_width=self.frame_width,
+            frame_height=self.frame_height
+        )
+        self.show_demo_overlay = True  # Set to True for demos/presentations
 
         # SLAM (if enabled)
         self.slam_enabled = self.config.get('slam.enabled', False)
@@ -161,7 +169,7 @@ class OrbyGlasses:
                     self.navigator.update(slam_result, detections)
 
             # 6. ANNOTATE FRAME
-            annotated_frame = self.annotate_frame(frame, detections, warnings, current_fps)
+            annotated_frame = self.annotate_frame(frame, detections, warnings, current_fps, slam_result)
 
             # 7. CALCULATE FPS
             process_time = time.time() - start_time
@@ -184,64 +192,76 @@ class OrbyGlasses:
             return None
 
     def annotate_frame(self, frame: np.ndarray, detections: List[Dict],
-                      warnings: List[Dict], fps: float) -> np.ndarray:
-        """Add annotations to frame."""
+                      warnings: List[Dict], fps: float, slam_result: Optional[Dict] = None) -> np.ndarray:
+        """Add annotations to frame with optional impressive demo overlay."""
         annotated = frame.copy()
-        h, w = annotated.shape[:2]
 
-        # Draw bounding boxes
-        for det in detections:
-            bbox = det['bbox']
-            x1, y1, x2, y2 = map(int, bbox)
-            depth = det.get('depth', 0)
-            label = det['label']
+        # Use impressive demo overlay for presentations
+        if self.show_demo_overlay:
+            # Draw detailed detection boxes
+            annotated = self.demo_overlay.draw_detection_details(annotated, detections)
 
-            # Color based on distance
-            if depth < 0.4:
-                color = (0, 0, 255)  # Red - immediate danger
-            elif depth < 1.0:
-                color = (0, 165, 255)  # Orange - danger
-            elif depth < 2.0:
-                color = (0, 255, 255)  # Yellow - caution
-            else:
-                color = (0, 255, 0)  # Green - safe
-
-            # Draw box
-            cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
-
-            # Draw label
-            text = f"{label} {depth:.1f}m"
-            cv2.putText(annotated, text, (x1, y1-5),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-
-        # Status overlay
-        overlay = annotated.copy()
-        cv2.rectangle(overlay, (5, 5), (200, 100), (0, 0, 0), -1)
-        cv2.addWeighted(overlay, 0.6, annotated, 0.4, 0, annotated)
-
-        # FPS
-        fps_color = (0, 255, 0) if fps > 10 else (0, 165, 255) if fps > 5 else (0, 0, 255)
-        cv2.putText(annotated, f"FPS: {fps:.1f}", (10, 25),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, fps_color, 2)
-
-        # Danger count
-        danger_count = len([d for d in detections if d.get('depth', 10) < 1.0])
-        cv2.putText(annotated, f"Dangers: {danger_count}", (10, 50),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-
-        # Status
-        if warnings and warnings[0]['level'] == 'IMMEDIATE_DANGER':
-            status = "STOP!"
-            status_color = (0, 0, 255)
-        elif danger_count > 0:
-            status = "DANGER"
-            status_color = (0, 165, 255)
+            # Add impressive stats overlay
+            annotated = self.demo_overlay.create_impressive_overlay(
+                annotated, detections, slam_result, fps
+            )
         else:
-            status = "SAFE"
-            status_color = (0, 255, 0)
+            # Simple annotations (original)
+            h, w = annotated.shape[:2]
 
-        cv2.putText(annotated, status, (10, 80),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, status_color, 2)
+            # Draw bounding boxes
+            for det in detections:
+                bbox = det['bbox']
+                x1, y1, x2, y2 = map(int, bbox)
+                depth = det.get('depth', 0)
+                label = det['label']
+
+                # Color based on distance
+                if depth < 0.4:
+                    color = (0, 0, 255)  # Red - immediate danger
+                elif depth < 1.0:
+                    color = (0, 165, 255)  # Orange - danger
+                elif depth < 2.0:
+                    color = (0, 255, 255)  # Yellow - caution
+                else:
+                    color = (0, 255, 0)  # Green - safe
+
+                # Draw box
+                cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
+
+                # Draw label
+                text = f"{label} {depth:.1f}m"
+                cv2.putText(annotated, text, (x1, y1-5),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+
+            # Simple status overlay
+            overlay = annotated.copy()
+            cv2.rectangle(overlay, (5, 5), (200, 100), (0, 0, 0), -1)
+            cv2.addWeighted(overlay, 0.6, annotated, 0.4, 0, annotated)
+
+            # FPS
+            fps_color = (0, 255, 0) if fps > 10 else (0, 165, 255) if fps > 5 else (0, 0, 255)
+            cv2.putText(annotated, f"FPS: {fps:.1f}", (10, 25),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, fps_color, 2)
+
+            # Danger count
+            danger_count = len([d for d in detections if d.get('depth', 10) < 1.0])
+            cv2.putText(annotated, f"Dangers: {danger_count}", (10, 50),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+
+            # Status
+            if warnings and warnings[0]['level'] == 'IMMEDIATE_DANGER':
+                status = "STOP!"
+                status_color = (0, 0, 255)
+            elif danger_count > 0:
+                status = "DANGER"
+                status_color = (0, 165, 255)
+            else:
+                status = "SAFE"
+                status_color = (0, 255, 0)
+
+            cv2.putText(annotated, status, (10, 80),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, status_color, 2)
 
         return annotated
 
