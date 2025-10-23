@@ -45,6 +45,9 @@ from point_cloud_viewer import PointCloudViewer
 from movement_visualizer import MovementVisualizer
 from coordinate_transformer import CoordinateTransformer
 from scene_understanding import EnhancedSceneProcessor
+from smart_cache import SmartCache, PredictiveEngine
+from robot_ui import RobotUI
+from error_handler import ErrorHandler
 
 
 class OrbyGlasses:
@@ -217,6 +220,19 @@ class OrbyGlasses:
         self.obstacle_memory = {}  # Remember common obstacles
         self.path_memory = []      # Remember good paths
 
+        # Smart caching and prediction
+        self.smart_cache = SmartCache(cache_size=10)
+        self.predictive_engine = PredictiveEngine()
+        self.logger.info("✓ Smart cache and predictive engine initialized")
+
+        # Robot-style UI
+        self.robot_ui = RobotUI(width=self.frame_width, height=self.frame_height)
+        self.logger.info("✓ Robot UI initialized")
+
+        # Error handler
+        self.error_handler = ErrorHandler(self.logger.logger)
+        self.logger.info("✓ Error handler initialized")
+
         # Conversation state
         self.last_conversation_check = 0
         self.conversation_check_interval = self.config.get('conversation.check_interval', 2.0)
@@ -284,13 +300,24 @@ class OrbyGlasses:
             detections = detections[:self.max_detections]
             det_time = self.perf_monitor.stop_timer('detection')
 
-            # Optimized depth estimation with smart caching
+            # Smart depth estimation with motion-based caching
             self.perf_monitor.start_timer('depth')
-            if self.frame_count % (self.skip_depth_frames + 1) == 0 or self.last_depth_map is None:
+
+            # Compute motion score for intelligent caching
+            prev_frame = self.smart_cache.get_previous_frame()
+            motion_score = self.smart_cache.compute_motion_score(frame, prev_frame)
+
+            # Only recompute depth if significant motion detected
+            if self.smart_cache.should_recompute_depth(motion_score, self.frame_count):
                 depth_map = self.detection_pipeline.depth_estimator.estimate_depth(frame)
                 self.last_depth_map = depth_map
             else:
-                depth_map = self.last_depth_map
+                # Reuse cached depth map (much faster!)
+                depth_map = self.smart_cache.get_cached_depth()
+                if depth_map is None:
+                    depth_map = self.detection_pipeline.depth_estimator.estimate_depth(frame)
+                    self.last_depth_map = depth_map
+
             depth_time = self.perf_monitor.stop_timer('depth')
 
             # Add depth to detections
@@ -306,8 +333,16 @@ class OrbyGlasses:
                     detection['depth'] = 0.0
                     detection['is_danger'] = False
 
+            # Predict object motion and collision risks
+            detections = self.smart_cache.predict_object_motion(detections)
+            detections = self.predictive_engine.predict_collision_risk(detections)
+
             # Get navigation summary
             nav_summary = self.detection_pipeline.get_navigation_summary(detections)
+
+            # Add safe direction suggestion
+            safe_direction = self.predictive_engine.suggest_safe_direction(detections, frame.shape[1])
+            nav_summary['safe_direction'] = safe_direction
             
             # Enhanced scene understanding with VLM
             scene_analysis = None
@@ -405,60 +440,14 @@ class OrbyGlasses:
             )
             audio_time = self.perf_monitor.stop_timer('audio')
 
-            # Annotate frame
-            annotated_frame = FrameProcessor.annotate_detections(frame, detections)
+            # Create robot-style UI overlay
+            annotated_frame = self.robot_ui.draw_clean_overlay(
+                frame, detections, fps, safe_direction
+            )
 
-            # Add performance info to frame
+            # Get performance metrics
             total_time = self.perf_monitor.stop_timer('total')
             fps = self.perf_monitor.get_avg_fps()
-
-            # Check for danger zone
-            danger_objects = [d for d in detections if d.get('depth', 10) < self.danger_distance]
-            caution_objects = [d for d in detections if self.danger_distance <= d.get('depth', 10) < self.caution_distance]
-
-            # Performance overlay with danger-aware background
-            overlay = annotated_frame.copy()
-            bg_color = (0, 0, 100) if danger_objects else (0, 0, 0)  # Red tint if danger
-            cv2.rectangle(overlay, (5, 5), (250, 135), bg_color, -1)
-            cv2.addWeighted(overlay, 0.6, annotated_frame, 0.4, 0, annotated_frame)
-
-            # FPS indicator
-            fps_color = (0, 255, 0) if fps > 10 else (0, 165, 255) if fps > 5 else (0, 0, 255)
-            cv2.putText(annotated_frame, f"FPS: {fps:.1f}", (10, 30),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, fps_color, 2)
-
-            # Danger/Caution/Safe counts
-            cv2.putText(annotated_frame, f"Danger: {len(danger_objects)} | Caution: {len(caution_objects)}", (10, 55),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
-
-            # Closest object with distance
-            if detections:
-                closest = min(detections, key=lambda x: x.get('depth', 10))
-                dist_color = (0, 0, 255) if closest['depth'] < self.danger_distance else \
-                            (0, 165, 255) if closest['depth'] < self.caution_distance else (0, 255, 0)
-                cv2.putText(annotated_frame, f"Closest: {closest['label']} {closest['depth']:.1f}m", (10, 75),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, dist_color, 1)
-
-            # Processing time
-            cv2.putText(annotated_frame, f"Process: {total_time:.0f}ms", (10, 95),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
-
-            # Status indicator
-            if danger_objects:
-                status_text = "⚠ DANGER"
-                status_color = (0, 0, 255)
-            elif caution_objects:
-                status_text = "⚠ CAUTION"
-                status_color = (0, 165, 255)
-            elif detections:
-                status_text = "SAFE"
-                status_color = (0, 255, 0)
-            else:
-                status_text = "CLEAR"
-                status_color = (0, 255, 0)
-
-            cv2.putText(annotated_frame, status_text, (10, 120),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, status_color, 2)
 
             # Add SLAM info if enabled
             if slam_result is not None:
@@ -490,6 +479,9 @@ class OrbyGlasses:
                         trajectory_result['tracked_objects'],
                         trajectory_result['predictions']
                     )
+
+            # Update smart cache
+            self.smart_cache.update(frame, depth_map, detections)
 
             # Log frame time
             self.perf_monitor.log_frame_time(total_time)
@@ -547,85 +539,48 @@ class OrbyGlasses:
 
     def _generate_fast_guidance(self, detections: List[Dict], nav_summary: Dict) -> Dict:
         """
-        Generate clear, helpful guidance for blind navigation.
-        
+        Generate simple, clear guidance for blind users.
+
         Args:
             detections: List of detected objects
             nav_summary: Navigation summary
-            
+
         Returns:
-            Guidance dictionary with clear messages
+            Guidance dictionary with simple messages
         """
         try:
-            # Check for immediate danger
+            safe_direction = nav_summary.get('safe_direction', 'forward')
+
+            # Immediate danger - very simple
             danger_objects = nav_summary.get('danger_objects', [])
             if danger_objects:
-                closest_danger = min(danger_objects, key=lambda x: x.get('depth', 10))
-                # Give clear direction guidance
-                direction = self._get_direction_guidance(closest_danger)
-                return {
-                    'narrative': f"Stop! {closest_danger['label']} ahead. {direction}",
-                    'predictive': '',
-                    'combined': f"Stop! {closest_danger['label']} ahead. {direction}"
-                }
-            
-            # Check for caution objects
+                closest = min(danger_objects, key=lambda x: x.get('depth', 10))
+                label = closest['label']
+
+                # Simple direction
+                if safe_direction == 'left':
+                    msg = f"Stop. {label} ahead. Go left"
+                elif safe_direction == 'right':
+                    msg = f"Stop. {label} ahead. Go right"
+                else:
+                    msg = f"Stop. {label} very close"
+
+                return {'narrative': msg, 'predictive': '', 'combined': msg}
+
+            # Caution - simple warning
             caution_objects = nav_summary.get('caution_objects', [])
             if caution_objects:
-                closest_caution = min(caution_objects, key=lambda x: x.get('depth', 10))
-                direction = self._get_direction_guidance(closest_caution)
-                return {
-                    'narrative': f"Caution: {closest_caution['label']} {closest_caution['depth']:.1f}m. {direction}",
-                    'predictive': '',
-                    'combined': f"Caution: {closest_caution['label']} {closest_caution['depth']:.1f}m. {direction}"
-                }
-            
-            # Path clear with helpful info
-            if nav_summary.get('path_clear', True):
-                if detections:
-                    # Tell them what's around them
-                    nearby_objects = [d for d in detections if d.get('depth', 10) < 5.0]
-                    if nearby_objects:
-                        object_names = [d['label'] for d in nearby_objects[:3]]
-                        return {
-                            'narrative': f"Path clear. You have {', '.join(object_names)} nearby",
-                            'predictive': '',
-                            'combined': f"Path clear. You have {', '.join(object_names)} nearby"
-                        }
-                
-                return {
-                    'narrative': 'Path clear, continue forward',
-                    'predictive': '',
-                    'combined': 'Path clear, continue forward'
-                }
-            
-            # Default fallback
-            return {
-                'narrative': 'Continue forward',
-                'predictive': '',
-                'combined': 'Continue forward'
-            }
-            
+                closest = min(caution_objects, key=lambda x: x.get('depth', 10))
+                msg = f"{closest['label']} ahead. Slow down"
+                return {'narrative': msg, 'predictive': '', 'combined': msg}
+
+            # Clear path
+            msg = "Path clear"
+            return {'narrative': msg, 'predictive': '', 'combined': msg}
+
         except Exception as e:
-            self.logger.error(f"Guidance generation error: {e}")
-            return {
-                'narrative': 'Continue forward',
-                'predictive': '',
-                'combined': 'Continue forward'
-            }
+            return {'narrative': 'Continue', 'predictive': '', 'combined': 'Continue'}
     
-    def _get_direction_guidance(self, detection: Dict) -> str:
-        """Get helpful direction guidance for avoiding obstacles."""
-        center = detection.get('center', [160, 160])
-        x_center = center[0]
-        
-        # Simple left/right guidance
-        if x_center < 160:  # Left side of frame
-            return "Step right to avoid"
-        elif x_center > 320:  # Right side of frame
-            return "Step left to avoid"
-        else:  # Center
-            return "Step left or right to avoid"
 
     def _display_terminal_info(self, fps, detections, total_time, slam_result, trajectory_result):
         """Display information in the terminal using Rich."""
@@ -909,113 +864,22 @@ class OrbyGlasses:
                     # Update timer
                     self.last_audio_time = current_time
 
-                # Optimized display
+                # Clean robot-style display
                 if display:
-                    # Display terminal info less frequently for performance
-                    if self.frame_count % 10 == 0:  # Show terminal info every 10 frames
-                        total_time = self.perf_monitor.get_stats().get('avg_frame_time_ms', 0)
-                        fps = self.perf_monitor.get_avg_fps()
-                        self._display_terminal_info(fps, detections, total_time, slam_result, trajectory_result)
+                    # Main camera view (larger)
+                    main_size = (640, 480)
+                    display_frame = cv2.resize(annotated_frame, main_size)
+                    cv2.imshow('Robot Vision', display_frame)
 
-                    # Optimized display size
-                    display_size = (416, 416)  # Match input size for no scaling
+                    # Show depth view (robot-style)
+                    if depth_map is not None:
+                        depth_view = self.robot_ui.create_depth_view(depth_map, size=320)
+                        cv2.imshow('Depth Sensor', depth_view)
 
-                    # Show main window (no resize needed if same size)
-                    if annotated_frame.shape[:2] != display_size:
-                        display_frame = cv2.resize(annotated_frame, display_size)
-                    else:
-                        display_frame = annotated_frame
-                    cv2.imshow('OrbyGlasses', display_frame)
-
-                    # Setup mouse callbacks for windows (first time only)
-                    if self.frame_count == 1:
-                        # Voxel grid mouse callback
-                        if self.occupancy_grid_enabled and self.occupancy_grid is not None:
-                            def occ_mouse_callback(event, x, y, flags, param):
-                                self.occupancy_grid.handle_mouse_events(event, x, y, flags, param)
-                            cv2.setMouseCallback('Voxel Grid Map', occ_mouse_callback)
-
-                        # Point cloud mouse callback
-                        if self.point_cloud_enabled and self.point_cloud is not None:
-                            def pc_mouse_callback(event, x, y, flags, param):
-                                self.point_cloud.handle_mouse_events(event, x, y, flags, param)
-                            cv2.setMouseCallback('3D Point Cloud', pc_mouse_callback)
-
-                    # Show depth map in separate smaller window (only when freshly calculated)
-                    if depth_map is not None and self.frame_count % (self.skip_depth_frames + 1) == 0:
-                        # Convert depth map to colormap for visualization
-                        depth_colored = cv2.applyColorMap(
-                            (depth_map * 255).astype(np.uint8),
-                            cv2.COLORMAP_MAGMA
-                        )
-                        # Resize depth map to standard size
-                        depth_display = cv2.resize(depth_colored, display_size)
-                        cv2.imshow('Depth Map', depth_display)
-
-                    # Show SLAM visualization if enabled
-                    if slam_result is not None and self.config.get('slam.visualize', False):
-                        slam_vis = self.slam.visualize_tracking(frame, slam_result)
-                        slam_display = cv2.resize(slam_vis, display_size)
-                        cv2.imshow('SLAM Tracking', slam_display)
-
-                    # Always show SLAM map (like robots do)
-                    if self.slam_enabled and self.slam_map_viewer and slam_result:
-                        # Update map with current position and landmarks
-                        self.slam_map_viewer.update(slam_result, self.slam.map_points)
-                        map_image = self.slam_map_viewer.get_map_image()
-                        cv2.imshow('SLAM Map (Top View)', map_image)
-
-                    # Show other SLAM visualizations if enabled
-                    if slam_result is not None and self.config.get('slam.show_map_creation', False):
-                        if hasattr(self.slam, 'visualize_map_creation'):
-                            map_creation_vis = self.slam.visualize_map_creation()
-                            if map_creation_vis is not None:
-                                map_creation_display = cv2.resize(map_creation_vis, display_size)
-                                cv2.imshow('SLAM Map Creation', map_creation_display)
-
-                    # Show 3D Point Cloud visualization if enabled
-                    if self.point_cloud_enabled and self.point_cloud is not None:
-                        if self.config.get('point_cloud_viewer.visualize', True):
-                            camera_pos = None
-                            if slam_result is not None:
-                                camera_pos = np.array(slam_result['position'])
-
-                            pc_vis = self.point_cloud.visualize(camera_pos)
-                            pc_display = cv2.resize(pc_vis, display_size)
-                            cv2.imshow('3D Point Cloud', pc_display)
-
-                    # Show 3D Occupancy Grid visualization if enabled
-                    if self.occupancy_grid_enabled and self.occupancy_grid is not None:
-                        if self.config.get('occupancy_grid_3d.visualize', True):
-                            # Get camera position from SLAM if available
-                            camera_pos = None
-                            if slam_result is not None:
-                                camera_pos = np.array(slam_result['position'])
-
-                            # Show interactive voxel grid view with enhanced controls
-                            occ_vis_3d = self.occupancy_grid.visualize_3d_interactive(camera_pos)
-                            occ_display_3d = cv2.resize(occ_vis_3d, display_size)
-                            cv2.imshow('3D Occupancy Map', occ_display_3d)
-
-                            # Show 2D slice for better understanding
-                            if self.config.get('occupancy_grid_3d.show_2d_slice', True):
-                                occ_vis_2d = self.occupancy_grid.visualize_2d_slice(z_height=1.5)
-                                occ_display_2d = cv2.resize(occ_vis_2d, display_size)
-                                cv2.imshow('2D Map Slice', occ_display_2d)
-                            
-                            # Show map statistics (only if method exists)
-                            if self.config.get('occupancy_grid_3d.show_statistics', True) and hasattr(self.occupancy_grid, 'visualize_statistics'):
-                                stats_vis = self.occupancy_grid.visualize_statistics()
-                                if stats_vis is not None:
-                                    stats_display = cv2.resize(stats_vis, display_size)
-                                    cv2.imshow('Map Statistics', stats_display)
-
-                    # Show Movement Visualizer if enabled
-                    if self.movement_visualizer_enabled and self.movement_visualizer is not None:
-                        if self.config.get('movement_visualizer.enabled', True):
-                            mv_vis = self.movement_visualizer.visualize()
-                            mv_display = cv2.resize(mv_vis, display_size)
-                            cv2.imshow('Movement Trajectory', mv_display)
+                    # Show SLAM map (clean top-down view like robots)
+                    if self.slam_enabled and slam_result:
+                        mini_map = self.robot_ui.create_mini_map(slam_result, size=320)
+                        cv2.imshow('Navigation Map', mini_map)
 
                 # Save video
                 if video_writer:
