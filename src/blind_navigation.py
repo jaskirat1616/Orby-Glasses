@@ -203,21 +203,19 @@ class BlindNavigationAssistant:
 
     def get_navigation_guidance(self, detections: List[Dict], depth_map: Optional[np.ndarray] = None) -> str:
         """
-        Get CLEAR, ACTIONABLE navigation guidance.
+        Get natural, human-like navigation guidance.
 
-        This is what blind users need to hear:
-        - Where to walk
-        - What to avoid
-        - When to stop
-        - How to proceed
+        Sounds like a helpful friend, not a robot.
 
         Args:
             detections: All detections
             depth_map: Depth map
 
         Returns:
-            Clear, simple guidance message
+            Natural, conversational guidance
         """
+        import random
+
         # Filter to important objects only
         important = self.object_detector.filter_important_objects(detections)
 
@@ -227,23 +225,44 @@ class BlindNavigationAssistant:
         # Check for immediate dangers (< 1 meter)
         immediate_danger = [d for d in important if d.get('depth', 10) < 1.0]
 
-        # PRIORITY 1: Immediate danger - STOP
+        # PRIORITY 1: Immediate danger - STOP (urgent but natural)
         if immediate_danger:
             closest = min(immediate_danger, key=lambda x: x.get('depth', 10))
             label = closest.get('user_friendly_name', closest['label'])
             depth = closest['depth']
             position = self._get_simple_position(closest['center'][0])
 
-            return f"STOP! {label} {position}, {depth:.1f} meters. Do not move forward."
+            # Vary the language naturally
+            urgent_phrases = [
+                f"Whoa, stop! There's a {label.lower()} right {position}, about {depth:.1f} meters away.",
+                f"Hold up! {label} {position}, really close at {depth:.1f} meters.",
+                f"Stop right there. {label} {position}, less than a meter away.",
+                f"Careful! {label} {position} at {depth:.1f} meters - too close."
+            ]
+            return random.choice(urgent_phrases)
 
-        # PRIORITY 2: Hazards - WARN
+        # PRIORITY 2: Hazards - WARN (concerned but calm)
         if hazards:
             hazard = hazards[0]
-            warning = hazard.get('warning', hazard['label'])
+            label = hazard.get('user_friendly_name', hazard['label'])
             position = self._get_simple_position(hazard['center'][0])
-            return f"Warning: {warning} {position}."
+            depth = hazard.get('depth', 2.0)
 
-        # PRIORITY 3: Path guidance - WHERE TO WALK
+            if hazard.get('hazard_type') == 'head':
+                warnings = [
+                    f"Watch out, there's a {label.lower()} at head height {position}.",
+                    f"Heads up - {label.lower()} {position} could bump your head.",
+                    f"Be careful, {label.lower()} {position} is at head level."
+                ]
+            else:
+                warnings = [
+                    f"Watch your step - {label.lower()} {position}.",
+                    f"Careful, there's a {label.lower()} {position}.",
+                    f"Heads up, {label.lower()} coming up {position}."
+                ]
+            return random.choice(warnings)
+
+        # PRIORITY 3: Path guidance - WHERE TO WALK (friendly and clear)
         path_info = self.path_finder.find_clear_path(important, depth_map)
 
         if path_info['confidence'] == 'high':
@@ -251,36 +270,74 @@ class BlindNavigationAssistant:
 
             # Mention what's nearby if relevant
             nearby = [d for d in important if 1.0 < d.get('depth', 10) < 2.5]
-            if nearby:
-                obj = nearby[0]
-                label = obj.get('user_friendly_name', obj['label'])
-                obj_position = self._get_simple_position(obj['center'][0])
-                return f"Path clear {direction}. {label} {obj_position} at {obj['depth']:.1f} meters."
-            else:
-                return f"Path clear {direction}."
+
+            if direction == "straight ahead":
+                if nearby:
+                    obj = nearby[0]
+                    label = obj.get('user_friendly_name', obj['label']).lower()
+                    obj_position = self._get_simple_position(obj['center'][0])
+                    phrases = [
+                        f"You're good to keep going straight. There's a {label} {obj_position} if you need to know.",
+                        f"All clear ahead. Just so you know, {label} {obj_position}.",
+                        f"Keep going straight, you're fine. {label} {obj_position}, but not in your way."
+                    ]
+                else:
+                    phrases = [
+                        "You're clear to keep going straight.",
+                        "All clear ahead, keep walking.",
+                        "Looking good, path is clear straight ahead.",
+                        "You're good to go, nothing in your way."
+                    ]
+                return random.choice(phrases)
+
+            elif "left" in direction:
+                phrases = [
+                    f"Path is clear if you go {direction}.",
+                    f"You'll want to head {direction} here.",
+                    f"Best to go {direction}, it's clear that way.",
+                    f"Go {direction} and you're good."
+                ]
+                return random.choice(phrases)
+
+            elif "right" in direction:
+                phrases = [
+                    f"Path is clear if you go {direction}.",
+                    f"Head {direction} and you're clear.",
+                    f"Best to go {direction}, nothing in your way.",
+                    f"Go {direction} and you'll be fine."
+                ]
+                return random.choice(phrases)
 
         elif path_info['confidence'] == 'medium':
-            return f"Multiple obstacles. Safe path {path_info['direction']}."
+            direction = path_info['direction']
+            phrases = [
+                f"Few things around, but {direction} looks good.",
+                f"It's a bit crowded, but {direction} is your best bet.",
+                f"Try going {direction}, should be clear enough."
+            ]
+            return random.choice(phrases)
 
         else:
             # Path blocked
-            return "Path blocked ahead. Stop and listen for guidance."
+            blocked_phrases = [
+                "Hold on, looks pretty blocked ahead. Let's figure this out.",
+                "Hmm, not seeing a clear path right now. Hold up a sec.",
+                "Everything's blocked up ahead. Better wait a moment."
+            ]
+            return random.choice(blocked_phrases)
 
     def get_landmark_guidance(self, detections: List[Dict]) -> Optional[str]:
         """
-        Help user understand landmarks around them.
-
-        This helps with:
-        - "Where am I?"
-        - "Am I at the door?"
-        - "Is there a crosswalk?"
+        Help user understand landmarks around them - naturally.
 
         Args:
             detections: All detections
 
         Returns:
-            Landmark description or None
+            Natural landmark description or None
         """
+        import random
+
         LANDMARKS = ['door', 'traffic light', 'stop sign', 'crosswalk', 'bench', 'stairs']
 
         for det in detections:
@@ -291,7 +348,35 @@ class BlindNavigationAssistant:
                     position = self._get_simple_position(det['center'][0])
 
                     if depth < 3.0:  # Only mention if close enough
-                        return f"{det['label'].title()} {position}, {depth:.1f} meters away."
+                        landmark_name = det['label'].title().lower()
+
+                        # Different phrases for different landmarks
+                        if 'door' in label:
+                            phrases = [
+                                f"There's a door {position}, about {depth:.1f} meters away.",
+                                f"I see a door {position} - {depth:.1f} meters from you.",
+                                f"Door {position}, roughly {depth:.1f} meters."
+                            ]
+                        elif 'stair' in label:
+                            phrases = [
+                                f"Heads up - stairs {position}, {depth:.1f} meters ahead.",
+                                f"There are stairs {position}, about {depth:.1f} meters from you.",
+                                f"Stairs coming up {position}, {depth:.1f} meters."
+                            ]
+                        elif 'traffic light' in label or 'crosswalk' in label:
+                            phrases = [
+                                f"There's a {landmark_name} {position} at {depth:.1f} meters.",
+                                f"I see a {landmark_name} {position}, about {depth:.1f} meters away.",
+                                f"{landmark_name.title()} {position}, {depth:.1f} meters from here."
+                            ]
+                        else:
+                            phrases = [
+                                f"There's a {landmark_name} {position}, {depth:.1f} meters away.",
+                                f"{landmark_name.title()} {position} at about {depth:.1f} meters.",
+                                f"I see a {landmark_name} {position}, roughly {depth:.1f} meters."
+                            ]
+
+                        return random.choice(phrases)
 
         return None
 
