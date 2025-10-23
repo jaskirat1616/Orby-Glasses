@@ -37,12 +37,17 @@ class OrbyGlasses:
         self.logger = Logger(log_level=log_level)
         self.logger.info("OrbyGlasses Starting...")
 
+        # Camera settings (need these first!)
+        self.camera = None
+        self.frame_width = self.config.get('camera.width', 640)
+        self.frame_height = self.config.get('camera.height', 480)
+
         # Core components
         self.audio_manager = AudioManager(self.config)
         self.detection_pipeline = DetectionPipeline(self.config)
         self.safety_system = SafetySystem(
             focal_length=self.config.get('safety.focal_length', 500),
-            frame_height=self.config.get('camera.height', 480)
+            frame_height=self.frame_height
         )
         self.audio_priority = AudioPriorityManager(
             max_queue_size=self.config.get('audio.max_queue_size', 5),
@@ -80,11 +85,6 @@ class OrbyGlasses:
             self.logger.info("✓ Navigation enabled")
         else:
             self.navigator = None
-
-        # Camera settings
-        self.camera = None
-        self.frame_width = self.config.get('camera.width', 640)
-        self.frame_height = self.config.get('camera.height', 480)
 
         # State
         self.frame_count = 0
