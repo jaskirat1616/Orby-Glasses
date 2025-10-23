@@ -24,7 +24,7 @@ models:
     path: "depth-anything/Depth-Anything-V2-Small-hf"
     device: "mps"
     half_precision: true   # Use half precision for speed
-    max_resolution: 320    # Lower resolution for much faster processing
+    max_resolution: 240    # Lower resolution for faster processing
 
   # LLM for Narrative Generation - Optimized with VLM
   llm:
@@ -117,7 +117,7 @@ performance:
   danger_audio_interval: 0.8      # Very fast alerts for danger zone objects
   stats_interval: 100             # Less frequent logging for performance
   max_detections: 5               # Focus on top 5 most relevant objects
-  depth_skip_frames: 5            # Calculate depth every 6th frame (much faster)
+  depth_skip_frames: 8            # Calculate depth every 9th frame (faster)
   frame_skip: 0                   # Process every frame for maximum responsiveness
   enable_multithreading: true     # Use multithreading for parallel processing
   cache_depth_maps: true          # Cache depth maps for speed

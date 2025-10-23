@@ -46,7 +46,7 @@ from movement_visualizer import MovementVisualizer
 from coordinate_transformer import CoordinateTransformer
 from scene_understanding import EnhancedSceneProcessor
 from smart_cache import SmartCache, PredictiveEngine
-from minimal_ui import MinimalUI
+from robot_ui import RobotUI
 from error_handler import ErrorHandler
 
 
@@ -225,8 +225,8 @@ class OrbyGlasses:
         self.predictive_engine = PredictiveEngine()
         self.logger.info("✓ Smart cache and predictive engine initialized")
 
-        # Minimal UI for blind users
-        self.minimal_ui = MinimalUI()
+        # UI
+        self.robot_ui = RobotUI(width=self.frame_width, height=self.frame_height)
         self.logger.info("✓ UI initialized")
 
         # Error handler
@@ -437,10 +437,9 @@ class OrbyGlasses:
             total_time = self.perf_monitor.stop_timer('total')
             fps = self.perf_monitor.get_avg_fps()
 
-            # Create minimal UI overlay with LLM guidance
-            guidance_text = guidance.get('combined', '')
-            annotated_frame = self.minimal_ui.draw_overlay(
-                frame, detections, fps, guidance_text
+            # Create UI overlay
+            annotated_frame = self.robot_ui.draw_clean_overlay(
+                frame, detections, fps, safe_direction
             )
 
             # Add SLAM info if enabled
@@ -861,30 +860,24 @@ class OrbyGlasses:
                 # Clean robot-style display
                 if display:
                     # Main camera view
-                    main_size = (800, 600)
-                    display_frame = cv2.resize(annotated_frame, main_size)
-                    cv2.imshow('OrbyGlasses - Camera', display_frame)
+                    display_size = (640, 480)
+                    display_frame = cv2.resize(annotated_frame, display_size)
+                    cv2.imshow('OrbyGlasses', display_frame)
 
-                    # Show depth map
-                    if depth_map is not None:
+                    # Show depth map (only when calculated)
+                    if depth_map is not None and self.frame_count % (self.skip_depth_frames + 1) == 0:
                         depth_colored = cv2.applyColorMap(
                             (depth_map * 255).astype(np.uint8),
                             cv2.COLORMAP_TURBO
                         )
-                        depth_display = cv2.resize(depth_colored, (400, 300))
-                        cv2.putText(depth_display, "Depth", (10, 25),
-                                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                        depth_display = cv2.resize(depth_colored, (320, 240))
                         cv2.imshow('Depth', depth_display)
 
-                    # Show SLAM map (simple top-down)
-                    if self.slam_enabled and slam_result:
-                        # Get map points as numpy array
-                        if hasattr(self.slam, 'get_map_points_array'):
-                            map_points = self.slam.get_map_points_array()
-                        else:
-                            map_points = np.array([])
-                        mini_map = self.minimal_ui.create_slam_map(slam_result, map_points, size=400)
-                        cv2.imshow('Map', mini_map)
+                    # Show SLAM map viewer (original working version)
+                    if self.slam_enabled and self.slam_map_viewer and slam_result:
+                        self.slam_map_viewer.update(slam_result, self.slam.map_points)
+                        map_image = self.slam_map_viewer.get_map_image()
+                        cv2.imshow('Map', map_image)
 
                 # Save video
                 if video_writer:
