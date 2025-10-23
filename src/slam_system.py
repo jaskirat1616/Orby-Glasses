@@ -69,19 +69,22 @@ class SLAMSystem:
         
         self.K_inv = np.linalg.inv(self.K)
 
-        # Feature detector with parameters
-        nfeatures = config.get('slam.orb_features', 3000)
+        # Feature detector with parameters optimized for low-res frames
+        nfeatures = config.get('slam.orb_features', 1000)
+        fast_threshold = config.get('slam.fast_threshold', 10)
         self.orb = cv2.ORB_create(
             nfeatures=nfeatures,
-            scaleFactor=1.1,  # Smaller scale factor for more precise features
-            nlevels=16,       # More levels for better scale invariance
-            edgeThreshold=31,
+            scaleFactor=1.2,  # Good balance for feature detection
+            nlevels=8,        # Fewer levels for low-res images
+            edgeThreshold=15, # Lower threshold for more features
             firstLevel=0,
             WTA_K=2,
             patchSize=31,
-            fastThreshold=10,  # Lower threshold for more features
+            fastThreshold=fast_threshold,  # Adjustable threshold
             scoreType=cv2.ORB_HARRIS_SCORE
         )
+
+        logging.info(f"ORB configured: {nfeatures} features, FAST threshold {fast_threshold}")
 
         # Multiple matcher strategies
         self.bf_matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
@@ -176,8 +179,15 @@ class SLAMSystem:
         # Convert to grayscale
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
+        # Improve contrast for better feature detection
+        gray = cv2.equalizeHist(gray)
+
         # Detect ORB features with parameters
         keypoints, descriptors = self.orb.detectAndCompute(gray, None)
+
+        # Log feature count for debugging
+        if self.frame_count % 30 == 0:  # Log every 30 frames
+            logging.info(f"Frame {self.frame_count}: Detected {len(keypoints) if keypoints else 0} features")
 
         if descriptors is None or len(keypoints) < 10:
             if self.is_initialized:

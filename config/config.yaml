@@ -146,8 +146,8 @@ slam:
   show_landmarks: true            # Show detected landmarks
 
   # High accuracy tracking without IMU
-  orb_features: 1000              # More features for better accuracy
-  fast_threshold: 8               # Lower threshold for more features
+  orb_features: 1000              # Good number of features
+  fast_threshold: 5               # Lower threshold for more features (better for low-res)
   min_matches: 15                 # More matches for stability
   motion_model: true              # Use constant velocity model
   pose_smoothing: 0.8             # Strong smoothing for stability
