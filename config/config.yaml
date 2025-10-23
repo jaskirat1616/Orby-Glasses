@@ -24,16 +24,16 @@ models:
     path: "depth-anything/Depth-Anything-V2-Small-hf"
     device: "mps"
     half_precision: true   # Use half precision for speed
-    max_resolution: 320    # Limit resolution for speed
+    max_resolution: 480    # Higher resolution for better accuracy
 
   # LLM for Narrative Generation - Optimized with VLM
   llm:
     primary: "gemma3:4b"      # Fast and efficient 3B model
     vision: "moondream:latest"        # Vision Language Model for scene understanding
     temperature: 0.6             # Slightly lower temperature for consistency
-    max_tokens: 150              # More tokens for detailed scene descriptions
-    vlm_enabled: true            # Enable Vision Language Model
-    scene_analysis_interval: 5   # Analyze scene every 5 frames
+    max_tokens: 100              # Shorter responses for speed
+    vlm_enabled: false           # Disable for speed (too slow)
+    scene_analysis_interval: 30  # Analyze scene every 30 frames (only if enabled)
 
 # Conversational Navigation - Simple voice commands
 conversation:
@@ -117,8 +117,8 @@ performance:
   danger_audio_interval: 0.8      # Very fast alerts for danger zone objects
   stats_interval: 100             # Less frequent logging for performance
   max_detections: 5               # Focus on top 5 most relevant objects
-  depth_skip_frames: 2            # Calculate depth every 3rd frame for speed
-  frame_skip: 1                    # Process every frame for maximum responsiveness
+  depth_skip_frames: 1            # Calculate depth every 2nd frame (better accuracy)
+  frame_skip: 0                   # Process every frame for maximum responsiveness
   enable_multithreading: true     # Use multithreading for parallel processing
   cache_depth_maps: true          # Cache depth maps for speed
 
@@ -182,30 +182,30 @@ trajectory_prediction:
   visualize: false                # Show trajectory visualization
   collision_warning: true         # Warn about predicted collisions
 
-# 3D Occupancy Grid Settings - Super Accurate Mapping
+# 3D Occupancy Grid Settings - Balanced Accuracy and Speed
 occupancy_grid_3d:
   enabled: true                   # Enable voxel grid visualization
-  grid_size: [15.0, 15.0, 4.0]    # Larger grid for better coverage
-  resolution: 0.15                # High resolution for accuracy
-  near_resolution: 0.08           # Very high resolution for close objects
+  grid_size: [10.0, 10.0, 3.0]    # Smaller grid for speed
+  resolution: 0.1                 # Good balance
+  near_resolution: 0.05           # High resolution for close objects
   near_distance: 2.0              # Distance for high-res mapping
-  far_resolution: 0.2             # Good resolution for far objects
-  max_range: 6.0                  # Extended sensor range
-  min_range: 0.05                 # Very close range detection
-  log_odds_occupied: 2.0          # Strong occupied signal
-  log_odds_free: -1.0             # Strong free space signal
-  log_odds_min: -4.0              # Strong saturation
-  log_odds_max: 4.0               # Strong saturation
-  subsample_step: 8               # Dense sampling for accuracy
-  update_interval: 0.3            # Fast updates for real-time mapping
+  far_resolution: 0.15            # Moderate resolution for far objects
+  max_range: 5.0                  # Reasonable sensor range
+  min_range: 0.1                  # Minimum range
+  log_odds_occupied: 1.5          # Moderate occupied signal
+  log_odds_free: -1.0             # Free space signal
+  log_odds_min: -3.0              # Saturation limits
+  log_odds_max: 3.0               # Saturation limits
+  subsample_step: 6               # Moderate sampling (faster)
+  update_interval: 0.2            # Fast updates
   visualize: true                 # Show 3D voxel grid visualization window
   show_2d_slice: true             # Show 2D slice for better understanding
   temporal_consistency: true      # Enable for accuracy
   temporal_filtering: true        # Enable temporal filtering for accuracy
-  min_observations: 3             # More observations for accuracy
-  decay_rate: 0.0005              # Very slow decay for stability
-  max_history_length: 10          # Longer history for accuracy
-  history_decay: 0.9              # Better decay factor
+  min_observations: 2             # Fewer observations needed (faster)
+  decay_rate: 0.001               # Slow decay
+  max_history_length: 8           # Moderate history
+  history_decay: 0.85             # Decay factor
   
   # Interactive controls
   interactive: true                # Enable interactive controls

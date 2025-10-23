@@ -221,11 +221,13 @@ class DepthEstimator:
     def _estimate_depth_fast(self, frame: np.ndarray) -> np.ndarray:
         """Fast depth estimation with optimizations."""
         from PIL import Image
-        
+
         # Resize frame for faster processing (maintain aspect ratio)
+        # Use higher resolution for better accuracy (480 instead of 320)
+        max_res = 480
         h, w = frame.shape[:2]
-        if h > 320 or w > 320:
-            scale = min(320/h, 320/w)
+        if h > max_res or w > max_res:
+            scale = min(max_res/h, max_res/w)
             new_h, new_w = int(h * scale), int(w * scale)
             frame = cv2.resize(frame, (new_w, new_h))
         
@@ -296,10 +298,11 @@ class DepthEstimator:
 
         # Convert normalized depth (0-1) to meters
         # Depth Anything V2 gives relative depth (higher = farther)
-        # Map 0 (very close) -> 0.3m, 1 (far) -> 15m
-        depth_meters = 0.3 + (median_depth * 14.7)
+        # Better calibration: 0 (very close) -> 0.2m, 1 (far) -> 10m
+        # More accurate mapping for indoor navigation
+        depth_meters = 0.2 + (median_depth * 9.8)
 
-        return float(np.clip(depth_meters, 0.3, 15.0))
+        return float(np.clip(depth_meters, 0.2, 10.0))
 
 
 class DetectionPipeline:
