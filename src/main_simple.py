@@ -327,24 +327,27 @@ class OrbyGlasses:
                 # Display main window
                 cv2.imshow('OrbyGlasses', result['annotated_frame'])
 
-                # Show depth map with better visualization
-                if result['depth_map'] is not None:
+                # Show depth map (only when freshly calculated for crisp display)
+                skip_frames = self.config.get('performance.depth_skip_frames', 1)
+                if result['depth_map'] is not None and self.frame_count % (skip_frames + 1) == 0:
                     depth_map = result['depth_map']
 
-                    # Apply bilateral filter to smooth while preserving edges
-                    depth_for_display = (depth_map * 255).astype(np.uint8)
-                    depth_filtered = cv2.bilateralFilter(depth_for_display, 9, 75, 75)
+                    # Convert to colormap (no filtering for sharp display)
+                    depth_colored = cv2.applyColorMap(
+                        (depth_map * 255).astype(np.uint8),
+                        cv2.COLORMAP_MAGMA
+                    )
 
-                    # Convert to colorful visualization with MAGMA colormap
-                    depth_colored = cv2.applyColorMap(depth_filtered, cv2.COLORMAP_MAGMA)
+                    # Resize to clean display size (matches main.py)
+                    depth_display = cv2.resize(depth_colored, (640, 480))
 
                     # Add depth legend
-                    cv2.putText(depth_colored, "Close", (10, 30),
+                    cv2.putText(depth_display, "Close", (10, 30),
                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-                    cv2.putText(depth_colored, "Far", (10, depth_colored.shape[0] - 10),
+                    cv2.putText(depth_display, "Far", (10, depth_display.shape[0] - 10),
                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
-                    cv2.imshow('Depth Map', depth_colored)
+                    cv2.imshow('Depth Map', depth_display)
 
                 # Show SLAM map (top-down view like robots)
                 if self.slam_enabled and result['slam_result']:
