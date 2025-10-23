@@ -35,7 +35,7 @@ safety:
   emergency_stop_key: "q"
   max_obstacle_alerts: 3
   enable_calibration: true
-  focal_length: 500
+  focal_length: 600  # Adjusted for better accuracy
   enable_health_monitoring: true
   safe_mode_fps_threshold: 5
   max_error_count: 10

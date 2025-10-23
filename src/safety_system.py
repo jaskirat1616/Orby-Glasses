@@ -26,29 +26,37 @@ class DistanceCalibrator:
     Improves accuracy of depth estimation for critical navigation objects.
     """
 
-    # Real-world average object heights in meters
+    # Real-world average object heights in meters (accurate measurements)
     OBJECT_HEIGHTS = {
-        'person': 1.7,  # Average human height
-        'car': 1.5,  # Average car height
-        'chair': 0.9,  # Standard chair height
+        'person': 1.65,  # Average human height (more accurate)
+        'car': 1.45,  # Average car height
+        'chair': 0.85,  # Standard chair height
+        'couch': 0.9,  # Couch/sofa height
+        'table': 0.75,  # Table height
+        'desk': 0.75,  # Desk height
         'door': 2.0,  # Standard door height
-        'bench': 0.45,  # Standard bench height
+        'bench': 0.45,  # Bench height
         'bicycle': 1.1,  # Bicycle height
-        'motorcycle': 1.2,  # Motorcycle height
-        'bus': 3.0,  # Bus height
-        'truck': 2.5,  # Truck height
-        'stop sign': 2.1,  # Stop sign height
-        'fire hydrant': 0.8,  # Fire hydrant height
-        'traffic light': 3.5,  # Traffic light height
-        'potted plant': 0.6,  # Average potted plant
+        'motorcycle': 1.15,  # Motorcycle height
+        'bus': 3.2,  # Bus height
+        'truck': 2.4,  # Truck height
+        'stop sign': 2.15,  # Stop sign height
+        'fire hydrant': 0.75,  # Fire hydrant height
+        'traffic light': 4.0,  # Traffic light height (on pole)
+        'potted plant': 0.5,  # Potted plant
+        'bottle': 0.25,  # Bottle height
+        'cup': 0.12,  # Cup height
+        'laptop': 0.35,  # Laptop (open height)
+        'backpack': 0.45,  # Backpack height
+        'handbag': 0.35,  # Handbag height
     }
 
-    def __init__(self, focal_length: float = 500, frame_height: int = 480):
+    def __init__(self, focal_length: float = 600, frame_height: int = 480):
         """
         Initialize distance calibrator.
 
         Args:
-            focal_length: Camera focal length in pixels (estimated)
+            focal_length: Camera focal length in pixels (adjusted for better accuracy)
             frame_height: Frame height in pixels
         """
         self.focal_length = focal_length
@@ -100,9 +108,9 @@ class DistanceCalibrator:
         size_based_distance = self.estimate_distance_from_size(label, bbox_height)
 
         if size_based_distance is not None:
-            # Weighted average: 60% size-based, 40% depth model
-            # Size-based is more reliable for known objects
-            calibrated = 0.6 * size_based_distance + 0.4 * depth_estimate
+            # Weighted average: 70% size-based, 30% depth model
+            # Size-based is much more reliable for known objects
+            calibrated = 0.7 * size_based_distance + 0.3 * depth_estimate
 
             # Store calibration for future reference
             self.calibration_history.append({

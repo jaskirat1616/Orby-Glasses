@@ -319,10 +319,20 @@ class DepthEstimator:
             median_depth = np.median(depth_region)
 
         # Convert normalized depth (0-1) to meters
-        # Better calibration: 0 (very close) -> 0.2m, 1 (far) -> 10m
-        depth_meters = 0.2 + (median_depth * 9.8)
+        # Improved non-linear calibration for better real-world accuracy
+        # Close objects need more precision, far objects less critical
 
-        return float(np.clip(depth_meters, 0.2, 10.0))
+        if median_depth < 0.3:
+            # Very close: 0-0.3 maps to 0.3-1.5m (high precision near user)
+            depth_meters = 0.3 + (median_depth / 0.3) * 1.2
+        elif median_depth < 0.6:
+            # Medium: 0.3-0.6 maps to 1.5-3.5m
+            depth_meters = 1.5 + ((median_depth - 0.3) / 0.3) * 2.0
+        else:
+            # Far: 0.6-1.0 maps to 3.5-8.0m
+            depth_meters = 3.5 + ((median_depth - 0.6) / 0.4) * 4.5
+
+        return float(np.clip(depth_meters, 0.3, 8.0))
 
 
 class DetectionPipeline:
