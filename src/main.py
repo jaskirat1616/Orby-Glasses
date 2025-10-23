@@ -46,7 +46,7 @@ from movement_visualizer import MovementVisualizer
 from coordinate_transformer import CoordinateTransformer
 from scene_understanding import EnhancedSceneProcessor
 from smart_cache import SmartCache, PredictiveEngine
-from robot_ui import RobotUI
+from minimal_ui import MinimalUI
 from error_handler import ErrorHandler
 
 
@@ -225,9 +225,9 @@ class OrbyGlasses:
         self.predictive_engine = PredictiveEngine()
         self.logger.info("✓ Smart cache and predictive engine initialized")
 
-        # Robot-style UI
-        self.robot_ui = RobotUI(width=self.frame_width, height=self.frame_height)
-        self.logger.info("✓ Robot UI initialized")
+        # Minimal UI for blind users
+        self.minimal_ui = MinimalUI()
+        self.logger.info("✓ UI initialized")
 
         # Error handler
         self.error_handler = ErrorHandler(self.logger.logger)
@@ -420,16 +420,9 @@ class OrbyGlasses:
             path_plan = None  # Disabled
             pred_time = self.perf_monitor.stop_timer('prediction')
 
-            # Optimized narrative generation with smart caching
+            # Generate LLM guidance (always, for display)
             self.perf_monitor.start_timer('narrative')
-            should_generate = current_time - self.last_audio_time > self.audio_interval
-            
-            if should_generate:
-                # Generate enhanced guidance with VLM scene understanding
-                guidance = self._generate_enhanced_guidance(detections, nav_summary, scene_analysis)
-            else:
-                # Use cached guidance or simple fallback
-                guidance = {'narrative': '', 'predictive': '', 'combined': ''}
+            guidance = self._generate_fast_guidance(detections, nav_summary)
             narr_time = self.perf_monitor.stop_timer('narrative')
 
             # Generate audio cues
@@ -440,13 +433,14 @@ class OrbyGlasses:
             )
             audio_time = self.perf_monitor.stop_timer('audio')
 
-            # Get performance metrics BEFORE UI overlay
+            # Get performance metrics
             total_time = self.perf_monitor.stop_timer('total')
             fps = self.perf_monitor.get_avg_fps()
 
-            # Create UI overlay
-            annotated_frame = self.robot_ui.draw_clean_overlay(
-                frame, detections, fps, safe_direction
+            # Create minimal UI overlay with LLM guidance
+            guidance_text = guidance.get('combined', '')
+            annotated_frame = self.minimal_ui.draw_overlay(
+                frame, detections, fps, guidance_text
             )
 
             # Add SLAM info if enabled
@@ -866,20 +860,27 @@ class OrbyGlasses:
 
                 # Clean robot-style display
                 if display:
-                    # Main camera view (larger)
-                    main_size = (640, 480)
+                    # Main camera view
+                    main_size = (800, 600)
                     display_frame = cv2.resize(annotated_frame, main_size)
-                    cv2.imshow('Robot Vision', display_frame)
+                    cv2.imshow('OrbyGlasses - Camera', display_frame)
 
-                    # Show depth view (robot-style)
+                    # Show depth map
                     if depth_map is not None:
-                        depth_view = self.robot_ui.create_depth_view(depth_map, size=320)
-                        cv2.imshow('Depth Sensor', depth_view)
+                        depth_colored = cv2.applyColorMap(
+                            (depth_map * 255).astype(np.uint8),
+                            cv2.COLORMAP_TURBO
+                        )
+                        depth_display = cv2.resize(depth_colored, (400, 300))
+                        cv2.putText(depth_display, "Depth", (10, 25),
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                        cv2.imshow('Depth', depth_display)
 
-                    # Show SLAM map (clean top-down view like robots)
+                    # Show SLAM map (simple top-down)
                     if self.slam_enabled and slam_result:
-                        mini_map = self.robot_ui.create_mini_map(slam_result, size=320)
-                        cv2.imshow('Navigation Map', mini_map)
+                        map_points = self.slam.map_points if hasattr(self.slam, 'map_points') else np.array([])
+                        mini_map = self.minimal_ui.create_slam_map(slam_result, map_points, size=400)
+                        cv2.imshow('Map', mini_map)
 
                 # Save video
                 if video_writer:
