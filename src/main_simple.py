@@ -17,6 +17,7 @@ from utils import ConfigManager, Logger, AudioManager, ensure_directories
 from detection import DetectionPipeline
 from safety_system import SafetySystem
 from audio_priority import AudioPriorityManager
+from blind_navigation import BlindNavigationAssistant
 
 
 class OrbyGlasses:
@@ -46,6 +47,13 @@ class OrbyGlasses:
             max_queue_size=self.config.get('audio.max_queue_size', 5),
             min_message_interval=self.config.get('audio.min_message_interval', 0.5)
         )
+
+        # Blind navigation assistant - REAL help for blind users
+        self.blind_nav = BlindNavigationAssistant(
+            frame_width=self.frame_width,
+            frame_height=self.frame_height
+        )
+        self.logger.info("✓ Blind navigation assistant initialized")
 
         # SLAM (if enabled)
         self.slam_enabled = self.config.get('slam.enabled', False)
@@ -244,39 +252,20 @@ class OrbyGlasses:
         return sum(self.fps_history) / len(self.fps_history)
 
     def generate_audio_message(self, detections: List[Dict], warnings: List[Dict]) -> Optional[str]:
-        """Generate audio message using priority system."""
+        """Generate TRULY HELPFUL audio message for blind users."""
         current_time = time.time()
 
-        # Check if we should speak
-        if current_time - self.last_audio_time < 0.5:
+        # Don't speak too often
+        if current_time - self.last_audio_time < 1.5:
             return None
 
-        # Priority 1: Safety warnings
-        if warnings:
-            msg_dict = self.audio_priority.create_safety_message(warnings)
-            if msg_dict:
-                self.audio_priority.add_message(
-                    msg_dict['message'],
-                    msg_dict['priority'],
-                    msg_dict['category']
-                )
+        # Use blind navigation assistant - provides CLEAR, ACTIONABLE guidance
+        guidance = self.blind_nav.get_navigation_guidance(detections, None)
 
-        # Priority 2: Navigation guidance
-        else:
-            nav_summary = self.detection_pipeline.get_navigation_summary(detections)
-            msg_dict = self.audio_priority.create_navigation_message(nav_summary, detections)
-            if msg_dict:
-                self.audio_priority.add_message(
-                    msg_dict['message'],
-                    msg_dict['priority'],
-                    msg_dict['category']
-                )
-
-        # Get next message to speak
-        message = self.audio_priority.get_next_message()
-        if message:
+        # Check if we should speak this guidance now
+        if self.blind_nav.should_speak_now(guidance):
             self.last_audio_time = current_time
-            return message
+            return guidance
 
         return None
 
