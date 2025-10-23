@@ -878,7 +878,11 @@ class OrbyGlasses:
 
                     # Show SLAM map (simple top-down)
                     if self.slam_enabled and slam_result:
-                        map_points = self.slam.map_points if hasattr(self.slam, 'map_points') else np.array([])
+                        # Get map points as numpy array
+                        if hasattr(self.slam, 'get_map_points_array'):
+                            map_points = self.slam.get_map_points_array()
+                        else:
+                            map_points = np.array([])
                         mini_map = self.minimal_ui.create_slam_map(slam_result, map_points, size=400)
                         cv2.imshow('Map', mini_map)
 
