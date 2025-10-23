@@ -333,14 +333,16 @@ class OrbyGlasses:
                 if result['depth_map'] is not None and self.frame_count % (skip_frames + 1) == 0:
                     depth_map = result['depth_map']
 
-                    # Convert to colormap (no filtering for sharp display)
-                    depth_colored = cv2.applyColorMap(
-                        (depth_map * 255).astype(np.uint8),
-                        cv2.COLORMAP_MAGMA
-                    )
+                    # Apply unsharp mask for sharpness (counteracts pipeline upscaling blur)
+                    depth_uint8 = (depth_map * 255).astype(np.uint8)
+                    gaussian = cv2.GaussianBlur(depth_uint8, (0, 0), 2.0)
+                    depth_sharpened = cv2.addWeighted(depth_uint8, 1.5, gaussian, -0.5, 0)
 
-                    # Resize to clean display size (matches main.py)
-                    depth_display = cv2.resize(depth_colored, (640, 480))
+                    # Convert to colormap
+                    depth_colored = cv2.applyColorMap(depth_sharpened, cv2.COLORMAP_MAGMA)
+
+                    # Resize with high-quality interpolation
+                    depth_display = cv2.resize(depth_colored, (640, 480), interpolation=cv2.INTER_CUBIC)
 
                     # Add depth legend
                     cv2.putText(depth_display, "Close", (10, 30),
