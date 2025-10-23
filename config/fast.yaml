@@ -19,7 +19,7 @@ models:
     path: "depth-anything/Depth-Anything-V2-Small-hf"
     device: "mps"
     half_precision: true
-    max_resolution: 518  # Higher resolution for better quality
+    max_resolution: 480  # Balanced for accuracy and speed
 
   llm:
     primary: "gemma3:4b"
@@ -35,7 +35,7 @@ safety:
   emergency_stop_key: "q"
   max_obstacle_alerts: 3
   enable_calibration: true
-  focal_length: 600  # Adjusted for better accuracy
+  focal_length: 500  # Standard focal length (matches main config)
   enable_health_monitoring: true
   safe_mode_fps_threshold: 5
   max_error_count: 10
@@ -55,35 +55,35 @@ performance:
   danger_audio_interval: 0.5
   stats_interval: 100
   max_detections: 5
-  depth_skip_frames: 2  # Calculate depth every 3rd frame
+  depth_skip_frames: 1  # Calculate depth every 2nd frame for accuracy
   frame_skip: 0
-  enable_multithreading: false
+  enable_multithreading: true
   cache_depth_maps: true
 
 slam:
   enabled: true
-  grid_size: [200, 200]
-  grid_resolution: 0.1
+  grid_size: [300, 300]
+  grid_resolution: 0.2
   save_maps: true
   visualize: true
   show_map_creation: false
   show_camera_trajectory: false
   show_keyframes: false
   show_landmarks: false
-  orb_features: 1000
+  orb_features: 500  # Balanced for speed and accuracy
   fast_threshold: 10
-  min_matches: 12
+  min_matches: 10  # Balanced for speed
   motion_model: true
-  pose_smoothing: 0.7
+  pose_smoothing: 0.8  # Stronger smoothing for stability
   temporal_consistency_check: true
   max_position_jump: 0.2
   max_rotation_jump: 0.2
-  strict_matching: false
-  min_tracked_features: 10
-  keyframe_threshold: 20
-  reprojection_threshold: 2.5
-  min_depth: 0.1
-  max_depth: 10.0
+  strict_matching: true  # Enable for accuracy
+  min_tracked_features: 12  # More features for stability
+  keyframe_threshold: 15  # More frequent keyframes
+  reprojection_threshold: 2.0  # Lower for accuracy
+  min_depth: 0.05  # Better close detection
+  max_depth: 15.0
   loop_closure: false  # Disabled for speed
   bundle_adjustment: false  # Disabled for speed
 
