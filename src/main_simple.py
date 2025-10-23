@@ -230,27 +230,27 @@ class OrbyGlasses:
                 # Draw box
                 cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
 
-                # Draw label
+                # Draw label with larger text
                 text = f"{label} {depth:.1f}m"
                 cv2.putText(annotated, text, (x1, y1-5),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
 
-            # Simple status overlay
+            # Simple status overlay (larger)
             overlay = annotated.copy()
-            cv2.rectangle(overlay, (5, 5), (200, 100), (0, 0, 0), -1)
+            cv2.rectangle(overlay, (5, 5), (250, 120), (0, 0, 0), -1)
             cv2.addWeighted(overlay, 0.6, annotated, 0.4, 0, annotated)
 
-            # FPS
+            # FPS (larger text)
             fps_color = (0, 255, 0) if fps > 10 else (0, 165, 255) if fps > 5 else (0, 0, 255)
-            cv2.putText(annotated, f"FPS: {fps:.1f}", (10, 25),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, fps_color, 2)
+            cv2.putText(annotated, f"FPS: {fps:.1f}", (15, 35),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.9, fps_color, 2)
 
-            # Danger count
+            # Danger count (larger text)
             danger_count = len([d for d in detections if d.get('depth', 10) < 1.0])
-            cv2.putText(annotated, f"Dangers: {danger_count}", (10, 50),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            cv2.putText(annotated, f"Dangers: {danger_count}", (15, 70),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
 
-            # Status
+            # Status (larger text)
             if warnings and warnings[0]['level'] == 'IMMEDIATE_DANGER':
                 status = "STOP!"
                 status_color = (0, 0, 255)
@@ -261,8 +261,8 @@ class OrbyGlasses:
                 status = "SAFE"
                 status_color = (0, 255, 0)
 
-            cv2.putText(annotated, status, (10, 80),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, status_color, 2)
+            cv2.putText(annotated, status, (15, 105),
+                       cv2.FONT_HERSHEY_SIMPLEX, 1.0, status_color, 2)
 
         return annotated
 
