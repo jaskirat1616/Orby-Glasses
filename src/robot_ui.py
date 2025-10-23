@@ -28,7 +28,7 @@ class RobotUI:
     def draw_clean_overlay(self, frame: np.ndarray, detections: List[Dict],
                           fps: float, safe_direction: str) -> np.ndarray:
         """
-        Draw futuristic robot-style overlay - BREAKTHROUGH UI.
+        Draw clean navigation overlay with large readable text.
 
         Args:
             frame: Input frame
@@ -45,7 +45,7 @@ class RobotUI:
         # Calculate scaling factor for larger display
         scale = max(w / 640, 1.0)
 
-        # Draw enhanced center crosshair (robot's focus point)
+        # Draw center crosshair for aiming
         center_x, center_y = w // 2, h // 2
         crosshair_size = int(30 * scale)
         cv2.line(overlay, (center_x - crosshair_size, center_y),
@@ -74,7 +74,7 @@ class RobotUI:
             label = det.get('label', 'object')
             depth = det.get('depth', 0.0)
 
-            # Color by risk with glow effect
+            # Color by distance/risk
             if depth < 1.0:
                 color = self.RED
                 danger_count += 1
@@ -87,10 +87,10 @@ class RobotUI:
                 color = self.GREEN
                 thickness = 2
 
-            # Enhanced box with corners
+            # Draw detection box
             cv2.rectangle(overlay, (x1, y1), (x2, y2), color, thickness)
 
-            # Corner brackets for futuristic look
+            # Corner brackets for clarity
             corner_len = int(20 * scale)
             cv2.line(overlay, (x1, y1), (x1 + corner_len, y1), color, thickness + 1)
             cv2.line(overlay, (x1, y1), (x1, y1 + corner_len), color, thickness + 1)
@@ -116,7 +116,7 @@ class RobotUI:
             cv2.putText(overlay, text, (x1 + 5, text_y),
                        cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 0), font_thickness)
 
-        # ENHANCED TOP STATUS BAR - Much larger and clearer
+        # Top status bar with large text
         status_h = int(80 * scale)
         # Semi-transparent dark background
         overlay_bg = overlay.copy()
@@ -143,10 +143,10 @@ class RobotUI:
                    cv2.FONT_HERSHEY_SIMPLEX, count_scale,
                    self.YELLOW if caution_count > 0 else self.WHITE, count_thick)
 
-        # Enhanced direction arrow
+        # Direction arrow
         self._draw_direction_arrow(overlay, safe_direction, center_x, status_h + int(40 * scale))
 
-        # LARGE status text
+        # Status text
         if danger_count > 0:
             status = "⚠ STOP"
             status_color = self.RED
@@ -166,7 +166,7 @@ class RobotUI:
         cv2.putText(overlay, status, (w - status_w - int(20 * scale), int(50 * scale)),
                    cv2.FONT_HERSHEY_SIMPLEX, status_scale, status_color, status_thick)
 
-        # Add corner frame markers for futuristic look
+        # Corner frame markers
         frame_size = int(40 * scale)
         frame_thick = 3
         # Top-left
@@ -186,7 +186,7 @@ class RobotUI:
 
     def _draw_direction_arrow(self, frame: np.ndarray, direction: str,
                              center_x: int, y: int):
-        """Draw LARGE directional arrow indicator."""
+        """Draw directional arrow."""
         h, w = frame.shape[:2]
         scale = max(w / 640, 1.0)
         arrow_length = int(60 * scale)

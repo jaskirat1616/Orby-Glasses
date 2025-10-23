@@ -440,14 +440,14 @@ class OrbyGlasses:
             )
             audio_time = self.perf_monitor.stop_timer('audio')
 
-            # Create robot-style UI overlay
+            # Get performance metrics BEFORE UI overlay
+            total_time = self.perf_monitor.stop_timer('total')
+            fps = self.perf_monitor.get_avg_fps()
+
+            # Create UI overlay
             annotated_frame = self.robot_ui.draw_clean_overlay(
                 frame, detections, fps, safe_direction
             )
-
-            # Get performance metrics
-            total_time = self.perf_monitor.stop_timer('total')
-            fps = self.perf_monitor.get_avg_fps()
 
             # Add SLAM info if enabled
             if slam_result is not None:
