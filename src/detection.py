@@ -303,7 +303,7 @@ class DepthEstimator:
 
 
 class DetectionPipeline:
-    """Combined detection and depth estimation pipeline."""
+    """Combined detection and depth estimation pipeline with safety system."""
 
     def __init__(self, config):
         """
@@ -330,15 +330,26 @@ class DetectionPipeline:
 
         self.min_safe_distance = config.get('safety.min_safe_distance', 1.5)
 
-    def process_frame(self, frame: np.ndarray) -> Tuple[List[Dict], Optional[np.ndarray]]:
+        # Import and initialize safety system
+        try:
+            from safety_system import SafetySystem
+            camera_height = config.get('camera.height', 480)
+            self.safety_system = SafetySystem(focal_length=500, frame_height=camera_height)
+            logging.info("Safety system initialized")
+        except Exception as e:
+            logging.warning(f"Safety system initialization failed: {e}, using basic safety")
+            self.safety_system = None
+
+    def process_frame(self, frame: np.ndarray, current_fps: float = 15.0) -> Tuple[List[Dict], Optional[np.ndarray], List[Dict]]:
         """
-        Process frame through detection and depth estimation.
+        Process frame through detection and depth estimation with safety checks.
 
         Args:
             frame: Input frame
+            current_fps: Current system FPS for health monitoring
 
         Returns:
-            Tuple of (detections with depth, depth_map)
+            Tuple of (detections with calibrated depth, depth_map, safety_warnings)
         """
         # Object detection
         detections = self.detector.detect(frame)
@@ -359,7 +370,15 @@ class DetectionPipeline:
                 detection['depth'] = 0.0
                 detection['is_danger'] = False
 
-        return detections, depth_map
+        # Apply safety system calibration and get warnings
+        safety_warnings = []
+        if self.safety_system:
+            try:
+                detections, safety_warnings = self.safety_system.process_detections(detections, current_fps)
+            except Exception as e:
+                logging.error(f"Safety system error: {e}")
+
+        return detections, depth_map, safety_warnings
 
     def get_navigation_summary(self, detections: List[Dict]) -> Dict:
         """

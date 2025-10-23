@@ -1,0 +1,170 @@
+# OrbyGlasses - Best Settings
+# Accurate, fast, and safe navigation
+
+# Camera Settings - High Quality
+camera:
+  source: 0  # Built-in webcam (change to 1 for external camera)
+  width: 640  # Higher resolution for better accuracy
+  height: 480  # Standard aspect ratio
+  fps: 30  # Smooth frame rate
+
+# Object Detection - High Accuracy
+models:
+  yolo:
+    path: "models/yolo/yolo12n.pt"
+    confidence: 0.7  # Higher confidence for fewer false positives
+    iou_threshold: 0.45
+    device: "mps"  # Apple Silicon
+    half_precision: true
+
+  # Depth Estimation - High Quality
+  depth:
+    path: "depth-anything/Depth-Anything-V2-Small-hf"
+    device: "mps"
+    half_precision: true
+    max_resolution: 480  # Higher resolution for accuracy
+
+  # AI Models - Reliable Guidance
+  llm:
+    primary: "gemma3:4b"  # Fast and accurate
+    vision: "moondream:latest"
+    temperature: 0.6  # Consistent responses
+    max_tokens: 150
+    vlm_enabled: true
+    scene_analysis_interval: 5  # Analyze every 5 frames
+
+# Safety Settings - Maximum Protection
+safety:
+  min_safe_distance: 1.5  # Safe walking distance
+  danger_distance: 0.4  # Immediate danger zone
+  caution_distance: 2.0  # Caution zone
+  emergency_stop_key: "q"
+  max_obstacle_alerts: 3  # Limit simultaneous alerts
+
+  # Distance calibration
+  enable_calibration: true  # Use size-based calibration
+  focal_length: 500  # Camera focal length (pixels)
+
+  # System health monitoring
+  enable_health_monitoring: true
+  safe_mode_fps_threshold: 5  # Enable safe mode below 5 FPS
+  max_error_count: 10  # Max errors before safe mode
+
+# Audio System - Clear and Timely
+audio:
+  tts_engine: "pyttsx3"
+  tts_rate: 180  # Clear speech rate
+  tts_volume: 0.9
+
+  # Audio prioritization
+  enable_priority_system: true
+  max_queue_size: 5
+  min_message_interval: 0.5  # Seconds between messages
+
+  # Echolocation beacons
+  echolocation_enabled: true
+  spatial_audio: true
+  adaptive_beaconing_enabled: true
+  beacon_safe_frequency: 440
+  beacon_obstacle_frequency: 880
+  warning_pulse_rate: 0.2
+
+# Performance - Balanced for Accuracy
+performance:
+  audio_update_interval: 2.0  # Frequent updates
+  danger_audio_interval: 0.5  # Fast danger alerts
+  stats_interval: 100
+  max_detections: 5  # Track top 5 objects
+  depth_skip_frames: 1  # Process depth frequently
+  frame_skip: 0  # Process all frames
+  enable_multithreading: true
+  cache_depth_maps: true
+
+# SLAM - Accurate Indoor Navigation
+slam:
+  enabled: true  # Enable for indoor navigation
+  grid_size: [300, 300]
+  grid_resolution: 0.1  # High resolution
+  save_maps: true
+  visualize: true
+  show_map_creation: true
+  show_camera_trajectory: true
+  show_keyframes: true
+  show_landmarks: true
+
+  # High accuracy tracking
+  orb_features: 1500  # Many features for accuracy
+  fast_threshold: 8
+  min_matches: 15
+  motion_model: true
+  pose_smoothing: 0.8  # Smooth movements
+  temporal_consistency_check: true
+  max_position_jump: 0.15  # Detect unrealistic movements
+  max_rotation_jump: 0.15
+  strict_matching: true
+  min_tracked_features: 12
+  keyframe_threshold: 15
+  reprojection_threshold: 2.0
+  min_depth: 0.05
+  max_depth: 15.0
+  loop_closure: true
+  bundle_adjustment: true
+  ba_interval: 5
+
+# Indoor Navigation
+indoor_navigation:
+  enabled: true  # Goal-oriented navigation
+  path_planning: true
+  save_locations: true
+
+# 3D Mapping
+occupancy_grid_3d:
+  enabled: true  # 3D spatial awareness
+  grid_size: [12.0, 12.0, 3.0]
+  resolution: 0.1  # High resolution
+  near_resolution: 0.05  # Very detailed for close objects
+  near_distance: 2.0
+  far_resolution: 0.15
+  max_range: 6.0
+  min_range: 0.05
+  subsample_step: 6  # Dense sampling
+  update_interval: 0.2  # Fast updates
+  visualize: true
+  show_2d_slice: true
+  temporal_consistency: true
+  temporal_filtering: true
+  min_observations: 3
+  interactive: true
+
+# Trajectory Prediction - For Moving Objects
+trajectory_prediction:
+  enabled: false  # Disable for now (experimental)
+  max_history: 10
+  prediction_horizon: 3
+  time_step: 0.5
+  visualize: false
+  collision_warning: true
+
+# Conversational Navigation
+conversation:
+  enabled: true  # Voice interaction
+  model: "gemma3:4b"
+  temperature: 0.7
+  max_tokens: 200
+  voice_input: true
+  activation_phrase: "hey orby"
+  check_interval: 1.0
+  simple_commands: true
+
+# Social Navigation
+social_navigation:
+  enabled: true
+  region: "us"  # US social norms
+  voice_announce: true
+
+# Logging - Production Level
+logging:
+  level: "INFO"  # Production logging level
+  log_file: "data/logs/orbyglass.log"
+  save_detections: false  # Don't save in production
+  save_frames: false  # Don't save frames

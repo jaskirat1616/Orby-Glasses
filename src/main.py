@@ -995,8 +995,8 @@ class OrbyGlasses:
                                 occ_display_2d = cv2.resize(occ_vis_2d, display_size)
                                 cv2.imshow('2D Map Slice', occ_display_2d)
                             
-                            # Show map statistics
-                            if self.config.get('occupancy_grid_3d.show_statistics', True):
+                            # Show map statistics (only if method exists)
+                            if self.config.get('occupancy_grid_3d.show_statistics', True) and hasattr(self.occupancy_grid, 'visualize_statistics'):
                                 stats_vis = self.occupancy_grid.visualize_statistics()
                                 if stats_vis is not None:
                                     stats_display = cv2.resize(stats_vis, display_size)

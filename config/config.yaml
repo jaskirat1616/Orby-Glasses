@@ -4,7 +4,7 @@
 # Camera/Video Source Settings - Optimized for Performance
 camera:
   # Source: 0 for built-in webcam, or URL for IP camera
-  source: 0
+  source: 1
   width: 416  # Optimized size for YOLO (416x416 is optimal for YOLOv12)
   height: 416  # Square aspect ratio for best performance
   fps: 30  # Higher FPS for smoother navigation
@@ -146,7 +146,7 @@ slam:
   show_landmarks: true            # Show detected landmarks
 
   # High accuracy tracking without IMU
-  orb_features: 2000              # More features for better accuracy
+  orb_features: 1000              # More features for better accuracy
   fast_threshold: 8               # Lower threshold for more features
   min_matches: 15                 # More matches for stability
   motion_model: true              # Use constant velocity model
