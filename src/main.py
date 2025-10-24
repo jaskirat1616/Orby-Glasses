@@ -204,7 +204,7 @@ class OrbyGlasses:
         self.last_audio_time = 0
         self.audio_interval = self.config.get('performance.audio_update_interval', 2.0)
         self.danger_audio_interval = self.config.get('performance.danger_audio_interval', 0.8)
-        self.skip_depth_frames = self.config.get('performance.depth_skip_frames', 4)  # Process depth every 5th frame
+        self.skip_depth_frames = self.config.get('performance.depth_skip_frames', 2)  # Process depth every 3rd frame
         self.last_depth_map = None  # Cache last depth map
 
         # Performance optimizations
@@ -369,40 +369,16 @@ class OrbyGlasses:
             prev_frame = self.smart_cache.get_previous_frame()
             motion_score = self.smart_cache.compute_motion_score(frame, prev_frame)
 
-            # Use threaded depth computation for non-blocking processing
-            if self.enable_multithreading:
-                # Check if previous depth computation is done
-                if self.depth_future is not None and self.depth_future.done():
-                    try:
-                        self.last_depth_map = self.depth_future.result()
-                    except Exception as e:
-                        self.logger.error(f"Depth thread error: {e}")
-                    self.depth_future = None
-
-                # Start new depth computation if needed and no computation is running
-                if self.smart_cache.should_recompute_depth(motion_score, self.frame_count) and self.depth_future is None:
-                    self.depth_future = self.executor.submit(
-                        self.detection_pipeline.depth_estimator.estimate_depth,
-                        frame.copy()
-                    )
-
-                # Use cached depth map
+            # Simplified depth computation with caching (no threading - causes issues)
+            if self.smart_cache.should_recompute_depth(motion_score, self.frame_count):
+                depth_map = self.detection_pipeline.depth_estimator.estimate_depth(frame)
+                self.last_depth_map = depth_map
+            else:
+                # Reuse cached depth map (much faster!)
                 depth_map = self.last_depth_map
                 if depth_map is None:
-                    # First frame - compute synchronously
                     depth_map = self.detection_pipeline.depth_estimator.estimate_depth(frame)
                     self.last_depth_map = depth_map
-            else:
-                # Original synchronous depth computation
-                if self.smart_cache.should_recompute_depth(motion_score, self.frame_count):
-                    depth_map = self.detection_pipeline.depth_estimator.estimate_depth(frame)
-                    self.last_depth_map = depth_map
-                else:
-                    # Reuse cached depth map (much faster!)
-                    depth_map = self.smart_cache.get_cached_depth()
-                    if depth_map is None:
-                        depth_map = self.detection_pipeline.depth_estimator.estimate_depth(frame)
-                        self.last_depth_map = depth_map
 
             depth_time = self.perf_monitor.stop_timer('depth')
 
