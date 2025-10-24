@@ -52,7 +52,7 @@ class DarkThemeDepthVisualizer:
         # > 3.5m: far zone
 
         # Visualization parameters
-        self.enhance_edges = True
+        self.enable_edge_enhancement = True
         self.apply_histogram_eq = True
         self.overlay_semantic = True
         self.show_legend = True
@@ -128,7 +128,7 @@ class DarkThemeDepthVisualizer:
 
         return colored
 
-    def enhance_edges(self, colored_depth: np.ndarray) -> np.ndarray:
+    def enhance_edges_func(self, colored_depth: np.ndarray) -> np.ndarray:
         """
         Apply edge enhancement for maximum clarity.
 
@@ -262,8 +262,8 @@ class DarkThemeDepthVisualizer:
         colored = self.create_obsidian_colormap(depth_norm)
 
         # Enhance edges
-        if self.enhance_edges:
-            colored = self.enhance_edges(colored)
+        if self.enable_edge_enhancement:
+            colored = self.enhance_edges_func(colored)
 
         # Overlay semantic zones
         if self.overlay_semantic:

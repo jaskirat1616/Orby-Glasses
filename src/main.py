@@ -392,7 +392,7 @@ class OrbyGlasses:
         t = (depth_eq[mask4] - 0.5) / 0.2
         colored[mask4] = np.stack([
             (t * 100).astype(np.uint8),
-            (255).astype(np.uint8),
+            np.full_like(t, 255, dtype=np.uint8),
             (255 - t * 255).astype(np.uint8)
         ], axis=-1)
 

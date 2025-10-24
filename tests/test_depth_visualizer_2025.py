@@ -46,7 +46,7 @@ class TestDarkThemeDepthVisualizer:
         """Test edge enhancement."""
         depth_norm = self.depth_map / 10.0
         colored = self.visualizer.create_obsidian_colormap(depth_norm)
-        enhanced = self.visualizer.enhance_edges(colored)
+        enhanced = self.visualizer.enhance_edges_func(colored)
 
         assert enhanced.shape == colored.shape
         assert enhanced.dtype == np.uint8
