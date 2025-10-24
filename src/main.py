@@ -61,6 +61,12 @@ except ImportError:
     DARK_DEPTH_VIZ_AVAILABLE = False
 
 try:
+    from visualization.fast_depth import FastDepthVisualizer
+    FAST_DEPTH_VIZ_AVAILABLE = True
+except ImportError:
+    FAST_DEPTH_VIZ_AVAILABLE = False
+
+try:
     from features.haptic_feedback_2025 import HapticFeedbackController
     HAPTIC_AVAILABLE = True
 except ImportError:
@@ -218,12 +224,16 @@ class OrbyGlasses:
         self.coordinate_transformer = CoordinateTransformer(self.config)
         self.logger.info("✓ Coordinate Transformer initialized")
 
-        # NEW: Dark Depth Visualizer
-        if DARK_DEPTH_VIZ_AVAILABLE:
-            self.dark_depth_viz = DarkThemeDepthVisualizer(self.config)
+        # NEW: Depth Visualizers (fast by default)
+        use_fast_depth = self.config.get('visualization.use_fast_depth', True)
+        if use_fast_depth and FAST_DEPTH_VIZ_AVAILABLE:
+            self.depth_viz = FastDepthVisualizer()
+            self.logger.info("✓ Fast depth visualizer initialized")
+        elif DARK_DEPTH_VIZ_AVAILABLE:
+            self.depth_viz = DarkThemeDepthVisualizer(self.config)
             self.logger.info("✓ Dark depth visualizer initialized")
         else:
-            self.dark_depth_viz = None
+            self.depth_viz = None
 
         # NEW: Haptic Feedback
         if HAPTIC_AVAILABLE and self.config.get('haptic.enabled', False):
