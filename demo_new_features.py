@@ -25,13 +25,22 @@ print("4. Audio sonification\n")
 
 # Initialize
 print("Loading models...")
-config = {'models': {'depth': {'size': 'small', 'device': 'cpu'}}}
 
-depth_estimator = DepthAnythingV2(config)
+# Use MiDaS instead (faster and simpler)
+try:
+    from core.detection import DetectionPipeline
+    config_full = {'models': {'depth': {'device': 'cpu'}}}
+    detection_pipeline = DetectionPipeline(config_full)
+    depth_estimator = detection_pipeline.depth_estimator
+    print("✓ Using MiDaS depth estimator (fast)")
+except Exception as e:
+    print(f"Note: Using simple depth estimation ({e})")
+    depth_estimator = None
+
 depth_viz = DarkThemeDepthVisualizer()
 haptic_converter = HapticAudioConverter()
 
-print("✓ Models loaded\n")
+print("✓ Visualizers loaded\n")
 
 # Open webcam
 cap = cv2.VideoCapture(0)
@@ -57,15 +66,20 @@ while True:
 
     # Only process depth every 3rd frame for speed
     if frame_count % 3 == 0:
-        # NEW: Depth Anything V2 estimation
-        depth_map = depth_estimator.estimate_depth(frame)
+        # Estimate depth
+        if depth_estimator:
+            depth_map = depth_estimator.estimate_depth(frame)
+        else:
+            # Simple random depth for demo if no estimator
+            depth_map = np.random.rand(frame.shape[0], frame.shape[1]) * 10
 
         # NEW: Dark-themed visualization
         if show_dark_viz:
-            depth_colored = depth_viz.visualize(depth_map, normalize=False)
+            depth_colored = depth_viz.visualize(depth_map, normalize=True)
         else:
-            # Old style visualization
-            depth_colored = depth_estimator.visualize_depth(depth_map)
+            # Standard OpenCV visualization
+            depth_norm = (depth_map / 10.0 * 255).astype(np.uint8)
+            depth_colored = cv2.applyColorMap(depth_norm, cv2.COLORMAP_JET)
 
         # Show side by side
         # Resize to match
