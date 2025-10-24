@@ -11,7 +11,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from occupancy_grid_3d import OccupancyGrid3D
-from utils import ConfigManager
+from core.utils import ConfigManager
 
 
 class TestOccupancyGrid3D(unittest.TestCase):

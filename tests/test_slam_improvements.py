@@ -6,11 +6,11 @@ import sys
 import os
 sys.path.insert(0, './src')
 
-from slam_system import SLAMSystem
+from navigation.slam_system import SLAMSystem
 from voxel_map import VoxelMap
-from slam import MonocularSLAM
+from navigation.slam_system import MonocularSLAM
 from occupancy_grid_3d import OccupancyGrid3D
-from utils import ConfigManager
+from core.utils import ConfigManager
 import numpy as np
 import cv2
 

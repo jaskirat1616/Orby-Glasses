@@ -23,7 +23,7 @@ except ImportError:
 
 # Import social navigation module
 try:
-    from social_navigation import SocialNavigationAI
+    from features.social_navigation import SocialNavigationAI
     SOCIAL_NAVIGATION_AVAILABLE = True
 except ImportError:
     SOCIAL_NAVIGATION_AVAILABLE = False

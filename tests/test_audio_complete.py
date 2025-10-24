@@ -8,7 +8,7 @@ import os
 import time
 sys.path.insert(0, 'src')
 
-from utils import ConfigManager, AudioManager
+from core.utils import ConfigManager, AudioManager
 import logging
 
 # Enable debug logging to see everything

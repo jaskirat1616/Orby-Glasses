@@ -8,7 +8,7 @@ import os
 import time
 sys.path.insert(0, 'src')
 
-from utils import ConfigManager, AudioManager
+from core.utils import ConfigManager, AudioManager
 
 def test_audio_cutoff():
     """Test that audio sentences complete without being cut off."""

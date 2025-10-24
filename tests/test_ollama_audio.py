@@ -9,7 +9,7 @@ import os
 import time
 sys.path.insert(0, 'src')
 
-from utils import ConfigManager, AudioManager, Logger
+from core.utils import ConfigManager, AudioManager, Logger
 from narrative import NarrativeGenerator
 import numpy as np
 import cv2

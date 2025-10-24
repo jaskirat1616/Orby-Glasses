@@ -11,8 +11,8 @@ import os
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from slam_system import SLAMSystem
-from utils import ConfigManager
+from navigation.slam_system import SLAMSystem
+from core.utils import ConfigManager
 
 class MockConfig(ConfigManager):
     def __init__(self, config_dict):

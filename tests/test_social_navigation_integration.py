@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src
 
 from src.conversation import ConversationManager
 from social_navigation import SocialNavigationAI
-from utils import ConfigManager
+from core.utils import ConfigManager
 
 
 def test_conversation_with_social_navigation():

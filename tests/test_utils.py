@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 import pytest
 import numpy as np
 import cv2
-from utils import (
+from core.utils import (
     ConfigManager, FrameProcessor, DataLogger,
     PerformanceMonitor, check_device
 )

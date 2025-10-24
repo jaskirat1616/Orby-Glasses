@@ -16,7 +16,7 @@ def test_integration():
     
     try:
         # Import all components
-        from slam import MonocularSLAM
+        from navigation.slam_system import MonocularSLAM
         from occupancy_grid_3d import OccupancyGrid3D
         from movement_visualizer import MovementVisualizer
         from coordinate_transformer import CoordinateTransformer

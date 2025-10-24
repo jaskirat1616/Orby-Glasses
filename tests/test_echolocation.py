@@ -8,8 +8,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 import pytest
 import numpy as np
-from echolocation import EcholocationEngine, AudioCueGenerator
-from utils import ConfigManager
+from core.echolocation import EcholocationEngine, AudioCueGenerator
+from core.utils import ConfigManager
 
 
 @pytest.fixture

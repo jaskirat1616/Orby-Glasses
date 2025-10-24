@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 import numpy as np
 import cv2
 from occupancy_grid_3d import OccupancyGrid3D
-from utils import ConfigManager
+from core.utils import ConfigManager
 
 def main():
     print("Testing Interactive 3D Occupancy Grid Visualization")

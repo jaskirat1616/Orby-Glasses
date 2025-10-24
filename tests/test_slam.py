@@ -11,8 +11,8 @@ import os
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from slam_system import SLAMSystem, MapPoint, KeyFrame
-from indoor_navigation import OccupancyGrid, AStarPlanner, IndoorNavigator
+from navigation.slam_system import SLAMSystem, MapPoint, KeyFrame
+from navigation.indoor_navigation import OccupancyGrid, AStarPlanner, IndoorNavigator
 
 
 class MockConfig:

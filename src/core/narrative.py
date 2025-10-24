@@ -11,7 +11,7 @@ import ollama
 from typing import List, Dict, Optional
 import json
 import time
-from llm_manager import LLMManager
+from core.llm_manager import LLMManager
 
 
 class NarrativeGenerator:
