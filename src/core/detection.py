@@ -368,12 +368,16 @@ class DepthEstimator:
             if depth_w != frame_w or depth_h != frame_h:
                 scale_x = depth_w / frame_w
                 scale_y = depth_h / frame_h
-                x1 = int(x1 * scale_x)
-                x2 = int(x2 * scale_x)
-                y1 = int(y1 * scale_y)
-                y2 = int(y2 * scale_y)
-        else:
-            x1, y1, x2, y2 = map(int, bbox)
+                x1 = x1 * scale_x
+                x2 = x2 * scale_x
+                y1 = y1 * scale_y
+                y2 = y2 * scale_y
+
+        # Convert to integers (must be done after scaling)
+        x1 = int(x1)
+        x2 = int(x2)
+        y1 = int(y1)
+        y2 = int(y2)
 
         # Ensure coordinates are within bounds
         x1 = max(0, min(x1, depth_w-1))
