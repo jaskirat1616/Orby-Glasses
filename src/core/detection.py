@@ -194,11 +194,17 @@ class DepthEstimator:
             model.eval()
 
             # Try to compile for speed (PyTorch 2.0+)
+            # Note: torch.compile on MPS has limited support, may not provide speedup
             try:
-                model = torch.compile(model, mode="reduce-overhead")
-                logging.info("  ✓ Model compiled with torch.compile")
-            except Exception:
-                logging.info("  torch.compile not available, skipping")
+                import warnings
+                warnings.filterwarnings('ignore', category=UserWarning, module='torch')
+
+                # Use 'default' mode for MPS (reduce-overhead can cause issues)
+                compile_mode = "default" if self.device == "mps" else "reduce-overhead"
+                model = torch.compile(model, mode=compile_mode)
+                logging.info(f"  ✓ Model compiled with torch.compile ({compile_mode} mode)")
+            except Exception as e:
+                logging.info(f"  torch.compile not available: {e}")
 
             self.model = model
             self.model_type = "depth_anything_v2_optimized"
