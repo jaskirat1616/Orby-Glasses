@@ -43,11 +43,8 @@ class RobotUI:
         overlay = frame.copy()
         h, w = frame.shape[:2]
 
-        # Draw depth zones (safe/caution/danger) if depth map available
-        if depth_map is not None:
-            # Create semi-transparent depth overlay
-            depth_overlay = self._create_depth_zones_overlay(depth_map, (w, h))
-            overlay = cv2.addWeighted(overlay, 0.7, depth_overlay, 0.3, 0)
+        # CLEAN: No depth overlay on camera window (confusing for users)
+        # Depth is shown in separate window with better visualization
 
         # Draw simple boxes on objects
         danger_count = 0

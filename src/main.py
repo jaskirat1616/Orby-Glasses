@@ -341,6 +341,81 @@ class OrbyGlasses:
 
         return colored
 
+    def _create_ultra_clear_depth_colormap(self, depth_map: np.ndarray) -> np.ndarray:
+        """
+        BREAKTHROUGH: Ultra-clear HIGH-CONTRAST depth visualization.
+
+        Uses sharp color transitions and enhanced detail preservation
+        for maximum clarity and obstacle visibility.
+
+        Args:
+            depth_map: Input depth map (0-1 normalized)
+
+        Returns:
+            Ultra-clear depth visualization with maximum detail
+        """
+        # Ensure depth is in range [0, 1]
+        depth_normalized = np.clip(depth_map, 0, 1)
+
+        # Apply histogram equalization for better contrast
+        depth_uint8 = (depth_normalized * 255).astype(np.uint8)
+        depth_eq = cv2.equalizeHist(depth_uint8).astype(np.float32) / 255.0
+
+        h, w = depth_map.shape
+        colored = np.zeros((h, w, 3), dtype=np.uint8)
+
+        # ULTRA-CLEAR color scheme with sharp transitions
+        # Very close (0-0.15): BRIGHT RED (immediate danger)
+        mask1 = depth_eq < 0.15
+        colored[mask1] = [0, 0, 255]
+
+        # Close (0.15-0.3): RED to ORANGE gradient
+        mask2 = (depth_eq >= 0.15) & (depth_eq < 0.3)
+        t = (depth_eq[mask2] - 0.15) / 0.15
+        colored[mask2] = np.stack([
+            np.zeros_like(t),
+            (t * 165).astype(np.uint8),
+            (255 - t * 50).astype(np.uint8)
+        ], axis=-1)
+
+        # Medium (0.3-0.5): ORANGE to YELLOW
+        mask3 = (depth_eq >= 0.3) & (depth_eq < 0.5)
+        t = (depth_eq[mask3] - 0.3) / 0.2
+        colored[mask3] = np.stack([
+            np.zeros_like(t),
+            (165 + t * 90).astype(np.uint8),
+            (205 + t * 50).astype(np.uint8)
+        ], axis=-1)
+
+        # Safe (0.5-0.7): YELLOW to GREEN
+        mask4 = (depth_eq >= 0.5) & (depth_eq < 0.7)
+        t = (depth_eq[mask4] - 0.5) / 0.2
+        colored[mask4] = np.stack([
+            (t * 100).astype(np.uint8),
+            (255).astype(np.uint8),
+            (255 - t * 255).astype(np.uint8)
+        ], axis=-1)
+
+        # Far (0.7-1.0): GREEN to CYAN to BLUE
+        mask5 = depth_eq >= 0.7
+        t = (depth_eq[mask5] - 0.7) / 0.3
+        colored[mask5] = np.stack([
+            (100 + t * 155).astype(np.uint8),
+            (255 - t * 100).astype(np.uint8),
+            (t * 100).astype(np.uint8)
+        ], axis=-1)
+
+        # Apply sharpening filter for ULTRA-CLEAR edges
+        kernel = np.array([[-1, -1, -1],
+                          [-1,  9, -1],
+                          [-1, -1, -1]])
+        colored = cv2.filter2D(colored, -1, kernel)
+
+        # Enhance details with bilateral filter (preserves edges)
+        colored = cv2.bilateralFilter(colored, 5, 50, 50)
+
+        return colored
+
     def process_frame(self, frame: np.ndarray) -> Optional[tuple]:
         """
         Optimized frame processing pipeline for maximum performance.
@@ -931,12 +1006,12 @@ class OrbyGlasses:
                         map_image = self.slam_map_viewer.get_map_image()
                         cv2.imshow('SLAM Map', map_image)  # Keep original SLAM map size
 
-                    # Show depth map (only when calculated) - sharp display with darker colors
+                    # BREAKTHROUGH: Show ULTRA-CLEAR depth map in separate window
                     if depth_map is not None:
-                        # Apply custom colormap with darker colors - no resize, use native resolution
-                        depth_colored = self._create_custom_depth_colormap(depth_map)
-                        # Display at native camera resolution for maximum sharpness
-                        cv2.imshow('Depth', depth_colored)
+                        # Apply HIGH-CONTRAST colormap for maximum detail
+                        depth_colored = self._create_ultra_clear_depth_colormap(depth_map)
+                        # Display at native resolution for maximum sharpness
+                        cv2.imshow('Depth Map (SOTA)', depth_colored)
 
                     # Show SLAM map viewer (original working version)
                     if self.slam_enabled and self.slam_map_viewer and slam_result and not separate_slam:

@@ -122,28 +122,28 @@ mapping3d:
   fy: 500
   skip_bbox: true
 
-# BREAKTHROUGH: Real-time Visual SLAM for Environment Mapping
+# BREAKTHROUGH: Highly Accurate Real-time SLAM
 slam:
-  enabled: true  # ORB-SLAM3 style real-time mapping
-  grid_size: [300, 300]
-  grid_resolution: 0.2
+  enabled: true  # Optimized for accuracy
+  grid_size: [400, 400]  # Larger grid for better mapping
+  grid_resolution: 0.1  # Finer resolution (was 0.2)
   save_maps: true
-  visualize: false
-  orb_features: 1000
-  fast_threshold: 20
-  min_matches: 15
+  visualize: true  # Show SLAM in separate window
+  orb_features: 2000  # More features for better tracking (was 1000)
+  fast_threshold: 15  # Lower for more features (was 20)
+  min_matches: 25  # Higher for better accuracy (was 15)
   motion_model: true
-  pose_smoothing: 0.7
+  pose_smoothing: 0.85  # Higher smoothing for accuracy (was 0.7)
   temporal_consistency_check: true
-  max_position_jump: 0.3
-  max_rotation_jump: 0.3
-  min_tracked_features: 20
-  keyframe_threshold: 20
-  reprojection_threshold: 3.0
+  max_position_jump: 0.15  # Tighter constraint (was 0.3)
+  max_rotation_jump: 0.15  # Tighter constraint (was 0.3)
+  min_tracked_features: 30  # Higher minimum (was 20)
+  keyframe_threshold: 30  # More selective keyframes (was 20)
+  reprojection_threshold: 2.0  # Stricter (was 3.0)
   min_depth: 0.1
   max_depth: 10.0
-  loop_closure: false
-  bundle_adjustment: false
+  loop_closure: true  # Enable for accuracy
+  bundle_adjustment: true  # Enable for refinement
 
 # BREAKTHROUGH: PathFinder-style Obstacle-Free Navigation
 indoor_navigation:
