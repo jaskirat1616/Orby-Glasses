@@ -16,6 +16,9 @@ aiofiles>=23.2.1
 ray[default]>=2.9.0  # Distributed edge inference
 uvloop>=0.19.0  # Fast async event loop
 
+# Zenoh - High-performance pub-sub for robotics (NEW)
+eclipse-zenoh>=0.11.0  # Much better than threading for real-time systems
+
 # ============================================================================
 # PERCEPTION LAYER - Neural AI (2025 SOTA)
 # ============================================================================
