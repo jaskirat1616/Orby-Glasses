@@ -152,14 +152,14 @@ class ObjectDetector:
 class DepthEstimator:
     """Optimized depth estimation using Depth Anything V2 with sharp output."""
 
-    def __init__(self, model_path: str = "depth-anything/Depth-Anything-V2-Small-hf",
+    def __init__(self, model_path: str = "depth-anything/Depth-Anything-V2-Base-hf",
                  device: str = "mps",
                  max_resolution: int = 518):
         """
         Initialize optimized depth estimator with Depth Anything V2.
 
         Args:
-            model_path: Hugging Face model name (default: Depth Anything V2 Small)
+            model_path: Hugging Face model name (default: Depth Anything V2 Base for better quality)
             device: Device to run on
             max_resolution: Maximum resolution for depth processing (518 optimal for Depth Anything V2)
         """
@@ -167,19 +167,19 @@ class DepthEstimator:
         self.device = self._validate_device(device)
         self.max_resolution = max_resolution  # 518 is optimal training resolution
 
-        # Use Depth Anything V2 Small for real-time performance with sharp output
+        # Use Depth Anything V2 Base for sharper output (better quality than Small)
         try:
             from transformers import pipeline
             import torch
 
-            logging.info(f"Loading Depth Anything V2 Small - sharp depth estimation...")
+            logging.info(f"Loading Depth Anything V2 Base - sharp depth estimation...")
 
-            # Use smaller model for speed
+            # Use base model for better quality
             device_id = 0 if self.device in ["mps", "cuda"] else -1
 
             self.model = pipeline(
                 task="depth-estimation",
-                model="depth-anything/Depth-Anything-V2-Small-hf",
+                model="depth-anything/Depth-Anything-V2-Base-hf",
                 device=device_id,
                 torch_dtype="float16" if device_id >= 0 else "float32"
             )
@@ -190,13 +190,25 @@ class DepthEstimator:
             dummy_image = np.zeros((518, 518, 3), dtype=np.uint8)
             self._estimate_depth_fast(dummy_image)
 
-            logging.info(f"✓ Depth Anything V2 Small loaded - 518px sharp depth")
+            logging.info(f"✓ Depth Anything V2 Base loaded - 518px sharp depth")
 
         except Exception as e:
-            logging.error(f"Depth model failed: {e}, using fallback")
-            self.model = None
-            self.model_type = "fallback"
-            self.processor = None
+            logging.info(f"Depth Anything V2 Base unavailable, trying Small...")
+            try:
+                self.model = pipeline(
+                    task="depth-estimation",
+                    model="depth-anything/Depth-Anything-V2-Small-hf",
+                    device=device_id,
+                    torch_dtype="float16" if device_id >= 0 else "float32"
+                )
+                logging.info(f"✓ Depth Anything V2 Small loaded as fallback")
+                self.model_type = "depth_anything_v2"
+                self.processor = None
+            except Exception as e2:
+                logging.error(f"All depth models failed: {e2}, using fallback")
+                self.model = None
+                self.model_type = "fallback"
+                self.processor = None
 
     def _validate_device(self, device: str) -> str:
         """Validate device availability."""

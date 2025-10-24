@@ -957,11 +957,10 @@ class OrbyGlasses:
 
                     # Show depth map (only when calculated) - sharp display with darker colors
                     if depth_map is not None:
-                        # Apply custom colormap with darker colors
+                        # Apply custom colormap with darker colors - no resize, use native resolution
                         depth_colored = self._create_custom_depth_colormap(depth_map)
-                        # Resize depth map using LANCZOS for sharpest display
-                        depth_display = cv2.resize(depth_colored, (640, 480), interpolation=cv2.INTER_LANCZOS4)
-                        cv2.imshow('Depth', depth_display)
+                        # Display at native camera resolution for maximum sharpness
+                        cv2.imshow('Depth', depth_colored)
 
                     # Show SLAM map viewer (original working version)
                     if self.slam_enabled and self.slam_map_viewer and slam_result and not separate_slam:
