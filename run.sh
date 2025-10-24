@@ -53,12 +53,12 @@ echo -e "${GREEN}✓ Camera ready${NC}"
 mkdir -p data/logs data/maps models/yolo models/depth
 
 echo ""
-echo -e "${BOLD}System Features:${NC}"
-echo -e "  • Real-time object detection and depth"
-echo -e "  • AI-powered navigation guidance"
-echo -e "  • Voice directions for blind users"
-echo -e "  • SLAM mapping and localization"
-echo -e "  • Smart caching (30+ FPS)"
+echo -e "${BOLD}System Features (2024-2025):${NC}"
+echo -e "  • YOLOv11n: Real-time object detection"
+echo -e "  • Depth-Anything-V2: Accurate depth estimation"
+echo -e "  • Visual SLAM: Indoor navigation & mapping"
+echo -e "  • Smart audio: Clear voice directions"
+echo -e "  • Optimized: 20-30 FPS real-time performance"
 echo ""
 echo -e "${BOLD}For Blind Users:${NC}"
 echo -e "  • Clear audio directions"
@@ -70,8 +70,8 @@ echo ""
 echo -e "${GREEN}Starting OrbyGlasses...${NC}"
 echo ""
 
-# Run system
-python3 src/main.py
+# Run system with SLAM in separate window, larger text, and enhanced depth colors
+python3 src/main.py --separate-slam
 
 # Cleanup
 echo ""

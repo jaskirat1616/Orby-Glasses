@@ -13,14 +13,14 @@ import logging
 
 
 class ObjectDetector:
-    """Optimized YOLOv12-based object detector for Apple Silicon."""
+    """Optimized YOLOv11-based object detector for Apple Silicon."""
 
-    def __init__(self, model_path: str = "models/yolo/yolo12n.pt",
-                 confidence: float = 0.65,  # Higher confidence for fewer false positives
+    def __init__(self, model_path: str = "models/yolo/yolo11n.pt",
+                 confidence: float = 0.6,  # Balanced confidence for real-world use
                  iou_threshold: float = 0.45,
                  device: str = "mps"):
         """
-        Initialize optimized YOLOv12 detector.
+        Initialize optimized YOLOv11 detector.
 
         Args:
             model_path: Path to YOLO model weights
@@ -33,21 +33,22 @@ class ObjectDetector:
         self.iou_threshold = iou_threshold
         self.device = self._validate_device(device)
 
-        # Load YOLOv12 model with optimizations
+        # Load YOLOv11 model with optimizations
         try:
             if os.path.exists(model_path):
                 self.model = YOLO(model_path)
             else:
-                self.model = YOLO('yolo12n.pt')
+                # Fallback to YOLOv11 nano model
+                self.model = YOLO('yolo11n.pt')
 
             # Set device and optimize for inference
             self.model.to(self.device)
-            
+
             # Warm up the model for faster inference
             dummy_input = np.zeros((320, 320, 3), dtype=np.uint8)
             self.model(dummy_input, verbose=False)
-            
-            logging.info("YOLOv12 model loaded and optimized")
+
+            logging.info("YOLOv11 model loaded and optimized")
 
         except Exception as e:
             logging.error(f"Failed to load YOLO model: {e}")
@@ -135,9 +136,9 @@ class ObjectDetector:
 
             # Sort by priority and confidence (most important first)
             detections.sort(key=lambda x: (not x['is_priority'], -x['confidence']))
-            
-            # Limit to top 5 detections for performance
-            return detections[:5]
+
+            # Limit to top 8 detections for balance
+            return detections[:8]
 
         except Exception as e:
             logging.error(f"Detection error: {e}")
@@ -153,7 +154,7 @@ class DepthEstimator:
 
     def __init__(self, model_path: str = "depth-anything/Depth-Anything-V2-Small-hf",
                  device: str = "mps",
-                 max_resolution: int = 480):
+                 max_resolution: int = 384):
         """
         Initialize optimized depth estimator.
 
@@ -367,10 +368,10 @@ class DetectionPipeline:
         """
         self.config = config
 
-        # Initialize YOLOv12 detector
+        # Initialize YOLOv11 detector
         self.detector = ObjectDetector(
-            model_path=config.get('models.yolo.path', 'models/yolo/yolo12n.pt'),
-            confidence=config.get('models.yolo.confidence', 0.5),
+            model_path=config.get('models.yolo.path', 'models/yolo/yolo11n.pt'),
+            confidence=config.get('models.yolo.confidence', 0.6),
             iou_threshold=config.get('models.yolo.iou_threshold', 0.45),
             device=config.get('models.yolo.device', 'mps')
         )
@@ -379,7 +380,7 @@ class DetectionPipeline:
         self.depth_estimator = DepthEstimator(
             model_path=config.get('models.depth.path', 'depth-anything/Depth-Anything-V2-Small-hf'),
             device=config.get('models.depth.device', 'mps'),
-            max_resolution=config.get('models.depth.max_resolution', 480)
+            max_resolution=config.get('models.depth.max_resolution', 384)
         )
 
         self.min_safe_distance = config.get('safety.min_safe_distance', 1.5)

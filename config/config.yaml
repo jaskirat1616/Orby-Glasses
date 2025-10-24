@@ -5,26 +5,26 @@
 camera:
   # Source: 0 for built-in webcam, or URL for IP camera
   source: 0
-  width: 416  # Optimized size for YOLO (416x416 is optimal for YOLOv12)
-  height: 416  # Square aspect ratio for best performance
+  width: 640  # Standard resolution for YOLOv11 (good balance)
+  height: 480  # Standard 4:3 aspect ratio
   fps: 30  # Higher FPS for smoother navigation
 
 # Model Settings - Optimized for Speed and Accuracy
 models:
-  # YOLOv12 Object Detection - Optimized Settings
+  # YOLOv11 Object Detection - Optimized Settings (Latest 2024)
   yolo:
-    path: "models/yolo/yolo12n.pt"
-    confidence: 0.7         # Higher confidence for fewer false positives
-    iou_threshold: 0.5      # Optimized IoU threshold
+    path: "models/yolo/yolo11n.pt"  # YOLOv11n (nano) - fastest for real-time
+    confidence: 0.6         # Balanced confidence for real-world use
+    iou_threshold: 0.45     # Optimized IoU threshold
     device: "mps"           # Apple Silicon optimization
     half_precision: true    # Use half precision for speed
 
-  # Depth Estimation - Optimized for speed
+  # Depth Estimation - Optimized for speed and accuracy
   depth:
-    path: "depth-anything/Depth-Anything-V2-Small-hf"
+    path: "depth-anything/Depth-Anything-V2-Small-hf"  # Latest 2024 model
     device: "mps"
     half_precision: true   # Use half precision for speed
-    max_resolution: 240    # Lower resolution for faster processing
+    max_resolution: 384    # Balanced resolution (better accuracy, still fast)
 
   # LLM for Narrative Generation - Optimized with VLM
   llm:
@@ -96,11 +96,11 @@ prediction:
   training_steps: 10000      # Steps for initial training
   save_interval: 1000        # Save checkpoint every N steps
 
-# Safety Settings
+# Safety Settings - Optimized for Blind Users
 safety:
   min_safe_distance: 1.5     # Minimum safe distance in meters
-  danger_distance: 0.4       # Immediate danger zone (<0.4m) - very close objects only
-  caution_distance: 1.5      # Caution zone (0.4-1.5m)
+  danger_distance: 1.0       # Immediate danger zone (<1.0m) - within reach
+  caution_distance: 2.5      # Caution zone (1.0-2.5m) - approaching
   emergency_stop_key: "q"    # Key to emergency stop
   max_obstacle_alerts: 3     # Maximum simultaneous obstacle alerts
 
@@ -111,16 +111,16 @@ logging:
   save_detections: true      # Log detection data for analysis
   save_frames: false         # Save frames (uses lots of space)
 
-# Performance Tuning - Optimized for High Performance
+# Performance Tuning - Optimized for Real-World Use
 performance:
-  audio_update_interval: 2.0      # Faster audio updates for better responsiveness
-  danger_audio_interval: 0.8      # Very fast alerts for danger zone objects
+  audio_update_interval: 2.0      # Clear path announcements every 2 seconds
+  danger_audio_interval: 0.5      # CRITICAL: Very fast alerts for danger (< 1m)
   stats_interval: 100             # Less frequent logging for performance
-  max_detections: 5               # Focus on top 5 most relevant objects
-  depth_skip_frames: 2            # Calculate depth every 3rd frame
-  frame_skip: 0                   # Process every frame for maximum responsiveness
+  max_detections: 8               # Top 8 objects (good balance)
+  depth_skip_frames: 1            # Calculate depth every 2 frames for speed
+  frame_skip: 0                   # Process every frame for safety
   enable_multithreading: true     # Use multithreading for parallel processing
-  cache_depth_maps: true          # Cache depth maps for speed
+  cache_depth_maps: true          # Smart caching with motion detection
 
 # 3D Mapping Settings
 mapping3d:
@@ -133,11 +133,11 @@ mapping3d:
   fy: 500                         # Camera focal length Y (pixels)
   skip_bbox: true                 # Skip bounding boxes for better performance
 
-# SLAM Settings - Super Accurate Visual Mapping (NO IMU)
+# SLAM Settings - Monocular Visual SLAM (2024 Best Practices)
 slam:
   enabled: true                   # Enable SLAM for indoor navigation
   grid_size: [300, 300]           # High resolution grid for accuracy
-  grid_resolution: 0.2             # High resolution for detailed mapping
+  grid_resolution: 0.2            # High resolution for detailed mapping
   save_maps: true                 # Save maps for later reuse
   visualize: false                # Disabled for speed
   show_map_creation: false        # Disabled for speed
@@ -145,23 +145,23 @@ slam:
   show_keyframes: false           # Disabled for speed
   show_landmarks: false           # Disabled for speed
 
-  # High accuracy tracking without IMU
-  orb_features: 500               # Fewer features for speed
-  fast_threshold: 10              # Higher threshold for speed
-  min_matches: 10                 # Fewer matches needed
+  # Balanced settings for real-time performance
+  orb_features: 1000              # More features for robustness
+  fast_threshold: 20              # Balanced threshold
+  min_matches: 15                 # Sufficient matches for stability
   motion_model: true              # Use constant velocity model
-  pose_smoothing: 0.8             # Strong smoothing for stability
+  pose_smoothing: 0.7             # Moderate smoothing for balance
   temporal_consistency_check: true # Check for physically impossible movements
-  max_position_jump: 0.2          # Smaller allowed position jump
-  max_rotation_jump: 0.2          # Smaller allowed rotation jump
-  strict_matching: true           # Enable strict matching for accuracy
-  min_tracked_features: 12         # More tracked features for stability
-  keyframe_threshold: 15          # More frequent keyframes for accuracy
-  reprojection_threshold: 2.0     # Lower threshold for accuracy
-  min_depth: 0.05                 # Very close depth detection
-  max_depth: 15.0                 # Extended depth range
-  depth_variance: 0.02            # Lower variance for accuracy
-  pose_alpha: 0.8                 # Strong smoothing factor
+  max_position_jump: 0.3          # Balanced position jump
+  max_rotation_jump: 0.3          # Balanced rotation jump
+  strict_matching: false          # Disable for speed
+  min_tracked_features: 20        # Sufficient tracked features
+  keyframe_threshold: 20          # Balanced keyframe frequency
+  reprojection_threshold: 3.0     # Balanced threshold
+  min_depth: 0.1                  # Close depth detection
+  max_depth: 10.0                 # Reasonable depth range
+  depth_variance: 0.05            # Balanced variance
+  pose_alpha: 0.7                 # Balanced smoothing factor
   loop_closure: false             # Disabled for speed
   loop_closure_threshold: 0.7     # Higher threshold for better loop closure
   bundle_adjustment: false        # Disabled for speed (too slow)

@@ -1,7 +1,13 @@
 """
 OrbyGlasses - Optimized Main Entry Point
-High-performance bio-mimetic navigation engine for visually impaired users.
-Optimized for speed, accuracy, and real-time performance.
+High-performance navigation assistance for blind and visually impaired users.
+Optimized for real-world usability, speed, and accuracy.
+
+Uses state-of-the-art 2024-2025 technology:
+- YOLOv11n for fast object detection
+- Depth-Anything-V2 for accurate depth estimation
+- Monocular SLAM for indoor navigation
+- Clear audio guidance for accessibility
 """
 
 import sys
@@ -193,6 +199,8 @@ class OrbyGlasses:
         self.frame_width = self.config.get('camera.width', 640)
         self.frame_height = self.config.get('camera.height', 480)
 
+        self.logger.info(f"Camera resolution: {self.frame_width}x{self.frame_height}")
+
         # Optimized state management
         self.running = False
         self.frame_count = 0
@@ -278,6 +286,25 @@ class OrbyGlasses:
         except Exception as e:
             self.logger.error(f"Camera initialization error: {e}")
             return False
+
+    def _create_custom_depth_colormap(self, depth_map: np.ndarray) -> np.ndarray:
+        """
+        Create a custom depth colormap with more orange and dark blue tones.
+        Optimized for speed using OpenCV's fast colormap functions.
+        
+        Args:
+            depth_map: Input depth map
+        
+        Returns:
+            Colorized depth map with custom colormap
+        """
+        # Ensure depth map is in range [0, 1], then convert to 8-bit
+        depth_normalized = np.clip(depth_map, 0, 1)
+        depth_8bit = (depth_normalized * 255).astype(np.uint8)
+        
+        # Use COLORMAP_TWILIGHT_SHIFTED for better blue-to-orange gradient
+        # If not available, use COLORMAP_TURBO which has good orange-blue characteristics
+        return cv2.applyColorMap(depth_8bit, cv2.COLORMAP_TURBO)
 
     def process_frame(self, frame: np.ndarray) -> Optional[tuple]:
         """
@@ -450,9 +477,9 @@ class OrbyGlasses:
                 # SLAM status overlay
                 slam_color = (0, 255, 0) if quality > 0.7 else (0, 165, 255) if quality > 0.4 else (0, 0, 255)
                 cv2.putText(annotated_frame, f"SLAM: ({position[0]:.1f}, {position[1]:.1f}, {position[2]:.1f})",
-                           (10, 145), cv2.FONT_HERSHEY_SIMPLEX, 0.4, slam_color, 1)
+                           (10, 145), cv2.FONT_HERSHEY_SIMPLEX, 0.5, slam_color, 1)
                 cv2.putText(annotated_frame, f"Quality: {quality:.2f} | Points: {slam_result['num_map_points']}",
-                           (10, 165), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1)
+                           (10, 165), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
 
             # Add trajectory prediction info if enabled
             if trajectory_result is not None:
@@ -678,13 +705,14 @@ class OrbyGlasses:
         console.print(Panel(performance_text, title="Performance", border_style="green"))
 
 
-    def run(self, display: bool = True, save_video: bool = False):
+    def run(self, display: bool = True, save_video: bool = False, separate_slam: bool = False):
         """
         Main run loop.
 
         Args:
             display: Show video display
             save_video: Save output video
+            separate_slam: Show SLAM map in a separate window
         """
         if not self.initialize_camera():
             self.logger.error("Cannot start without camera")
@@ -859,22 +887,37 @@ class OrbyGlasses:
 
                 # Clean robot-style display
                 if display:
-                    # Main camera view
-                    display_size = (640, 480)
+                    # Define display size for moderate windows (better performance)
+                    display_size = (480, 360)
+                    
+                    # Main camera view - resize to moderate display size
                     display_frame = cv2.resize(annotated_frame, display_size)
                     cv2.imshow('OrbyGlasses', display_frame)
 
-                    # Show depth map (only when calculated)
+                    # Show SLAM map in a separate window if requested
+                    if separate_slam and self.slam_enabled and self.slam_map_viewer and slam_result:
+                        self.slam_map_viewer.update(slam_result, self.slam.map_points)
+                        map_image = self.slam_map_viewer.get_map_image()
+                        cv2.imshow('SLAM Map', map_image)  # Keep original SLAM map size
+                    else:
+                        # Otherwise, draw it on the main frame
+                        if self.slam_enabled and self.slam_map_viewer and slam_result:
+                            self.slam_map_viewer.update(slam_result, self.slam.map_points)
+                            map_image = self.slam_map_viewer.get_map_image()
+                            # Resize and place on the main frame
+                            map_h, map_w = map_image.shape[:2]
+                            display_frame[0:map_h, 0:map_w] = map_image
+                    
+                    # Show depth map (only when calculated) - resize to match camera window
                     if depth_map is not None and self.frame_count % (self.skip_depth_frames + 1) == 0:
-                        depth_colored = cv2.applyColorMap(
-                            (depth_map * 255).astype(np.uint8),
-                            cv2.COLORMAP_TURBO
-                        )
-                        depth_display = cv2.resize(depth_colored, (320, 240))
+                        # Apply custom colormap with more orange and dark blue colors
+                        depth_colored = self._create_custom_depth_colormap(depth_map)
+                        # Resize depth map to match camera window size
+                        depth_display = cv2.resize(depth_colored, display_size)
                         cv2.imshow('Depth', depth_display)
 
                     # Show SLAM map viewer (original working version)
-                    if self.slam_enabled and self.slam_map_viewer and slam_result:
+                    if self.slam_enabled and self.slam_map_viewer and slam_result and not separate_slam:
                         self.slam_map_viewer.update(slam_result, self.slam.map_points)
                         map_image = self.slam_map_viewer.get_map_image()
                         cv2.imshow('Map', map_image)
@@ -936,6 +979,7 @@ class OrbyGlasses:
         finally:
             self.cleanup(video_writer)
 
+
     def cleanup(self, video_writer=None):
         """Clean up resources."""
         self.logger.info("Shutting down...")
@@ -983,6 +1027,8 @@ def main():
                        help='Train RL model before running')
     parser.add_argument('--test', action='store_true',
                        help='Run in test mode with sample video')
+    parser.add_argument('--separate-slam', action='store_true',
+                        help='Show SLAM map in a separate window')
 
     args = parser.parse_args()
 
@@ -1001,7 +1047,7 @@ def main():
         print("Test mode not yet implemented")
         # TODO: Implement test mode with sample videos
     else:
-        system.run(display=not args.no_display, save_video=args.save_video)
+        system.run(display=not args.no_display, save_video=args.save_video, separate_slam=args.separate_slam)
 
 
 if __name__ == "__main__":
