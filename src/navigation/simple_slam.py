@@ -111,8 +111,21 @@ class SimpleSLAM:
 
                     t_scaled = t * scale
 
+                    # Calculate movement
+                    movement = (self.pose[:3, :3] @ t_scaled).flatten()
+
+                    # Safety check: prevent overflow
+                    movement_magnitude = np.linalg.norm(movement)
+                    if movement_magnitude > 1.0:  # Max 1 meter per frame
+                        print(f"WARNING: Large movement detected ({movement_magnitude:.2f}m), clamping")
+                        movement = movement / movement_magnitude  # Normalize to 1m max
+
                     # Update pose
-                    self.position += (self.pose[:3, :3] @ t_scaled).flatten()
+                    self.position += movement
+
+                    # Clamp total position to reasonable bounds (-100m to +100m)
+                    self.position = np.clip(self.position, -100, 100)
+
                     self.pose[:3, :3] = self.pose[:3, :3] @ R
                     self.pose[:3, 3] = self.position
 
@@ -155,7 +168,7 @@ class SimpleSLAM:
             depth_map: Depth map
 
         Returns:
-            Scale factor
+            Scale factor (clamped to reasonable range)
         """
         scales = []
 
@@ -164,16 +177,23 @@ class SimpleSLAM:
             x1, y1 = int(p1[0]), int(p1[1])
             if 0 <= y1 < depth_map.shape[0] and 0 <= x1 < depth_map.shape[1]:
                 depth = depth_map[y1, x1]
-                if depth > 0:
+                # Only use valid depth values (0.1m to 10m)
+                if 0.1 < depth < 10.0:
                     # Calculate pixel displacement
                     displacement = np.linalg.norm(p2 - p1)
                     if displacement > 1:
                         scale = depth / (displacement * 100)  # Rough scale
+                        # Clamp scale to reasonable range (0.001 to 1.0)
+                        scale = np.clip(scale, 0.001, 1.0)
                         scales.append(scale)
 
         if len(scales) > 0:
-            return np.median(scales)
-        return 0.1
+            median_scale = np.median(scales)
+            # Final safety clamp
+            return np.clip(median_scale, 0.01, 0.5)
+
+        # Default conservative scale
+        return 0.05
 
     def reset(self):
         """Reset SLAM state."""

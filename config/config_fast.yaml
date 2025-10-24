@@ -1,0 +1,142 @@
+# OrbyGlasses - Fast Performance Config
+# Optimized for 20+ FPS on any hardware
+
+# Camera Settings - Lower resolution for speed
+camera:
+  source: 0
+  width: 320       # Reduced from 640 (4x faster)
+  height: 240      # Reduced from 480
+  fps: 30
+
+# Models - Optimized
+models:
+  yolo:
+    path: "models/yolo/yolo11n.pt"
+    confidence: 0.5
+    iou_threshold: 0.45
+    device: "mps"
+    half_precision: true
+
+  depth:
+    path: "depth-anything/Depth-Anything-V2-Small-hf"
+    device: "mps"
+    half_precision: true
+    max_resolution: 256  # Much lower for speed
+    use_v2: false  # Disable for now (slow)
+
+  llm:
+    primary: "gemma3:4b"
+    vision: "moondream"
+    temperature: 0.6
+    max_tokens: 100
+    vlm_enabled: false  # Disable VLM (slow)
+    scene_analysis_interval: 30
+
+# Voice Commands - Disabled for speed
+conversation:
+  enabled: false
+
+# Social Navigation
+social_navigation:
+  enabled: false  # Disable (not critical)
+  region: "us"
+  voice_announce: false
+
+# Audio - Keep simple
+audio:
+  tts_engine: "pyttsx3"
+  tts_rate: 200
+  tts_volume: 1.0
+  echolocation_enabled: false  # Disable (not critical)
+  spatial_audio: false
+  adaptive_beaconing_enabled: false
+
+# Echolocation - Disabled
+echolocation:
+  room_dimensions: [10, 10, 3]
+  sample_rate: 16000
+  duration: 0.1
+
+# RL Prediction - Disabled
+prediction:
+  enabled: false
+
+# Safety
+safety:
+  min_safe_distance: 1.5
+  danger_distance: 1.0
+  caution_distance: 2.5
+  emergency_stop_key: "q"
+  max_obstacle_alerts: 3
+
+# Logging - Minimal
+logging:
+  level: "ERROR"  # Only errors
+  log_file: "data/logs/orbyglass.log"
+  save_detections: false
+  save_frames: false
+
+# Performance - Optimized for SPEED
+performance:
+  audio_update_interval: 2.0  # Less frequent audio
+  danger_audio_interval: 0.5
+  stats_interval: 500  # Less frequent stats
+  max_detections: 5  # Fewer objects to track
+  depth_skip_frames: 3  # Skip MORE frames (every 4th)
+  frame_skip: 0
+  enable_multithreading: true
+  cache_depth_maps: true
+
+# 3D Mapping - DISABLED
+mapping3d:
+  enabled: false
+
+# SLAM - SIMPLIFIED
+slam:
+  enabled: true
+  use_simple: false  # Use regular SLAM but optimized
+  grid_size: [200, 200]  # Smaller grid
+  grid_resolution: 0.2  # Lower resolution
+  save_maps: false
+  visualize: false  # Disable SLAM window
+  orb_features: 500  # Fewer features (was 2000)
+  fast_threshold: 20
+  min_matches: 10  # Lower threshold
+  motion_model: true
+  pose_smoothing: 0.7
+  temporal_consistency_check: false  # Disable extra checks
+  max_position_jump: 0.5
+  max_rotation_jump: 0.5
+  min_tracked_features: 15
+  keyframe_threshold: 50  # Less frequent keyframes
+  reprojection_threshold: 3.0
+  min_depth: 0.1
+  max_depth: 10.0
+  loop_closure: false  # Disable (slow)
+  bundle_adjustment: false  # Disable (slow)
+
+# Indoor Navigation - Simplified
+indoor_navigation:
+  enabled: false  # Disable for speed
+  path_planning: false
+  save_locations: false
+
+# Trajectory Prediction - DISABLED
+trajectory_prediction:
+  enabled: false
+
+# 3D Occupancy Grid - DISABLED
+occupancy_grid_3d:
+  enabled: false
+
+# Point Cloud - DISABLED
+point_cloud_viewer:
+  enabled: false
+
+# Movement Visualizer - DISABLED
+movement_visualizer:
+  enabled: false
+
+# Haptic - DISABLED
+haptic:
+  enabled: false
