@@ -1079,12 +1079,16 @@ class OrbyGlasses:
                         map_image = self.slam_map_viewer.get_map_image()
                         cv2.imshow('SLAM Map', map_image)  # Keep original SLAM map size
 
-                    # BREAKTHROUGH: Show ULTRA-CLEAR depth map in separate window
+                    # Show depth map in separate window
                     if depth_map is not None:
-                        # Apply HIGH-CONTRAST colormap for maximum detail
-                        depth_colored = self._create_ultra_clear_depth_colormap(depth_map)
-                        # Display at native resolution for maximum sharpness
-                        cv2.imshow('Depth Map (SOTA)', depth_colored)
+                        # Use new fast dark visualizer if available
+                        if self.depth_viz:
+                            depth_colored = self.depth_viz.visualize(depth_map)
+                        else:
+                            # Fallback to old method
+                            depth_colored = self._create_ultra_clear_depth_colormap(depth_map)
+                        # Display depth map
+                        cv2.imshow('Depth Map', depth_colored)
 
                     # Show SLAM map viewer (original working version)
                     if self.slam_enabled and self.slam_map_viewer and slam_result and not separate_slam:
