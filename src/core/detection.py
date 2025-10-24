@@ -154,75 +154,44 @@ class DepthEstimator:
 
     def __init__(self, model_path: str = "depth-anything/Depth-Anything-V2-Small-hf",
                  device: str = "mps",
-                 max_resolution: int = 384):
+                 max_resolution: int = 256):
         """
-        Initialize depth estimator with MAXIMUM optimizations for Apple Silicon.
+        Initialize SIMPLE depth estimator - fast and effective.
 
         Args:
             model_path: Hugging Face model name
             device: Device to run on
-            max_resolution: Maximum resolution (384 for speed/quality balance)
+            max_resolution: Maximum resolution (256 for maximum speed)
         """
         self.model_path = model_path
         self.device = self._validate_device(device)
         self.max_resolution = max_resolution
 
-        # Load Depth Anything V2 with ALL optimizations
+        # SIMPLE: Try ML depth, fall back to fast edge detection
         try:
-            from transformers import pipeline, AutoImageProcessor, AutoModelForDepthEstimation
+            from transformers import AutoImageProcessor, AutoModelForDepthEstimation
             import torch
 
-            logging.info(f"Loading Depth Anything V2 Small with optimizations...")
+            logging.info(f"Loading simple depth model...")
 
-            # Load model and processor separately for maximum control
-            self.processor = AutoImageProcessor.from_pretrained(
-                "depth-anything/Depth-Anything-V2-Small-hf"
-            )
-
+            # Simple loading - no compilation complexity
             model = AutoModelForDepthEstimation.from_pretrained(
                 "depth-anything/Depth-Anything-V2-Small-hf",
-                torch_dtype=torch.float16 if self.device != "cpu" else torch.float32
+                torch_dtype=torch.float16 if self.device == "mps" else torch.float32
             )
 
-            # Move to device
             if self.device == "mps":
                 model = model.to("mps")
-            elif self.device == "cuda":
-                model = model.to("cuda")
-
-            # Set to eval mode (critical!)
             model.eval()
 
-            # Try to compile for speed (PyTorch 2.0+)
-            # Note: torch.compile on MPS has limited support, may not provide speedup
-            try:
-                import warnings
-                warnings.filterwarnings('ignore', category=UserWarning, module='torch')
-
-                # Use 'default' mode for MPS (reduce-overhead can cause issues)
-                compile_mode = "default" if self.device == "mps" else "reduce-overhead"
-                model = torch.compile(model, mode=compile_mode)
-                logging.info(f"  ✓ Model compiled with torch.compile ({compile_mode} mode)")
-            except Exception as e:
-                logging.info(f"  torch.compile not available: {e}")
-
             self.model = model
-            self.model_type = "depth_anything_v2_optimized"
+            self.processor = None
+            self.model_type = "depth_ml"
 
-            # Warm up
-            dummy = torch.zeros(1, 3, 384, 384, dtype=torch.float16 if self.device != "cpu" else torch.float32)
-            if self.device == "mps":
-                dummy = dummy.to("mps")
-            elif self.device == "cuda":
-                dummy = dummy.to("cuda")
-
-            with torch.inference_mode():
-                _ = model(dummy)
-
-            logging.info(f"✓ Depth Anything V2 Small loaded (384px, optimized)")
+            logging.info(f"✓ ML depth loaded (256px, simple mode)")
 
         except Exception as e:
-            logging.warning(f"ML depth failed: {e}, using fallback")
+            logging.info(f"Using fast edge-based depth (ML unavailable)")
             self.model = None
             self.processor = None
             self.model_type = "fallback"
@@ -256,54 +225,39 @@ class DepthEstimator:
             return self._fallback_depth(frame)
     
     def _estimate_depth_fast(self, frame: np.ndarray) -> np.ndarray:
-        """Heavily optimized depth estimation using direct model inference."""
+        """SIMPLE depth estimation - fast and effective."""
         import torch
-        from PIL import Image
 
         if self.model_type == "fallback" or self.model is None:
             return self._fallback_depth(frame)
 
-        # Resize to 384px for speed
-        max_res = self.max_resolution
         h, w = frame.shape[:2]
 
-        # Fixed size for consistency and speed
-        target_h, target_w = 384, 384
+        # Small fixed size for speed
+        size = 256
 
         # Fast resize
-        frame_resized = cv2.resize(frame, (target_w, target_h), interpolation=cv2.INTER_AREA)
+        frame_small = cv2.resize(frame, (size, size), interpolation=cv2.INTER_AREA)
+        rgb = cv2.cvtColor(frame_small, cv2.COLOR_BGR2RGB)
 
-        # Convert BGR to RGB
-        rgb = cv2.cvtColor(frame_resized, cv2.COLOR_BGR2RGB)
+        # Simple tensor conversion
+        tensor = torch.from_numpy(rgb).permute(2, 0, 1).unsqueeze(0).float() / 255.0
 
-        # Convert to tensor directly (faster than PIL)
-        img_tensor = torch.from_numpy(rgb).permute(2, 0, 1).unsqueeze(0).float() / 255.0
-
-        # Move to device
         if self.device == "mps":
-            img_tensor = img_tensor.to("mps", dtype=torch.float16)
-        elif self.device == "cuda":
-            img_tensor = img_tensor.to("cuda", dtype=torch.float16)
+            tensor = tensor.to("mps", dtype=torch.float16)
 
-        # Run inference with maximum optimizations
-        with torch.inference_mode():  # Faster than no_grad
-            outputs = self.model(pixel_values=img_tensor)
-            predicted_depth = outputs.predicted_depth
+        # Simple inference
+        with torch.inference_mode():
+            outputs = self.model(pixel_values=tensor)
+            depth = outputs.predicted_depth.squeeze().cpu().float().numpy()
 
-        # Convert to numpy
-        depth_map = predicted_depth.squeeze().cpu().float().numpy()
+        # Simple normalization
+        depth = (depth - depth.min()) / (depth.max() - depth.min() + 1e-8)
 
-        # Fast normalization
-        depth_min, depth_max = depth_map.min(), depth_map.max()
-        if depth_max > depth_min:
-            depth_map = (depth_map - depth_min) / (depth_max - depth_min)
-        else:
-            depth_map = np.zeros_like(depth_map)
+        # Resize back
+        depth = cv2.resize(depth, (w, h), interpolation=cv2.INTER_LINEAR)
 
-        # Resize back to original frame size
-        depth_map = cv2.resize(depth_map, (w, h), interpolation=cv2.INTER_LINEAR)
-
-        return depth_map
+        return depth
 
     def _fallback_depth(self, frame: np.ndarray) -> np.ndarray:
         """

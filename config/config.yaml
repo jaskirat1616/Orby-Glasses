@@ -7,31 +7,31 @@ camera:
   height: 480     # Resolution height
   fps: 30         # Frames per second
 
-# AI Models
+# AI Models - SIMPLIFIED FOR SPEED
 models:
   # Object Detection (YOLOv11n - 2024)
   yolo:
     path: "models/yolo/yolo11n.pt"
-    confidence: 0.6
+    confidence: 0.5  # Lower for more detections
     iou_threshold: 0.45
-    device: "mps"  # Use "cuda" for NVIDIA, "cpu" for CPU
+    device: "mps"
     half_precision: true
 
-  # Depth Sensing (Apple Depth Pro - 2024)
+  # Depth Sensing - SIMPLE AND FAST
   depth:
-    path: "apple/DepthPro-hf"  # Sharpest depth available
+    path: "depth-anything/Depth-Anything-V2-Small-hf"
     device: "mps"
-    half_precision: false
-    max_resolution: 518
+    half_precision: true
+    max_resolution: 256  # Smaller = faster
 
-  # Audio Narration (Optional)
+  # Audio Narration - DISABLED FOR SPEED
   llm:
     primary: "gemma3:4b"
-    vision: "moondream"  # Use Moondream2 VLM (faster than LLaVA)
+    vision: "moondream"
     temperature: 0.6
-    max_tokens: 100
-    vlm_enabled: true  # Enable VLM for better scene understanding
-    scene_analysis_interval: 15  # Analyze every 15 seconds
+    max_tokens: 50  # Shorter responses
+    vlm_enabled: false  # DISABLED - too slow
+    scene_analysis_interval: 30
 
 # Voice Commands (Optional)
 conversation:
@@ -54,17 +54,17 @@ social_navigation:
   region: "us"  # 'us', 'uk', 'japan', etc.
   voice_announce: true
 
-# Audio
+# Audio - CRITICAL FOR BLIND USERS
 audio:
   tts_engine: "pyttsx3"
-  tts_rate: 180  # Words per minute
-  tts_volume: 0.9
-  echolocation_enabled: true
+  tts_rate: 200  # Faster for quick updates
+  tts_volume: 1.0  # Full volume
+  echolocation_enabled: true  # Helpful audio cues
   spatial_audio: true
   adaptive_beaconing_enabled: true
   beacon_safe_frequency: 440
   beacon_obstacle_frequency: 880
-  warning_pulse_rate: 0.2
+  warning_pulse_rate: 0.15  # Faster warnings
   door_beacon: 660
   stairs_beacon: 1320
   clear_path_beacon: 330
@@ -97,20 +97,20 @@ logging:
   save_detections: true
   save_frames: false
 
-# Performance
+# Performance - OPTIMIZED FOR SPEED
 performance:
-  audio_update_interval: 2.0  # seconds
-  danger_audio_interval: 0.5  # seconds
-  stats_interval: 100
-  max_detections: 8
-  depth_skip_frames: 0  # 0 = every frame
+  audio_update_interval: 1.5  # Faster updates for blind users
+  danger_audio_interval: 0.3  # Very fast danger alerts
+  stats_interval: 200
+  max_detections: 5  # Fewer = faster
+  depth_skip_frames: 4  # Every 5th frame for speed
   frame_skip: 0
-  enable_multithreading: true
+  enable_multithreading: false  # Simpler
   cache_depth_maps: true
 
-# 3D Mapping (Optional)
+# 3D Mapping - DISABLED
 mapping3d:
-  enabled: false
+  enabled: false  # Not needed for navigation
   max_depth: 6.0
   voxel_size: 0.15
   subsample_step: 8
@@ -119,9 +119,9 @@ mapping3d:
   fy: 500
   skip_bbox: true
 
-# SLAM - Indoor Navigation
+# SLAM - Indoor Navigation - DISABLED FOR SIMPLICITY
 slam:
-  enabled: true
+  enabled: false  # Too complex and slow
   grid_size: [300, 300]
   grid_resolution: 0.2
   save_maps: true
@@ -142,40 +142,40 @@ slam:
   loop_closure: false
   bundle_adjustment: false
 
-# Indoor Navigation
+# Indoor Navigation - DISABLED
 indoor_navigation:
-  enabled: true
+  enabled: false  # Requires SLAM
   path_planning: true
   save_locations: true
 
-# Trajectory Prediction (Optional)
+# Trajectory Prediction - DISABLED
 trajectory_prediction:
-  enabled: false
+  enabled: false  # Too complex
   max_history: 10
   prediction_horizon: 3
   time_step: 0.5
   visualize: false
   collision_warning: true
 
-# 3D Occupancy Grid (Optional)
+# 3D Occupancy Grid - DISABLED
 occupancy_grid_3d:
-  enabled: false
+  enabled: false  # Not needed
   grid_size: [10.0, 10.0, 3.0]
   resolution: 0.1
   max_range: 5.0
   visualize: false
 
-# Point Cloud (Optional)
+# Point Cloud - DISABLED
 point_cloud_viewer:
-  enabled: false
+  enabled: false  # Visual feature, not for blind users
   max_points: 100000
   subsample: 3
   min_depth: 0.1
   max_depth: 5.0
 
-# Movement Visualizer (Optional)
+# Movement Visualizer - DISABLED
 movement_visualizer:
-  enabled: false
+  enabled: false  # Visual feature, not needed
   canvas_size: [700, 700]
   trail_length: 200
   show_stats: true
