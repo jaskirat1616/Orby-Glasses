@@ -30,8 +30,8 @@ models:
     vision: "moondream"  # Use Moondream2 VLM (faster than LLaVA)
     temperature: 0.6
     max_tokens: 100
-    vlm_enabled: true  # Enable Moondream VLM for better scene understanding
-    scene_analysis_interval: 10  # Analyze every 10 seconds
+    vlm_enabled: false  # Disabled for performance testing
+    scene_analysis_interval: 30  # Analyze every 30 seconds
 
 # Voice Commands (Optional)
 conversation:

@@ -204,7 +204,7 @@ class OrbyGlasses:
         self.last_audio_time = 0
         self.audio_interval = self.config.get('performance.audio_update_interval', 2.0)
         self.danger_audio_interval = self.config.get('performance.danger_audio_interval', 0.8)
-        self.skip_depth_frames = self.config.get('performance.depth_skip_frames', 2)  # Process depth every 3rd frame
+        self.skip_depth_frames = self.config.get('performance.depth_skip_frames', 0)  # Process depth every frame (fallback is fast)
         self.last_depth_map = None  # Cache last depth map
 
         # Performance optimizations
