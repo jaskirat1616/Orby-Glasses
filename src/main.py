@@ -204,17 +204,18 @@ class OrbyGlasses:
         self.last_audio_time = 0
         self.audio_interval = self.config.get('performance.audio_update_interval', 2.0)
         self.danger_audio_interval = self.config.get('performance.danger_audio_interval', 0.8)
-        self.skip_depth_frames = self.config.get('performance.depth_skip_frames', 2)
+        self.skip_depth_frames = self.config.get('performance.depth_skip_frames', 3)  # Process depth every 4th frame
         self.last_depth_map = None  # Cache last depth map
-        
+
         # Performance optimizations
         self.enable_multithreading = self.config.get('performance.enable_multithreading', True)
         self.cache_depth_maps = self.config.get('performance.cache_depth_maps', True)
         self.max_detections = self.config.get('performance.max_detections', 5)
-        
-        # Thread pool for parallel processing
+
+        # Thread pool for parallel processing - separate thread for depth
         if self.enable_multithreading:
-            self.executor = ThreadPoolExecutor(max_workers=3)
+            self.executor = ThreadPoolExecutor(max_workers=2)  # One for depth, one for other tasks
+            self.depth_future = None  # Track ongoing depth computation
         
         # Frame processing cache
         self.detection_cache = {}
@@ -361,23 +362,47 @@ class OrbyGlasses:
             detections = detections[:self.max_detections]
             det_time = self.perf_monitor.stop_timer('detection')
 
-            # Smart depth estimation with motion-based caching
+            # Smart depth estimation with motion-based caching and threading
             self.perf_monitor.start_timer('depth')
 
             # Compute motion score for intelligent caching
             prev_frame = self.smart_cache.get_previous_frame()
             motion_score = self.smart_cache.compute_motion_score(frame, prev_frame)
 
-            # Only recompute depth if significant motion detected
-            if self.smart_cache.should_recompute_depth(motion_score, self.frame_count):
-                depth_map = self.detection_pipeline.depth_estimator.estimate_depth(frame)
-                self.last_depth_map = depth_map
-            else:
-                # Reuse cached depth map (much faster!)
-                depth_map = self.smart_cache.get_cached_depth()
+            # Use threaded depth computation for non-blocking processing
+            if self.enable_multithreading:
+                # Check if previous depth computation is done
+                if self.depth_future is not None and self.depth_future.done():
+                    try:
+                        self.last_depth_map = self.depth_future.result()
+                    except Exception as e:
+                        self.logger.error(f"Depth thread error: {e}")
+                    self.depth_future = None
+
+                # Start new depth computation if needed and no computation is running
+                if self.smart_cache.should_recompute_depth(motion_score, self.frame_count) and self.depth_future is None:
+                    self.depth_future = self.executor.submit(
+                        self.detection_pipeline.depth_estimator.estimate_depth,
+                        frame.copy()
+                    )
+
+                # Use cached depth map
+                depth_map = self.last_depth_map
                 if depth_map is None:
+                    # First frame - compute synchronously
                     depth_map = self.detection_pipeline.depth_estimator.estimate_depth(frame)
                     self.last_depth_map = depth_map
+            else:
+                # Original synchronous depth computation
+                if self.smart_cache.should_recompute_depth(motion_score, self.frame_count):
+                    depth_map = self.detection_pipeline.depth_estimator.estimate_depth(frame)
+                    self.last_depth_map = depth_map
+                else:
+                    # Reuse cached depth map (much faster!)
+                    depth_map = self.smart_cache.get_cached_depth()
+                    if depth_map is None:
+                        depth_map = self.detection_pipeline.depth_estimator.estimate_depth(frame)
+                        self.last_depth_map = depth_map
 
             depth_time = self.perf_monitor.stop_timer('depth')
 
@@ -921,33 +946,24 @@ class OrbyGlasses:
 
                 # Clean robot-style display
                 if display:
-                    # Define display size for moderate windows (better performance)
-                    display_size = (480, 360)
-                    
-                    # Main camera view - resize to moderate display size
-                    display_frame = cv2.resize(annotated_frame, display_size)
-                    cv2.imshow('OrbyGlasses', display_frame)
+                    # Define smaller display size for better performance
+                    display_size = (640, 480)  # Use original resolution for camera window
+
+                    # Main camera view - keep original size to avoid unnecessary resize
+                    cv2.imshow('OrbyGlasses', annotated_frame)
 
                     # Show SLAM map in a separate window if requested
                     if separate_slam and self.slam_enabled and self.slam_map_viewer and slam_result:
                         self.slam_map_viewer.update(slam_result, self.slam.map_points)
                         map_image = self.slam_map_viewer.get_map_image()
                         cv2.imshow('SLAM Map', map_image)  # Keep original SLAM map size
-                    else:
-                        # Otherwise, draw it on the main frame
-                        if self.slam_enabled and self.slam_map_viewer and slam_result:
-                            self.slam_map_viewer.update(slam_result, self.slam.map_points)
-                            map_image = self.slam_map_viewer.get_map_image()
-                            # Resize and place on the main frame
-                            map_h, map_w = map_image.shape[:2]
-                            display_frame[0:map_h, 0:map_w] = map_image
-                    
-                    # Show depth map (only when calculated) - resize to match camera window
-                    if depth_map is not None and self.frame_count % (self.skip_depth_frames + 1) == 0:
-                        # Apply custom colormap with more orange and dark blue colors
+
+                    # Show depth map (only when calculated) - smaller window for performance
+                    if depth_map is not None:
+                        # Apply custom colormap
                         depth_colored = self._create_custom_depth_colormap(depth_map)
-                        # Resize depth map to match camera window size using LANCZOS for sharper results
-                        depth_display = cv2.resize(depth_colored, display_size, interpolation=cv2.INTER_LANCZOS4)
+                        # Resize depth map to smaller size using fast LINEAR interpolation
+                        depth_display = cv2.resize(depth_colored, (320, 240), interpolation=cv2.INTER_LINEAR)
                         cv2.imshow('Depth', depth_display)
 
                     # Show SLAM map viewer (original working version)
