@@ -75,6 +75,8 @@ while True:
 
         # NEW: Dark-themed visualization
         if show_dark_viz:
+            # Disable legend for demo
+            depth_viz.show_legend = False
             depth_colored = depth_viz.visualize(depth_map, normalize=True)
         else:
             # Standard OpenCV visualization
@@ -82,9 +84,9 @@ while True:
             depth_colored = cv2.applyColorMap(depth_norm, cv2.COLORMAP_JET)
 
         # Show side by side
-        # Resize to match
-        frame_resized = cv2.resize(frame, (depth_colored.shape[1], frame.shape[0]))
-        combined = np.hstack([frame_resized, depth_colored])
+        # Resize depth to match frame size
+        depth_resized = cv2.resize(depth_colored, (frame.shape[1], frame.shape[0]))
+        combined = np.hstack([frame, depth_resized])
 
         # Add labels
         cv2.putText(combined, "RGB Camera", (10, 30),
