@@ -1,237 +1,181 @@
-# OrbyGlasses Configuration File
-# Bio-Mimetic Navigation System for Visually Impaired Users
+# OrbyGlasses Config - Simple Settings
 
-# Camera/Video Source Settings - Optimized for Performance
+# Camera Settings
 camera:
-  # Source: 0 for built-in webcam, or URL for IP camera
-  source: 0
-  width: 640  # Standard resolution for YOLOv11 (good balance)
-  height: 480  # Standard 4:3 aspect ratio
-  fps: 30  # Higher FPS for smoother navigation
+  source: 0       # 0 = webcam, or URL for IP camera
+  width: 640      # Resolution width
+  height: 480     # Resolution height
+  fps: 30         # Frames per second
 
-# Model Settings - Optimized for Speed and Accuracy
+# AI Models
 models:
-  # YOLOv11 Object Detection - Optimized Settings (Latest 2024)
+  # Object Detection (YOLOv11n - 2024)
   yolo:
-    path: "models/yolo/yolo11n.pt"  # YOLOv11n (nano) - fastest for real-time
-    confidence: 0.6         # Balanced confidence for real-world use
-    iou_threshold: 0.45     # Optimized IoU threshold
-    device: "mps"           # Apple Silicon optimization
-    half_precision: true    # Use half precision for speed
+    path: "models/yolo/yolo11n.pt"
+    confidence: 0.6
+    iou_threshold: 0.45
+    device: "mps"  # Use "cuda" for NVIDIA, "cpu" for CPU
+    half_precision: true
 
-  # Depth Estimation - Apple Depth Pro (2024) - Sharpest Available
+  # Depth Sensing (Apple Depth Pro - 2024)
   depth:
-    path: "apple/DepthPro-hf"  # Apple Depth Pro (2024) - 2.25MP sharp depth in <0.3s
+    path: "apple/DepthPro-hf"  # Sharpest depth available
     device: "mps"
-    half_precision: false  # MPS requires float32
-    max_resolution: 518    # Depth Pro native resolution
+    half_precision: false
+    max_resolution: 518
 
-  # LLM for Narrative Generation - Optimized with VLM
+  # Audio Narration (Optional)
   llm:
-    primary: "gemma3:4b"      # Fast and efficient 3B model
-    vision: "moondream:latest"        # Vision Language Model for scene understanding
-    temperature: 0.6             # Slightly lower temperature for consistency
-    max_tokens: 100              # Shorter responses for speed
-    vlm_enabled: false           # Disable for speed (too slow)
-    scene_analysis_interval: 30  # Analyze scene every 30 frames (only if enabled)
+    primary: "gemma3:4b"
+    vision: "moondream:latest"
+    temperature: 0.6
+    max_tokens: 100
+    vlm_enabled: false  # Disabled (too slow)
+    scene_analysis_interval: 30
 
-# Conversational Navigation - Simple voice commands
+# Voice Commands (Optional)
 conversation:
-  enabled: false                     # Disabled for speed
-  model: "gemma3:4b"              # LLM model for conversations
-  temperature: 0.7                   # Response creativity (0-1)
-  max_tokens: 200                    # Maximum response length
-  voice_input: true                  # Enable voice input for blind users
-  activation_phrase: "hey orby"      # Wake phrase to start conversation
-  check_interval: 1.0                # How often to check for activation (seconds)
-  
-  # Simple voice commands for blind users
-  simple_commands: true              # Enable simple voice commands
-  command_phrases:                   # Common phrases blind users might say
+  enabled: false  # Turn on for voice control
+  model: "gemma3:4b"
+  temperature: 0.7
+  max_tokens: 200
+  voice_input: true
+  activation_phrase: "hey orby"
+  check_interval: 1.0
+  simple_commands: true
+  command_phrases:
     - "what's around me"
     - "is the path clear"
     - "where am I"
-    - "help me navigate"
-    - "describe the scene"
 
-# Social Navigation
+# Social Navigation (Optional)
 social_navigation:
-  enabled: true                      # Enable social navigation features
-  region: "us"                       # Regional social norm ('us', 'uk', 'japan', etc.)
-  voice_announce: true               # Announce social navigation advice through voice
+  enabled: true
+  region: "us"  # 'us', 'uk', 'japan', etc.
+  voice_announce: true
 
-# Audio Settings
+# Audio
 audio:
-  # Text-to-Speech
   tts_engine: "pyttsx3"
-  tts_rate: 180              # Words per minute (clear and understandable)
-  tts_volume: 0.9            # Volume (0-1)
-
-  # Echolocation/Spatial Audio
-  echolocation_enabled: true   # Enabled for audio beaconing
+  tts_rate: 180  # Words per minute
+  tts_volume: 0.9
+  echolocation_enabled: true
   spatial_audio: true
-  
-  # Adaptive Audio Beaconing - Helpful patterns for blind users
-  adaptive_beaconing_enabled: true  # Enable adaptive audio beaconing
-  beacon_safe_frequency: 440        # Low tone for safe paths
-  beacon_obstacle_frequency: 880    # High tone for obstacles
-  warning_pulse_rate: 0.2           # Warning pulse rate in seconds
-  
-  # Helpful audio patterns
-  door_beacon: 660                  # Special tone for doors
-  stairs_beacon: 1320              # Special tone for stairs
-  clear_path_beacon: 330           # Very low tone for clear paths
+  adaptive_beaconing_enabled: true
+  beacon_safe_frequency: 440
+  beacon_obstacle_frequency: 880
+  warning_pulse_rate: 0.2
+  door_beacon: 660
+  stairs_beacon: 1320
+  clear_path_beacon: 330
 
-# Echolocation Simulation Settings
+# Echolocation
 echolocation:
-  # Virtual room dimensions [x, y, z] in meters
-  room_dimensions: [10, 10, 3]
-  sample_rate: 16000         # Audio sample rate in Hz
-  duration: 0.1              # Duration of each beep in seconds
+  room_dimensions: [10, 10, 3]  # meters
+  sample_rate: 16000
+  duration: 0.1
 
-# Reinforcement Learning Prediction
+# RL Prediction (Optional)
 prediction:
-  enabled: false  # Disabled for better performance - enable after testing
+  enabled: false
   model_path: "models/rl/ppo_navigation.zip"
-  training_steps: 10000      # Steps for initial training
-  save_interval: 1000        # Save checkpoint every N steps
+  training_steps: 10000
+  save_interval: 1000
 
-# Safety Settings - Optimized for Blind Users
+# Safety
 safety:
-  min_safe_distance: 1.5     # Minimum safe distance in meters
-  danger_distance: 1.0       # Immediate danger zone (<1.0m) - within reach
-  caution_distance: 2.5      # Caution zone (1.0-2.5m) - approaching
-  emergency_stop_key: "q"    # Key to emergency stop
-  max_obstacle_alerts: 3     # Maximum simultaneous obstacle alerts
+  min_safe_distance: 1.5  # meters
+  danger_distance: 1.0    # meters
+  caution_distance: 2.5   # meters
+  emergency_stop_key: "q"
+  max_obstacle_alerts: 3
 
-# Logging Settings
+# Logging
 logging:
-  level: "WARNING"            # WARNING for speed (less logging)
+  level: "WARNING"  # WARNING, INFO, or DEBUG
   log_file: "data/logs/orbyglass.log"
-  save_detections: true      # Log detection data for analysis
-  save_frames: false         # Save frames (uses lots of space)
+  save_detections: true
+  save_frames: false
 
-# Performance Tuning - Optimized for 2024-2025 Best Practices
+# Performance
 performance:
-  audio_update_interval: 2.0      # Clear path announcements every 2 seconds
-  danger_audio_interval: 0.5      # CRITICAL: Very fast alerts for danger (< 1m)
-  stats_interval: 100             # Less frequent logging for performance
-  max_detections: 8               # Top 8 objects (good balance)
-  depth_skip_frames: 0            # Calculate depth every frame (Depth Pro is fast enough)
-  frame_skip: 0                   # Process every frame for safety
-  enable_multithreading: true     # Use multithreading for parallel processing
-  cache_depth_maps: true          # Smart caching with motion detection (still beneficial)
+  audio_update_interval: 2.0  # seconds
+  danger_audio_interval: 0.5  # seconds
+  stats_interval: 100
+  max_detections: 8
+  depth_skip_frames: 0  # 0 = every frame
+  frame_skip: 0
+  enable_multithreading: true
+  cache_depth_maps: true
 
-# 3D Mapping Settings
+# 3D Mapping (Optional)
 mapping3d:
-  enabled: false                    # Enable 3D mapping for spatial awareness (was false)
-  max_depth: 6.0                  # Better maximum depth (was 5.0)
-  voxel_size: 0.15                # Better voxel size for balance (was 0.2)
-  subsample_step: 8               # Moderate subsample (was 10)
-  update_interval: 0.3            # Better update frequency (was 0.5)
-  fx: 500                         # Camera focal length X (pixels)
-  fy: 500                         # Camera focal length Y (pixels)
-  skip_bbox: true                 # Skip bounding boxes for better performance
+  enabled: false
+  max_depth: 6.0
+  voxel_size: 0.15
+  subsample_step: 8
+  update_interval: 0.3
+  fx: 500
+  fy: 500
+  skip_bbox: true
 
-# SLAM Settings - Monocular Visual SLAM (2024 Best Practices)
+# SLAM - Indoor Navigation
 slam:
-  enabled: true                   # Enable SLAM for indoor navigation
-  grid_size: [300, 300]           # High resolution grid for accuracy
-  grid_resolution: 0.2            # High resolution for detailed mapping
-  save_maps: true                 # Save maps for later reuse
-  visualize: false                # Disabled for speed
-  show_map_creation: false        # Disabled for speed
-  show_camera_trajectory: false   # Disabled for speed
-  show_keyframes: false           # Disabled for speed
-  show_landmarks: false           # Disabled for speed
+  enabled: true
+  grid_size: [300, 300]
+  grid_resolution: 0.2
+  save_maps: true
+  visualize: false
+  orb_features: 1000
+  fast_threshold: 20
+  min_matches: 15
+  motion_model: true
+  pose_smoothing: 0.7
+  temporal_consistency_check: true
+  max_position_jump: 0.3
+  max_rotation_jump: 0.3
+  min_tracked_features: 20
+  keyframe_threshold: 20
+  reprojection_threshold: 3.0
+  min_depth: 0.1
+  max_depth: 10.0
+  loop_closure: false
+  bundle_adjustment: false
 
-  # Balanced settings for real-time performance
-  orb_features: 1000              # More features for robustness
-  fast_threshold: 20              # Balanced threshold
-  min_matches: 15                 # Sufficient matches for stability
-  motion_model: true              # Use constant velocity model
-  pose_smoothing: 0.7             # Moderate smoothing for balance
-  temporal_consistency_check: true # Check for physically impossible movements
-  max_position_jump: 0.3          # Balanced position jump
-  max_rotation_jump: 0.3          # Balanced rotation jump
-  strict_matching: false          # Disable for speed
-  min_tracked_features: 20        # Sufficient tracked features
-  keyframe_threshold: 20          # Balanced keyframe frequency
-  reprojection_threshold: 3.0     # Balanced threshold
-  min_depth: 0.1                  # Close depth detection
-  max_depth: 10.0                 # Reasonable depth range
-  depth_variance: 0.05            # Balanced variance
-  pose_alpha: 0.7                 # Balanced smoothing factor
-  loop_closure: false             # Disabled for speed
-  loop_closure_threshold: 0.7     # Higher threshold for better loop closure
-  bundle_adjustment: false        # Disabled for speed (too slow)
-  ba_interval: 10                 # Less frequent
-
-# Indoor Navigation Settings
+# Indoor Navigation
 indoor_navigation:
-  enabled: true                   # Enable goal-oriented indoor navigation (requires SLAM)
-  path_planning: true             # Enable A* path planning
-  save_locations: true            # Remember named locations
+  enabled: true
+  path_planning: true
+  save_locations: true
 
-# Trajectory Prediction Settings (Graph Neural Network)
+# Trajectory Prediction (Optional)
 trajectory_prediction:
-  enabled: false                  # Enable GNN-based trajectory prediction (EXPERIMENTAL)
-  max_history: 10                 # Number of historical positions to track
-  prediction_horizon: 3           # Number of future timesteps to predict
-  time_step: 0.5                  # Time between predictions (seconds)
-  visualize: false                # Show trajectory visualization
-  collision_warning: true         # Warn about predicted collisions
+  enabled: false
+  max_history: 10
+  prediction_horizon: 3
+  time_step: 0.5
+  visualize: false
+  collision_warning: true
 
-# 3D Occupancy Grid Settings - Balanced Accuracy and Speed
+# 3D Occupancy Grid (Optional)
 occupancy_grid_3d:
-  enabled: false                  # Disabled for speed (too slow)
-  grid_size: [10.0, 10.0, 3.0]    # Smaller grid for speed
-  resolution: 0.1                 # Good balance
-  near_resolution: 0.05           # High resolution for close objects
-  near_distance: 2.0              # Distance for high-res mapping
-  far_resolution: 0.15            # Moderate resolution for far objects
-  max_range: 5.0                  # Reasonable sensor range
-  min_range: 0.1                  # Minimum range
-  log_odds_occupied: 1.5          # Moderate occupied signal
-  log_odds_free: -1.0             # Free space signal
-  log_odds_min: -3.0              # Saturation limits
-  log_odds_max: 3.0               # Saturation limits
-  subsample_step: 6               # Moderate sampling (faster)
-  update_interval: 0.2            # Fast updates
-  visualize: true                 # Show 3D voxel grid visualization window
-  show_2d_slice: true             # Show 2D slice for better understanding
-  temporal_consistency: true      # Enable for accuracy
-  temporal_filtering: true        # Enable temporal filtering for accuracy
-  min_observations: 2             # Fewer observations needed (faster)
-  decay_rate: 0.001               # Slow decay
-  max_history_length: 8           # Moderate history
-  history_decay: 0.85             # Decay factor
-  
-  # Interactive controls
-  interactive: true                # Enable interactive controls
-  mouse_controls: true            # Enable mouse interaction
-  keyboard_controls: true          # Enable keyboard controls
-  auto_rotate: false              # Manual rotation control
-  show_trajectory: true           # Show camera trajectory
-  show_landmarks: true            # Show detected landmarks
+  enabled: false
+  grid_size: [10.0, 10.0, 3.0]
+  resolution: 0.1
+  max_range: 5.0
+  visualize: false
 
-# 3D Point Cloud Viewer Settings (DISABLED - using voxel grid only)
+# Point Cloud (Optional)
 point_cloud_viewer:
-  enabled: false                  # DISABLED - focus on voxel grid
-  max_points: 100000              # Maximum points to store (100K recommended)
-  subsample: 3                    # Subsample every Nth pixel (lower = denser, slower)
-  min_depth: 0.1                  # Minimum depth in meters
-  max_depth: 5.0                  # Maximum depth in meters
-  update_interval: 0.1            # Update frequency in seconds
-  visualize: false                # Show visualization window
+  enabled: false
+  max_points: 100000
+  subsample: 3
+  min_depth: 0.1
+  max_depth: 5.0
 
-# Movement Visualizer Settings (NEW)
+# Movement Visualizer (Optional)
 movement_visualizer:
-  enabled: false                   # Enable movement visualization
-  canvas_size: [700, 700]         # Moderate canvas size for balance (was [600, 600])
-  trail_length: 200               # Better trail length for accuracy (was 150)
-  grid_size: 22.0                 # Better grid for spatial context (was 20.0)
-  show_velocity: true             # Enable velocity for movement info (was false)
-  show_orientation: true          # Enable orientation for direction info (was false)
-  show_grid: true                 # Enable grid for spatial reference (was false)
-  show_stats: true                # Show movement statistics
+  enabled: false
+  canvas_size: [700, 700]
+  trail_length: 200
+  show_stats: true

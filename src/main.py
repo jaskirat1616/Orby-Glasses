@@ -1,13 +1,11 @@
 """
-OrbyGlasses - Optimized Main Entry Point
-High-performance navigation assistance for blind and visually impaired users.
-Optimized for real-world usability, speed, and accuracy.
+OrbyGlasses - AI Navigation for Blind Users
 
-Uses state-of-the-art 2024-2025 technology:
-- YOLOv11n for fast object detection
-- Depth-Anything-V2 for accurate depth estimation
-- Monocular SLAM for indoor navigation
-- Clear audio guidance for accessibility
+Helps blind and visually impaired people navigate safely using:
+- YOLOv11n object detection
+- Apple Depth Pro depth estimation
+- Visual SLAM indoor navigation
+- Clear audio guidance
 """
 
 import sys
@@ -24,42 +22,41 @@ from concurrent.futures import ThreadPoolExecutor
 # Add src to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from utils import (
-    ConfigManager, Logger, AudioManager, FrameProcessor,
+# Core modules
+from core.utils import (
+    ConfigManager, Logger, AudioManager,
     DataLogger, PerformanceMonitor, ensure_directories, check_device
 )
-from rich.console import Console
-from rich.table import Table
-from rich.panel import Panel
-from rich.text import Text
-from rich.layout import Layout
-from rich.live import Live
-from rich.box import ROUNDED
-from detection import DetectionPipeline
-from echolocation import AudioCueGenerator
-from narrative import ContextualAssistant
-from prediction import PathPlanner
-from mapping3d import Mapper3D
-from conversation import ConversationManager
-from slam import MonocularSLAM
-from slam_system import SLAMSystem
-from indoor_navigation import IndoorNavigator
-from trajectory_prediction import TrajectoryPredictionSystem
-from occupancy_grid_3d import OccupancyGrid3D
-from voxel_map import VoxelMap
-from point_cloud_viewer import PointCloudViewer
-from movement_visualizer import MovementVisualizer
-from coordinate_transformer import CoordinateTransformer
-from scene_understanding import EnhancedSceneProcessor
-from smart_cache import SmartCache, PredictiveEngine
-from robot_ui import RobotUI
-from error_handler import ErrorHandler
+from core.detection import DetectionPipeline
+from core.echolocation import AudioCueGenerator
+from core.narrative import ContextualAssistant
+from core.smart_cache import SmartCache, PredictiveEngine
+from core.error_handler import ErrorHandler
+
+# Navigation modules
+from navigation.slam_system import SLAMSystem
+from navigation.indoor_navigation import IndoorNavigator
+
+# Visualization
+from visualization.robot_ui import RobotUI
+
+# Optional features (loaded conditionally)
+from features.conversation import ConversationManager
+from features.trajectory_prediction import TrajectoryPredictionSystem
+from features.occupancy_grid_3d import OccupancyGrid3D
+from features.voxel_map import VoxelMap
+from features.point_cloud_viewer import PointCloudViewer
+from features.movement_visualizer import MovementVisualizer
+from features.coordinate_transformer import CoordinateTransformer
+from features.scene_understanding import EnhancedSceneProcessor
+from features.mapping3d import Mapper3D
+from features.prediction import PathPlanner
 
 
 class OrbyGlasses:
     """
-    Optimized OrbyGlasses application.
-    High-performance navigation assistance for visually impaired users.
+    Main navigation system for blind users.
+    Combines object detection, depth sensing, and SLAM.
     """
 
     def __init__(self, config_path: str = "config/config.yaml"):
