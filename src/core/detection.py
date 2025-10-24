@@ -460,7 +460,7 @@ class DetectionPipeline:
 
         # Import and initialize safety system
         try:
-            from safety_system import SafetySystem
+            from core.safety_system import SafetySystem
             camera_height = config.get('camera.height', 480)
             self.safety_system = SafetySystem(focal_length=500, frame_height=camera_height)
             logging.info("Safety system initialized")
@@ -470,7 +470,7 @@ class DetectionPipeline:
 
         # Initialize object tracker for temporal consistency
         try:
-            from object_tracker import ObjectTracker
+            from core.object_tracker import ObjectTracker
             self.object_tracker = ObjectTracker(max_distance=50.0, max_depth_diff=1.0)
             logging.info("Object tracker initialized")
         except Exception as e:

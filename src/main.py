@@ -127,7 +127,7 @@ class OrbyGlasses:
             self.slam = SLAMSystem(self.config)
 
             # Initialize SLAM map viewer (always-visible 2D map like robots)
-            from slam_map_viewer import SLAMMapViewer
+            from navigation.slam_map_viewer import SLAMMapViewer
             self.slam_map_viewer = SLAMMapViewer(map_size=600, meters_per_pixel=0.02)
             self.slam_map_viewer.draw_grid(grid_spacing=1.0)
             self.logger.info("✓ SLAM map viewer initialized")
