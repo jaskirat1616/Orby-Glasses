@@ -289,22 +289,59 @@ class OrbyGlasses:
 
     def _create_custom_depth_colormap(self, depth_map: np.ndarray) -> np.ndarray:
         """
-        Create a custom depth colormap with more orange and dark blue tones.
-        Optimized for speed using OpenCV's fast colormap functions.
-        
+        Create a custom depth colormap optimized for blind navigation.
+        Uses perceptually uniform colors with danger zones in red/yellow.
+
         Args:
-            depth_map: Input depth map
-        
+            depth_map: Input depth map (0-1 normalized)
+
         Returns:
-            Colorized depth map with custom colormap
+            Colorized depth map with safety-oriented colormap
         """
-        # Ensure depth map is in range [0, 1], then convert to 8-bit
+        # Ensure depth map is in range [0, 1]
         depth_normalized = np.clip(depth_map, 0, 1)
-        depth_8bit = (depth_normalized * 255).astype(np.uint8)
-        
-        # Use COLORMAP_TWILIGHT_SHIFTED for better blue-to-orange gradient
-        # If not available, use COLORMAP_TURBO which has good orange-blue characteristics
-        return cv2.applyColorMap(depth_8bit, cv2.COLORMAP_TURBO)
+
+        # Create custom colormap: red (close) -> yellow -> green -> blue (far)
+        h, w = depth_map.shape
+        colored = np.zeros((h, w, 3), dtype=np.uint8)
+
+        # Danger zone (0-0.3): Red to Orange
+        mask1 = depth_normalized < 0.3
+        t = depth_normalized[mask1] / 0.3  # 0 to 1
+        colored[mask1] = np.stack([
+            np.zeros_like(t),
+            (t * 100).astype(np.uint8),
+            (255 - t * 55).astype(np.uint8)
+        ], axis=-1)
+
+        # Caution zone (0.3-0.5): Orange to Yellow
+        mask2 = (depth_normalized >= 0.3) & (depth_normalized < 0.5)
+        t = (depth_normalized[mask2] - 0.3) / 0.2
+        colored[mask2] = np.stack([
+            np.zeros_like(t),
+            (100 + t * 155).astype(np.uint8),
+            (200 - t * 100).astype(np.uint8)
+        ], axis=-1)
+
+        # Safe zone (0.5-0.7): Yellow to Green
+        mask3 = (depth_normalized >= 0.5) & (depth_normalized < 0.7)
+        t = (depth_normalized[mask3] - 0.5) / 0.2
+        colored[mask3] = np.stack([
+            (t * 200).astype(np.uint8),
+            np.full_like(t, 255).astype(np.uint8),
+            (100 - t * 100).astype(np.uint8)
+        ], axis=-1)
+
+        # Far zone (0.7-1.0): Green to Blue
+        mask4 = depth_normalized >= 0.7
+        t = (depth_normalized[mask4] - 0.7) / 0.3
+        colored[mask4] = np.stack([
+            (200 - t * 200).astype(np.uint8),
+            (255 - t * 155).astype(np.uint8),
+            (t * 255).astype(np.uint8)
+        ], axis=-1)
+
+        return colored
 
     def process_frame(self, frame: np.ndarray) -> Optional[tuple]:
         """
@@ -464,9 +501,9 @@ class OrbyGlasses:
             total_time = self.perf_monitor.stop_timer('total')
             fps = self.perf_monitor.get_avg_fps()
 
-            # Create UI overlay
+            # Create UI overlay with depth visualization
             annotated_frame = self.robot_ui.draw_clean_overlay(
-                frame, detections, fps, safe_direction
+                frame, detections, fps, safe_direction, depth_map
             )
 
             # Add SLAM info if enabled
@@ -912,8 +949,8 @@ class OrbyGlasses:
                     if depth_map is not None and self.frame_count % (self.skip_depth_frames + 1) == 0:
                         # Apply custom colormap with more orange and dark blue colors
                         depth_colored = self._create_custom_depth_colormap(depth_map)
-                        # Resize depth map to match camera window size
-                        depth_display = cv2.resize(depth_colored, display_size)
+                        # Resize depth map to match camera window size using LANCZOS for sharper results
+                        depth_display = cv2.resize(depth_colored, display_size, interpolation=cv2.INTER_LANCZOS4)
                         cv2.imshow('Depth', depth_display)
 
                     # Show SLAM map viewer (original working version)

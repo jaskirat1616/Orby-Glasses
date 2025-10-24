@@ -26,21 +26,28 @@ class RobotUI:
         self.GRAY = (100, 100, 100)
 
     def draw_clean_overlay(self, frame: np.ndarray, detections: List[Dict],
-                          fps: float, safe_direction: str) -> np.ndarray:
+                          fps: float, safe_direction: str, depth_map: np.ndarray = None) -> np.ndarray:
         """
-        Draw clean overlay for camera window.
+        Draw clean overlay for camera window with enhanced visualizations.
 
         Args:
             frame: Input frame
             detections: Object detections
             fps: Current FPS
             safe_direction: Safe direction to move
+            depth_map: Optional depth map for overlay
 
         Returns:
             Frame with overlay
         """
         overlay = frame.copy()
         h, w = frame.shape[:2]
+
+        # Draw depth zones (safe/caution/danger) if depth map available
+        if depth_map is not None:
+            # Create semi-transparent depth overlay
+            depth_overlay = self._create_depth_zones_overlay(depth_map, (w, h))
+            overlay = cv2.addWeighted(overlay, 0.7, depth_overlay, 0.3, 0)
 
         # Draw simple boxes on objects
         danger_count = 0
@@ -71,20 +78,26 @@ class RobotUI:
             # Simple box
             cv2.rectangle(overlay, (x1, y1), (x2, y2), color, thickness)
 
-            # Label with distance
+            # Label with distance (increased text size) - with black background for readability
             text = f"{label} {depth:.1f}m"
+            (text_w, text_h), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.8, 3)
+            cv2.rectangle(overlay, (x1, y1 - text_h - 10), (x1 + text_w + 5, y1 - 5), self.BLACK, -1)
             cv2.putText(overlay, text, (x1, y1 - 5),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 3)  # Bigger text and thicker
+
+        # Draw safe direction arrow
+        if safe_direction and danger_count > 0:
+            self._draw_safe_direction_arrow(overlay, safe_direction, (w, h))
 
         # Top status bar - simple
         cv2.rectangle(overlay, (0, 0), (w, 35), self.BLACK, -1)
 
-        # FPS
+        # FPS (increased text size)
         fps_color = self.GREEN if fps > 15 else self.YELLOW if fps > 10 else self.RED
         cv2.putText(overlay, f"FPS: {fps:.0f}", (10, 25),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, fps_color, 2)
+                   cv2.FONT_HERSHEY_SIMPLEX, 1.2, fps_color, 3)
 
-        # Status
+        # Status (increased text size)
         if danger_count > 0:
             status = "DANGER"
             status_color = self.RED
@@ -95,10 +108,73 @@ class RobotUI:
             status = "CLEAR"
             status_color = self.GREEN
 
-        cv2.putText(overlay, status, (w - 120, 25),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, status_color, 2)
+        cv2.putText(overlay, status, (w - 160, 25),
+                   cv2.FONT_HERSHEY_SIMPLEX, 1.2, status_color, 3)
 
         return overlay
+
+    def _create_depth_zones_overlay(self, depth_map: np.ndarray, frame_size: tuple) -> np.ndarray:
+        """
+        Create colored overlay showing danger/caution/safe zones.
+
+        Args:
+            depth_map: Normalized depth map (0-1)
+            frame_size: (width, height) of output frame
+
+        Returns:
+            RGB overlay image
+        """
+        w, h = frame_size
+
+        # Resize depth map if needed
+        if depth_map.shape[:2] != (h, w):
+            depth_resized = cv2.resize(depth_map, (w, h), interpolation=cv2.INTER_LANCZOS4)
+        else:
+            depth_resized = depth_map.copy()
+
+        # Create color overlay based on depth zones
+        overlay = np.zeros((h, w, 3), dtype=np.uint8)
+
+        # Danger zone: red (< 0.3 normalized ~ < 1.5m)
+        danger_mask = depth_resized < 0.3
+        overlay[danger_mask] = [0, 0, 100]  # Dark red
+
+        # Caution zone: yellow (0.3-0.5 ~ 1.5-3.5m)
+        caution_mask = (depth_resized >= 0.3) & (depth_resized < 0.5)
+        overlay[caution_mask] = [0, 100, 100]  # Dark yellow
+
+        # Safe zone: green (> 0.5 ~ > 3.5m)
+        safe_mask = depth_resized >= 0.5
+        overlay[safe_mask] = [0, 100, 0]  # Dark green
+
+        return overlay
+
+    def _draw_safe_direction_arrow(self, frame: np.ndarray, direction: str, frame_size: tuple):
+        """
+        Draw arrow indicating safe direction to move.
+
+        Args:
+            frame: Frame to draw on
+            direction: 'left', 'right', or 'forward'
+            frame_size: (width, height)
+        """
+        w, h = frame_size
+        center_x, center_y = w // 2, h - 100
+
+        if direction == 'left':
+            # Arrow pointing left
+            pt1 = (center_x - 50, center_y)
+            pt2 = (center_x - 100, center_y)
+            cv2.arrowedLine(frame, pt1, pt2, self.GREEN, 5, tipLength=0.3)
+            cv2.putText(frame, "GO LEFT", (center_x - 150, center_y + 40),
+                       cv2.FONT_HERSHEY_SIMPLEX, 1.0, self.GREEN, 3)
+        elif direction == 'right':
+            # Arrow pointing right
+            pt1 = (center_x + 50, center_y)
+            pt2 = (center_x + 100, center_y)
+            cv2.arrowedLine(frame, pt1, pt2, self.GREEN, 5, tipLength=0.3)
+            cv2.putText(frame, "GO RIGHT", (center_x + 20, center_y + 40),
+                       cv2.FONT_HERSHEY_SIMPLEX, 1.0, self.GREEN, 3)
 
 
     def create_mini_map(self, slam_result: Optional[Dict], size: int = 300) -> np.ndarray:

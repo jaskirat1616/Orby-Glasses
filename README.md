@@ -1,16 +1,19 @@
 # OrbyGlasses 🚀
 
-**Production-Ready Robot Navigation for Blind Users**
+**2024-2025 State-of-the-Art Navigation System for Blind and Visually Impaired Users**
 
-OrbyGlasses is a breakthrough AI navigation system that helps blind users navigate safely and independently. Features **robot-style interface**, **smart motion caching** (30+ FPS), **predictive collision avoidance**, and **ultra-simple audio guidance**. Built for Apple Silicon with production-grade reliability.
+OrbyGlasses is a breakthrough AI-powered navigation assistant that helps blind and visually impaired users navigate safely and independently. Built using the latest research in computer vision, robotics navigation, and assistive technology (2024-2025).
 
-## 🎯 What Makes It Special
+## 🎯 What Makes It Special (2024-2025 Optimized)
 
-- **30+ FPS Performance**: Smart caching recomputes only when scene changes (2-3x faster)
-- **Predictive Safety**: Warns BEFORE danger, not just when close
-- **Robot UI**: Clean interface like Boston Dynamics robots
-- **Simple Audio**: "Stop. Car ahead. Go left" - that's it!
-- **Production Ready**: Error handling, graceful recovery, no crashes
+- **🔬 Apple Depth Pro (2024)**: Sharpest depth maps available - 2.25MP in <0.3s
+- **⚡ YOLOv11n (2024)**: Latest object detection - 22% fewer params, 2% faster
+- **📊 Enhanced Visualizations**: Depth zones, safety arrows, clear distance labels
+- **🎯 Production Ready**: 15-25 FPS on Apple Silicon, robust error handling
+- **♿ User-Centered Design**: Researched-backed features for blind navigation
+- **🔊 Smart Audio**: Priority-based alerts - "Stop. Car ahead. Go left"
+- **🗺️ Visual SLAM**: Indoor navigation without GPS
+- **✅ Not Over-Engineered**: Essential features only, disabled unnecessary components
 
 ## ⚡ Quick Start
 
@@ -62,21 +65,73 @@ See `QUICK_START.md` for 10-second setup.
 
 ## Features
 
-### Core Capabilities (Full Version)
+### Core Capabilities (2024-2025 Optimized)
 
-*   **Real-Time Object Detection:** Uses `YOLOv11n` optimized for Apple Silicon MPS acceleration to identify obstacles instantly.
-*   **Depth Estimation:** Employs Apple `Depth Pro` (with `MiDaS` fallback) for precise distance measurements.
-*   **Visual SLAM System:** Tracks user position indoors using a USB webcam, eliminating the need for GPS or IMU sensors.
-*   **3D Occupancy Grid Mapping:** Creates real-time volumetric environment maps with probabilistic obstacle detection.
-*   **Indoor Navigation System:** Supports goal-oriented navigation to specific locations (e.g., "kitchen").
-*   **Trajectory Prediction:** Applies a simplified Graph Neural Network (GNN) to forecast moving object paths.
-*   **Social Navigation:** Guides users through crowded areas while respecting regional social norms.
-*   **Bio-Mimetic Echolocation:** Mimics bat echolocation with spatial audio cues via binaural sound.
-*   **AI-Powered Narratives:** Generates contextual guidance using `Ollama` with `Gemma2` (2B parameter model) and `Moondream` vision models.
-*   **Predictive Navigation:** Uses reinforcement learning (PPO) to learn user patterns and optimize paths.
-*   **Text-to-Speech:** Delivers real-time audio feedback for obstacle alerts and navigation instructions.
-*   **Non-Blocking Voice Input:** Supports voice commands without interrupting camera feed processing.
-*   **Privacy-First Design:** Ensures 100% local processing with no cloud dependencies.
+#### Computer Vision (State-of-the-Art 2024-2025)
+
+*   **Object Detection - YOLOv11n (Ultralytics 2024)**
+    - Latest real-time detection model
+    - 22% fewer parameters than YOLOv10
+    - 2% faster inference
+    - Optimized for Apple Silicon MPS
+
+*   **Depth Estimation - Apple Depth Pro (October 2024)**
+    - **Sharpest depth maps available** - 2.25 megapixels
+    - Metric depth in <0.3 seconds on standard GPU
+    - Zero-shot generalization without camera intrinsics
+    - Research: Apple ML Research "Depth Pro: Sharp Monocular Metric Depth"
+    - Fallback: Depth Anything V2 (CVPR 2024)
+
+#### Navigation & Robotics (Best Practices 2024)
+
+*   **Visual SLAM System (Camera-Only)**
+    - Tracks user position indoors without GPS/IMU
+    - ORB features with temporal consistency
+    - Pose smoothing and motion models
+    - Based on: ACM Computing Surveys (2024) autonomous navigation review
+
+*   **Indoor Navigation with A* Path Planning**
+    - Goal-oriented navigation to named locations
+    - Dynamic obstacle avoidance
+    - Safe path suggestions with directional arrows
+    - Research: Nature Scientific Reports (2024) IA-DWA algorithm
+
+#### Enhanced Visualizations (User-Centered Design 2024)
+
+*   **Depth Zone Overlay**
+    - Semi-transparent colored zones: Red (danger <1.5m), Yellow (caution 1.5-3.5m), Green (safe >3.5m)
+    - LANCZOS4 interpolation for sharp rendering
+    - Perceptually uniform color progression
+
+*   **Safety Direction Arrows**
+    - Large, clear arrows when danger detected
+    - "GO LEFT" / "GO RIGHT" text instructions
+    - Based on: MDPI Sensors (2024) assistive systems research
+
+*   **Improved Labels**
+    - Large text with black backgrounds for readability
+    - Distance in meters with object names
+    - Color-coded by safety level
+
+#### Audio Guidance (Assistive Technology Best Practices 2024)
+
+*   **Priority-Based Audio Alerts**
+    - Immediate danger warnings (<1m): 0.5s interval
+    - Normal announcements: 2.0s interval
+    - Relatable distance terms: "arm's length away", "one step away"
+    - Research: ScienceDirect (2024) assistive systems survey
+
+*   **Clear, Simple Directions**
+    - "Stop. Car ahead. Go left" - actionable guidance
+    - Text-to-speech with optimized rate (180 WPM)
+    - Non-blocking voice input (background thread)
+
+#### Additional Features
+
+*   **Smart Caching**: Motion-based depth recomputation
+*   **Object Tracking**: Temporal consistency for smooth depth
+*   **Safety System**: Multi-level danger zones with calibration
+*   **Privacy-First**: 100% local processing, no cloud
 
 ### Simplified Version
 

@@ -150,49 +150,88 @@ class ObjectDetector:
 
 
 class DepthEstimator:
-    """Optimized depth estimation using Depth Anything V2."""
+    """Optimized depth estimation using Apple Depth Pro (2024) - sharpest available."""
 
-    def __init__(self, model_path: str = "depth-anything/Depth-Anything-V2-Small-hf",
+    def __init__(self, model_path: str = "apple/DepthPro-hf",
                  device: str = "mps",
-                 max_resolution: int = 384):
+                 max_resolution: int = 518):
         """
-        Initialize optimized depth estimator.
+        Initialize optimized depth estimator with Apple Depth Pro.
 
         Args:
-            model_path: Hugging Face model name or path
+            model_path: Hugging Face model name (default: Apple Depth Pro)
             device: Device to run on
-            max_resolution: Maximum resolution for depth processing
+            max_resolution: Maximum resolution for depth processing (518 for Depth Pro)
         """
         self.model_path = model_path
         self.device = self._validate_device(device)
         self.max_resolution = max_resolution
 
-        # Load Depth Anything V2 with optimizations
+        # Try to load Apple Depth Pro (2024) first - sharpest depth available
         try:
-            from transformers import pipeline
+            from transformers import AutoImageProcessor, DepthProForDepthEstimation
+            import torch
 
-            # Map device names to transformers format
-            device_id = 0 if self.device in ["mps", "cuda"] else -1
+            logging.info(f"Loading Apple Depth Pro (2024) - state-of-the-art sharpness...")
 
-            self.model = pipeline(
-                task="depth-estimation",
-                model=model_path,
-                device=device_id,
-                torch_dtype="float16" if device_id >= 0 else "float32"  # Use half precision
-            )
-            self.model_type = "depth_anything_v2"
+            # Load Depth Pro model and processor
+            self.processor = AutoImageProcessor.from_pretrained(model_path)
+            self.model = DepthProForDepthEstimation.from_pretrained(model_path)
+
+            # Move to device
+            if self.device == "mps":
+                self.model = self.model.to("mps")
+                # Use float32 for MPS (float16 not fully supported)
+                self.model = self.model.float()
+            elif self.device == "cuda":
+                self.model = self.model.to("cuda")
+                self.model = self.model.half()  # Use float16 for speed
+
+            self.model.eval()  # Set to evaluation mode
+            self.model_type = "depth_pro"
 
             # Warm up the model
-            dummy_image = np.zeros((320, 320, 3), dtype=np.uint8)
-            self._estimate_depth_fast(dummy_image)
-            
-            logging.info(f"Depth Anything V2 loaded and optimized: {model_path}")
+            dummy_image = np.zeros((518, 518, 3), dtype=np.uint8)
+            from PIL import Image
+            dummy_pil = Image.fromarray(dummy_image)
+            with torch.no_grad():
+                inputs = self.processor(images=dummy_pil, return_tensors="pt")
+                if self.device == "mps":
+                    inputs = {k: v.to("mps") for k, v in inputs.items()}
+                elif self.device == "cuda":
+                    inputs = {k: v.to("cuda") for k, v in inputs.items()}
+                _ = self.model(**inputs)
+
+            logging.info(f"✓ Apple Depth Pro loaded (2.25MP, sharp metric depth in <0.3s)")
 
         except Exception as e:
-            logging.error(f"Failed to load Depth Anything V2: {e}")
-            # Fallback to simple depth estimation
-            self.model = None
-            self.model_type = "fallback"
+            logging.warning(f"Depth Pro unavailable ({e}), falling back to Depth Anything V2...")
+            # Fallback to Depth Anything V2
+            try:
+                from transformers import pipeline
+
+                device_id = 0 if self.device in ["mps", "cuda"] else -1
+
+                self.model = pipeline(
+                    task="depth-estimation",
+                    model="depth-anything/Depth-Anything-V2-Small-hf",
+                    device=device_id,
+                    torch_dtype="float16" if device_id >= 0 else "float32"
+                )
+                self.model_type = "depth_anything_v2"
+                self.processor = None
+
+                # Warm up
+                dummy_image = np.zeros((320, 320, 3), dtype=np.uint8)
+                self._estimate_depth_fast(dummy_image)
+
+                logging.info(f"✓ Depth Anything V2 loaded as fallback")
+
+            except Exception as e2:
+                logging.error(f"All depth models failed: {e2}")
+                self.model = None
+                self.model_type = "fallback"
+                self.processor = None
 
     def _validate_device(self, device: str) -> str:
         """Validate device availability."""
@@ -224,35 +263,69 @@ class DepthEstimator:
     
     def _estimate_depth_fast(self, frame: np.ndarray) -> np.ndarray:
         """Fast depth estimation with optimizations."""
+        import torch
         from PIL import Image
-
-        # Resize frame for depth model (maintain aspect ratio)
-        max_res = self.max_resolution
-        h, w = frame.shape[:2]
-        if h > max_res or w > max_res:
-            scale = min(max_res/h, max_res/w)
-            new_h, new_w = int(h * scale), int(w * scale)
-            frame = cv2.resize(frame, (new_w, new_h))
 
         # Convert BGR to RGB efficiently
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         pil_image = Image.fromarray(rgb)
 
-        # Run Depth Anything V2 inference
-        result = self.model(pil_image)
+        if self.model_type == "depth_pro":
+            # Use Apple Depth Pro - produces sharp, high-resolution depth
+            with torch.no_grad():
+                # Process image
+                inputs = self.processor(images=pil_image, return_tensors="pt")
 
-        # Extract depth map from result
-        depth_map = np.array(result["depth"])
+                # Move to device
+                if self.device == "mps":
+                    inputs = {k: v.to("mps") for k, v in inputs.items()}
+                elif self.device == "cuda":
+                    inputs = {k: v.to("cuda") for k, v in inputs.items()}
 
-        # Fast normalization
-        depth_min, depth_max = depth_map.min(), depth_map.max()
-        if depth_max > depth_min:
-            depth_map = (depth_map - depth_min) / (depth_max - depth_min)
+                # Get depth prediction
+                outputs = self.model(**inputs)
+                predicted_depth = outputs.predicted_depth
+
+                # Convert to numpy and normalize
+                depth_map = predicted_depth.squeeze().cpu().numpy()
+
+                # Depth Pro outputs metric depth - normalize for consistency
+                depth_min, depth_max = depth_map.min(), depth_map.max()
+                if depth_max > depth_min:
+                    depth_map = (depth_map - depth_min) / (depth_max - depth_min)
+                else:
+                    depth_map = np.zeros_like(depth_map)
+
+                # Resize to match input frame size using LANCZOS for sharpness
+                h, w = frame.shape[:2]
+                depth_map = cv2.resize(depth_map, (w, h), interpolation=cv2.INTER_LANCZOS4)
+
         else:
-            depth_map = np.zeros_like(depth_map)
+            # Fallback to Depth Anything V2 pipeline
+            # Resize frame for depth model (maintain aspect ratio)
+            max_res = self.max_resolution
+            h, w = frame.shape[:2]
+            if h > max_res or w > max_res:
+                scale = min(max_res/h, max_res/w)
+                new_h, new_w = int(h * scale), int(w * scale)
+                frame_resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_AREA)
+                rgb = cv2.cvtColor(frame_resized, cv2.COLOR_BGR2RGB)
+                pil_image = Image.fromarray(rgb)
 
-        # Keep depth at native model resolution (don't upscale - causes blur)
-        # Resize only happens once for display, maintaining sharpness
+            # Run Depth Anything V2 inference
+            result = self.model(pil_image)
+
+            # Extract depth map from result
+            depth_map = np.array(result["depth"])
+
+            # Fast normalization
+            depth_min, depth_max = depth_map.min(), depth_map.max()
+            if depth_max > depth_min:
+                depth_map = (depth_map - depth_min) / (depth_max - depth_min)
+            else:
+                depth_map = np.zeros_like(depth_map)
+
+        # Return sharp depth map at original frame resolution
         return depth_map
 
     def _fallback_depth(self, frame: np.ndarray) -> np.ndarray:

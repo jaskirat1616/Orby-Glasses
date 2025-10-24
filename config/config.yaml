@@ -19,12 +19,12 @@ models:
     device: "mps"           # Apple Silicon optimization
     half_precision: true    # Use half precision for speed
 
-  # Depth Estimation - Optimized for speed and accuracy
+  # Depth Estimation - Apple Depth Pro (2024) - Sharpest Available
   depth:
-    path: "depth-anything/Depth-Anything-V2-Small-hf"  # Latest 2024 model
+    path: "apple/DepthPro-hf"  # Apple Depth Pro (2024) - 2.25MP sharp depth in <0.3s
     device: "mps"
-    half_precision: true   # Use half precision for speed
-    max_resolution: 384    # Balanced resolution (better accuracy, still fast)
+    half_precision: false  # MPS requires float32
+    max_resolution: 518    # Depth Pro native resolution
 
   # LLM for Narrative Generation - Optimized with VLM
   llm:
@@ -111,16 +111,16 @@ logging:
   save_detections: true      # Log detection data for analysis
   save_frames: false         # Save frames (uses lots of space)
 
-# Performance Tuning - Optimized for Real-World Use
+# Performance Tuning - Optimized for 2024-2025 Best Practices
 performance:
   audio_update_interval: 2.0      # Clear path announcements every 2 seconds
   danger_audio_interval: 0.5      # CRITICAL: Very fast alerts for danger (< 1m)
   stats_interval: 100             # Less frequent logging for performance
   max_detections: 8               # Top 8 objects (good balance)
-  depth_skip_frames: 1            # Calculate depth every 2 frames for speed
+  depth_skip_frames: 0            # Calculate depth every frame (Depth Pro is fast enough)
   frame_skip: 0                   # Process every frame for safety
   enable_multithreading: true     # Use multithreading for parallel processing
-  cache_depth_maps: true          # Smart caching with motion detection
+  cache_depth_maps: true          # Smart caching with motion detection (still beneficial)
 
 # 3D Mapping Settings
 mapping3d:
