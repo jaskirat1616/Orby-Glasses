@@ -9,24 +9,32 @@ import numpy as np
 
 class FastDepthVisualizer:
     """
-    Super fast depth visualization.
-    Uses OpenCV colormaps for maximum speed.
+    Super fast depth visualization with dark colors.
+    Uses custom dark colormap for better visibility.
     """
 
-    def __init__(self):
-        """Initialize fast depth visualizer."""
-        # Use JET colormap (very fast)
-        self.colormap = cv2.COLORMAP_JET
+    def __init__(self, use_dark=True):
+        """
+        Initialize fast depth visualizer.
+
+        Args:
+            use_dark: Use dark color scheme (default True)
+        """
+        # Use dark colormap by default
+        if use_dark:
+            self.colormap = cv2.COLORMAP_TWILIGHT  # Dark blue/purple
+        else:
+            self.colormap = cv2.COLORMAP_JET  # Bright colors
 
     def visualize(self, depth_map: np.ndarray) -> np.ndarray:
         """
-        Fast depth visualization.
+        Fast depth visualization with dark colors.
 
         Args:
             depth_map: Depth map (any range)
 
         Returns:
-            Colored depth map (BGR)
+            Colored depth map (BGR) with dark theme
         """
         # Normalize to 0-255
         depth_min = np.min(depth_map[depth_map > 0]) if np.any(depth_map > 0) else 0
@@ -39,6 +47,9 @@ class FastDepthVisualizer:
 
         # Apply colormap (hardware accelerated)
         colored = cv2.applyColorMap(normalized, self.colormap)
+
+        # Darken the image by 30% for better dark theme
+        colored = (colored * 0.7).astype(np.uint8)
 
         return colored
 
@@ -55,29 +66,37 @@ class SimpleDepthVisualizer:
 
     def visualize(self, depth_map: np.ndarray) -> np.ndarray:
         """
-        Simple colored depth map.
+        Simple colored depth map with dark colors.
 
         Args:
             depth_map: Depth map (meters)
 
         Returns:
-            Colored depth (BGR)
+            Colored depth (BGR) with dark theme
         """
         h, w = depth_map.shape
         colored = np.zeros((h, w, 3), dtype=np.uint8)
 
-        # Simple thresholding (very fast)
-        # Close (< 1m): Red
-        mask_close = depth_map < 1.0
-        colored[mask_close] = [0, 0, 255]
+        # Dark color scheme (darker versions)
+        # Very close (< 0.5m): Dark red
+        mask_very_close = depth_map < 0.5
+        colored[mask_very_close] = [0, 0, 180]  # Dark red
 
-        # Medium (1-3m): Yellow
-        mask_medium = (depth_map >= 1.0) & (depth_map < 3.0)
-        colored[mask_medium] = [0, 255, 255]
+        # Close (0.5-1.5m): Red/Orange
+        mask_close = (depth_map >= 0.5) & (depth_map < 1.5)
+        colored[mask_close] = [0, 50, 200]  # Orange-red
 
-        # Far (>3m): Green
-        mask_far = depth_map >= 3.0
-        colored[mask_far] = [0, 255, 0]
+        # Medium (1.5-3m): Yellow-green
+        mask_medium = (depth_map >= 1.5) & (depth_map < 3.0)
+        colored[mask_medium] = [0, 150, 150]  # Dark yellow
+
+        # Far (3-5m): Green
+        mask_far = (depth_map >= 3.0) & (depth_map < 5.0)
+        colored[mask_far] = [0, 120, 0]  # Dark green
+
+        # Very far (>5m): Blue
+        mask_very_far = depth_map >= 5.0
+        colored[mask_very_far] = [100, 50, 0]  # Dark blue
 
         return colored
 
