@@ -33,6 +33,39 @@ from core.narrative import ContextualAssistant
 from core.smart_cache import SmartCache, PredictiveEngine
 from core.error_handler import ErrorHandler
 
+# New modules
+try:
+    from core.yolo_world_detector import YOLOWorldDetector
+    YOLO_WORLD_AVAILABLE = True
+except ImportError:
+    YOLO_WORLD_AVAILABLE = False
+    print("Note: YOLO-World not available (install CLIP for text-based detection)")
+
+try:
+    from core.depth_anything_v2 import DepthAnythingV2
+    DEPTH_ANYTHING_V2_AVAILABLE = True
+except ImportError:
+    DEPTH_ANYTHING_V2_AVAILABLE = False
+    print("Note: Depth Anything V2 not available")
+
+try:
+    from navigation.simple_slam import SimpleSLAM
+    SIMPLE_SLAM_AVAILABLE = True
+except ImportError:
+    SIMPLE_SLAM_AVAILABLE = False
+
+try:
+    from visualization.depth_visualizer_2025 import DarkThemeDepthVisualizer
+    DARK_DEPTH_VIZ_AVAILABLE = True
+except ImportError:
+    DARK_DEPTH_VIZ_AVAILABLE = False
+
+try:
+    from features.haptic_feedback_2025 import HapticFeedbackController
+    HAPTIC_AVAILABLE = True
+except ImportError:
+    HAPTIC_AVAILABLE = False
+
 # Navigation modules
 from navigation.slam_system import SLAMSystem
 from navigation.indoor_navigation import IndoorNavigator
@@ -184,6 +217,36 @@ class OrbyGlasses:
         self.coordinate_transformer_enabled = True  # Always enabled for coordinate transformations
         self.coordinate_transformer = CoordinateTransformer(self.config)
         self.logger.info("✓ Coordinate Transformer initialized")
+
+        # NEW: Dark Depth Visualizer
+        if DARK_DEPTH_VIZ_AVAILABLE:
+            self.dark_depth_viz = DarkThemeDepthVisualizer(self.config)
+            self.logger.info("✓ Dark depth visualizer initialized")
+        else:
+            self.dark_depth_viz = None
+
+        # NEW: Haptic Feedback
+        if HAPTIC_AVAILABLE and self.config.get('haptic.enabled', False):
+            self.haptic_controller = HapticFeedbackController(self.config)
+            self.logger.info("✓ Haptic feedback initialized")
+        else:
+            self.haptic_controller = None
+
+        # NEW: Depth Anything V2 (optional upgrade)
+        use_depth_v2 = self.config.get('models.depth.use_v2', False)
+        if use_depth_v2 and DEPTH_ANYTHING_V2_AVAILABLE:
+            self.depth_v2 = DepthAnythingV2(self.config)
+            self.logger.info("✓ Depth Anything V2 initialized")
+        else:
+            self.depth_v2 = None
+
+        # NEW: Simple SLAM (alternative to full SLAM)
+        use_simple_slam = self.config.get('slam.use_simple', False)
+        if use_simple_slam and SIMPLE_SLAM_AVAILABLE and not self.slam_enabled:
+            self.simple_slam = SimpleSLAM(self.config)
+            self.logger.info("✓ Simple SLAM initialized")
+        else:
+            self.simple_slam = None
 
         # Data logging
         self.data_logger = DataLogger()
