@@ -149,19 +149,34 @@ class AudioManager:
         """Worker thread for TTS to avoid blocking."""
         import subprocess
         print("TTS worker thread running...")
+        current_process = None
+
         while True:
             try:
                 text = self.tts_queue.get(timeout=1)
                 if text:
+                    # Kill previous speech if still running
+                    if current_process and current_process.poll() is None:
+                        current_process.terminate()
+
                     self.is_speaking = True
                     word_count = len(text.split())
                     print(f"🎤 Speaking now ({word_count} words): {text[:60]}...")
 
                     try:
-                        # Use macOS 'say' command with rate
+                        # Use macOS 'say' command with rate - run in background
                         rate_wpm = int(self.rate)
-                        subprocess.run(['say', '-r', str(rate_wpm), text], check=True)
+                        current_process = subprocess.Popen(
+                            ['say', '-r', str(rate_wpm), text],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL
+                        )
+                        # Wait for completion but with timeout to avoid long blocks
+                        current_process.wait(timeout=10)
                         print(f"✓ Speech completed ({word_count} words)")
+                    except subprocess.TimeoutExpired:
+                        print(f"⚠️ Speech timeout - continuing")
+                        current_process.terminate()
                     except Exception as speak_error:
                         print(f"✗ TTS speak error: {speak_error}")
                     finally:

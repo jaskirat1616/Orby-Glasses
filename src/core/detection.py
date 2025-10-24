@@ -154,14 +154,14 @@ class DepthEstimator:
 
     def __init__(self, model_path: str = "depth-anything/Depth-Anything-V2-Small-hf",
                  device: str = "mps",
-                 max_resolution: int = 320):
+                 max_resolution: int = 384):
         """
         Initialize optimized depth estimator with Depth Anything V2.
 
         Args:
             model_path: Hugging Face model name (default: Depth Anything V2 Small)
             device: Device to run on
-            max_resolution: Maximum resolution for depth processing (320 for speed)
+            max_resolution: Maximum resolution for depth processing (384 for balance)
         """
         self.model_path = model_path
         self.device = self._validate_device(device)
@@ -186,8 +186,8 @@ class DepthEstimator:
             self.model_type = "depth_anything_v2"
             self.processor = None
 
-            # Warm up with smaller resolution
-            dummy_image = np.zeros((320, 240, 3), dtype=np.uint8)
+            # Warm up with moderate resolution for quality/speed balance
+            dummy_image = np.zeros((384, 288, 3), dtype=np.uint8)
             self._estimate_depth_fast(dummy_image)
 
             logging.info(f"✓ Depth Anything V2 Small loaded - optimized for real-time")
@@ -231,15 +231,15 @@ class DepthEstimator:
         import torch
         from PIL import Image
 
-        # Resize frame to smaller resolution for much faster processing
+        # Resize frame to moderate resolution for better quality (384x288 typical)
         max_res = self.max_resolution
         h, w = frame.shape[:2]
 
-        # Always resize to smaller resolution for speed (320x240 typical)
+        # Resize to moderate resolution for quality/speed balance
         scale = min(max_res/h, max_res/w)
         new_h, new_w = int(h * scale), int(w * scale)
-        # Use INTER_LINEAR for fastest resizing
-        frame_resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+        # Use INTER_AREA for downscaling (better quality than LINEAR)
+        frame_resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
         # Convert BGR to RGB efficiently
         rgb = cv2.cvtColor(frame_resized, cv2.COLOR_BGR2RGB)
@@ -258,8 +258,8 @@ class DepthEstimator:
         else:
             depth_map = np.zeros_like(depth_map)
 
-        # Resize back to original frame size using fast LINEAR interpolation
-        depth_map = cv2.resize(depth_map, (w, h), interpolation=cv2.INTER_LINEAR)
+        # Resize back to original frame size using INTER_CUBIC for sharper upscaling
+        depth_map = cv2.resize(depth_map, (w, h), interpolation=cv2.INTER_CUBIC)
 
         return depth_map
 

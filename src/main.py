@@ -204,7 +204,7 @@ class OrbyGlasses:
         self.last_audio_time = 0
         self.audio_interval = self.config.get('performance.audio_update_interval', 2.0)
         self.danger_audio_interval = self.config.get('performance.danger_audio_interval', 0.8)
-        self.skip_depth_frames = self.config.get('performance.depth_skip_frames', 3)  # Process depth every 4th frame
+        self.skip_depth_frames = self.config.get('performance.depth_skip_frames', 4)  # Process depth every 5th frame
         self.last_depth_map = None  # Cache last depth map
 
         # Performance optimizations
@@ -288,55 +288,55 @@ class OrbyGlasses:
     def _create_custom_depth_colormap(self, depth_map: np.ndarray) -> np.ndarray:
         """
         Create a custom depth colormap optimized for blind navigation.
-        Uses perceptually uniform colors with danger zones in red/yellow.
+        Uses darker, more visible colors with danger zones in red/orange.
 
         Args:
             depth_map: Input depth map (0-1 normalized)
 
         Returns:
-            Colorized depth map with safety-oriented colormap
+            Colorized depth map with safety-oriented colormap (darker colors)
         """
         # Ensure depth map is in range [0, 1]
         depth_normalized = np.clip(depth_map, 0, 1)
 
-        # Create custom colormap: red (close) -> yellow -> green -> blue (far)
+        # Create custom colormap: dark red (close) -> orange -> dark green -> dark blue (far)
         h, w = depth_map.shape
         colored = np.zeros((h, w, 3), dtype=np.uint8)
 
-        # Danger zone (0-0.3): Red to Orange
+        # Danger zone (0-0.3): Dark Red to Red
         mask1 = depth_normalized < 0.3
         t = depth_normalized[mask1] / 0.3  # 0 to 1
         colored[mask1] = np.stack([
             np.zeros_like(t),
-            (t * 100).astype(np.uint8),
-            (255 - t * 55).astype(np.uint8)
+            np.zeros_like(t),
+            (120 + t * 100).astype(np.uint8)  # Dark red to red
         ], axis=-1)
 
-        # Caution zone (0.3-0.5): Orange to Yellow
+        # Caution zone (0.3-0.5): Red to Orange
         mask2 = (depth_normalized >= 0.3) & (depth_normalized < 0.5)
         t = (depth_normalized[mask2] - 0.3) / 0.2
         colored[mask2] = np.stack([
             np.zeros_like(t),
-            (100 + t * 155).astype(np.uint8),
-            (200 - t * 100).astype(np.uint8)
+            (t * 100).astype(np.uint8),  # Add some green for orange
+            (220 - t * 60).astype(np.uint8)  # Red to orange
         ], axis=-1)
 
-        # Safe zone (0.5-0.7): Yellow to Green
+        # Safe zone (0.5-0.7): Orange to Dark Green
         mask3 = (depth_normalized >= 0.5) & (depth_normalized < 0.7)
         t = (depth_normalized[mask3] - 0.5) / 0.2
         colored[mask3] = np.stack([
-            (t * 200).astype(np.uint8),
-            np.full_like(t, 255).astype(np.uint8),
-            (100 - t * 100).astype(np.uint8)
+            (t * 100).astype(np.uint8),  # Add green
+            (100 + t * 60).astype(np.uint8),  # Dark to medium green
+            (160 - t * 160).astype(np.uint8)  # Reduce red
         ], axis=-1)
 
-        # Far zone (0.7-1.0): Green to Blue
+        # Far zone (0.7-1.0): Dark Green to Dark Blue
         mask4 = depth_normalized >= 0.7
         t = (depth_normalized[mask4] - 0.7) / 0.3
         colored[mask4] = np.stack([
-            (200 - t * 200).astype(np.uint8),
-            (255 - t * 155).astype(np.uint8),
-            (t * 255).astype(np.uint8)
+            (100 + t * 100).astype(np.uint8),  # Blue channel
+            (160 - t * 100).astype(np.uint8),  # Green fades
+            (t * 50).astype(np.uint8)  # Dark blue
         ], axis=-1)
 
         return colored
@@ -794,7 +794,7 @@ class OrbyGlasses:
 
         self.logger.info("OrbyGlasses - High-Performance Navigation System")
         self.logger.info(f"Resolution: {self.frame_width}x{self.frame_height} @ {self.config.get('camera.fps', 30)} FPS")
-        self.logger.info(f"Audio interval: {self.audio_interval}s | Depth: every {self.skip_depth_frames + 1} frames")
+        self.logger.info(f"Audio interval: {self.audio_interval}s (danger: {self.danger_audio_interval}s) | Depth: every {self.skip_depth_frames + 1} frames")
         if self.slam_enabled:
             self.logger.info("🗺️ SLAM enabled - Real-time mapping")
         if self.occupancy_grid_enabled:
@@ -946,9 +946,6 @@ class OrbyGlasses:
 
                 # Clean robot-style display
                 if display:
-                    # Define smaller display size for better performance
-                    display_size = (640, 480)  # Use original resolution for camera window
-
                     # Main camera view - keep original size to avoid unnecessary resize
                     cv2.imshow('OrbyGlasses', annotated_frame)
 
@@ -958,12 +955,12 @@ class OrbyGlasses:
                         map_image = self.slam_map_viewer.get_map_image()
                         cv2.imshow('SLAM Map', map_image)  # Keep original SLAM map size
 
-                    # Show depth map (only when calculated) - smaller window for performance
+                    # Show depth map (only when calculated) - better quality with darker colors
                     if depth_map is not None:
-                        # Apply custom colormap
+                        # Apply custom colormap with darker colors
                         depth_colored = self._create_custom_depth_colormap(depth_map)
-                        # Resize depth map to smaller size using fast LINEAR interpolation
-                        depth_display = cv2.resize(depth_colored, (320, 240), interpolation=cv2.INTER_LINEAR)
+                        # Resize depth map using INTER_CUBIC for sharper display
+                        depth_display = cv2.resize(depth_colored, (480, 360), interpolation=cv2.INTER_CUBIC)
                         cv2.imshow('Depth', depth_display)
 
                     # Show SLAM map viewer (original working version)
