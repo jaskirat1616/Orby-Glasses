@@ -27,11 +27,11 @@ models:
   # Audio Narration (Optional)
   llm:
     primary: "gemma3:4b"
-    vision: "moondream:latest"
+    vision: "moondream"  # Use Moondream2 VLM (faster than LLaVA)
     temperature: 0.6
     max_tokens: 100
-    vlm_enabled: false  # Disabled (too slow)
-    scene_analysis_interval: 30
+    vlm_enabled: true  # Enable Moondream VLM for better scene understanding
+    scene_analysis_interval: 10  # Analyze every 10 seconds
 
 # Voice Commands (Optional)
 conversation:

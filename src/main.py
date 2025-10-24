@@ -955,12 +955,12 @@ class OrbyGlasses:
                         map_image = self.slam_map_viewer.get_map_image()
                         cv2.imshow('SLAM Map', map_image)  # Keep original SLAM map size
 
-                    # Show depth map (only when calculated) - better quality with darker colors
+                    # Show depth map (only when calculated) - sharp display with darker colors
                     if depth_map is not None:
                         # Apply custom colormap with darker colors
                         depth_colored = self._create_custom_depth_colormap(depth_map)
-                        # Resize depth map using INTER_CUBIC for sharper display
-                        depth_display = cv2.resize(depth_colored, (480, 360), interpolation=cv2.INTER_CUBIC)
+                        # Resize depth map using LANCZOS for sharpest display
+                        depth_display = cv2.resize(depth_colored, (640, 480), interpolation=cv2.INTER_LANCZOS4)
                         cv2.imshow('Depth', depth_display)
 
                     # Show SLAM map viewer (original working version)

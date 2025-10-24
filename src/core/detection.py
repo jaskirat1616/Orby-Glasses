@@ -150,29 +150,29 @@ class ObjectDetector:
 
 
 class DepthEstimator:
-    """Optimized depth estimation using Depth Anything V2 for real-time performance."""
+    """Optimized depth estimation using Depth Anything V2 with sharp output."""
 
     def __init__(self, model_path: str = "depth-anything/Depth-Anything-V2-Small-hf",
                  device: str = "mps",
-                 max_resolution: int = 384):
+                 max_resolution: int = 518):
         """
         Initialize optimized depth estimator with Depth Anything V2.
 
         Args:
             model_path: Hugging Face model name (default: Depth Anything V2 Small)
             device: Device to run on
-            max_resolution: Maximum resolution for depth processing (384 for balance)
+            max_resolution: Maximum resolution for depth processing (518 optimal for Depth Anything V2)
         """
         self.model_path = model_path
         self.device = self._validate_device(device)
-        self.max_resolution = max_resolution
+        self.max_resolution = max_resolution  # 518 is optimal training resolution
 
-        # Use Depth Anything V2 Small for real-time performance
+        # Use Depth Anything V2 Small for real-time performance with sharp output
         try:
             from transformers import pipeline
             import torch
 
-            logging.info(f"Loading Depth Anything V2 Small - optimized for real-time...")
+            logging.info(f"Loading Depth Anything V2 Small - sharp depth estimation...")
 
             # Use smaller model for speed
             device_id = 0 if self.device in ["mps", "cuda"] else -1
@@ -186,11 +186,11 @@ class DepthEstimator:
             self.model_type = "depth_anything_v2"
             self.processor = None
 
-            # Warm up with moderate resolution for quality/speed balance
-            dummy_image = np.zeros((384, 288, 3), dtype=np.uint8)
+            # Warm up with optimal 518px resolution (training resolution)
+            dummy_image = np.zeros((518, 518, 3), dtype=np.uint8)
             self._estimate_depth_fast(dummy_image)
 
-            logging.info(f"✓ Depth Anything V2 Small loaded - optimized for real-time")
+            logging.info(f"✓ Depth Anything V2 Small loaded - 518px sharp depth")
 
         except Exception as e:
             logging.error(f"Depth model failed: {e}, using fallback")
@@ -227,25 +227,35 @@ class DepthEstimator:
             return self._fallback_depth(frame)
     
     def _estimate_depth_fast(self, frame: np.ndarray) -> np.ndarray:
-        """Fast depth estimation with optimizations for real-time performance."""
+        """Fast depth estimation with sharp output using optimal settings."""
         import torch
         from PIL import Image
 
-        # Resize frame to moderate resolution for better quality (384x288 typical)
+        # Resize to optimal 518px resolution (shorter side) - training resolution for best quality
         max_res = self.max_resolution
         h, w = frame.shape[:2]
 
-        # Resize to moderate resolution for quality/speed balance
-        scale = min(max_res/h, max_res/w)
-        new_h, new_w = int(h * scale), int(w * scale)
-        # Use INTER_AREA for downscaling (better quality than LINEAR)
-        frame_resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        # Calculate scale to resize shorter side to 518px (maintains aspect ratio)
+        if h < w:
+            scale = max_res / h
+            new_h, new_w = max_res, int(w * scale)
+        else:
+            scale = max_res / w
+            new_h, new_w = int(h * scale), max_res
+
+        # Use LANCZOS (best for upscaling/sharp results) or AREA (best for downscaling)
+        if scale > 1.0:
+            # Upscaling - use LANCZOS for sharpest results
+            frame_resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LANCZOS4)
+        else:
+            # Downscaling - use AREA for best quality
+            frame_resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
         # Convert BGR to RGB efficiently
         rgb = cv2.cvtColor(frame_resized, cv2.COLOR_BGR2RGB)
         pil_image = Image.fromarray(rgb)
 
-        # Run Depth Anything V2 inference
+        # Run Depth Anything V2 inference at optimal resolution
         result = self.model(pil_image)
 
         # Extract depth map from result
@@ -258,8 +268,8 @@ class DepthEstimator:
         else:
             depth_map = np.zeros_like(depth_map)
 
-        # Resize back to original frame size using INTER_CUBIC for sharper upscaling
-        depth_map = cv2.resize(depth_map, (w, h), interpolation=cv2.INTER_CUBIC)
+        # Resize back to original frame size using LANCZOS4 for sharpest upscaling
+        depth_map = cv2.resize(depth_map, (w, h), interpolation=cv2.INTER_LANCZOS4)
 
         return depth_map
 

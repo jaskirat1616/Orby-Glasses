@@ -15,28 +15,78 @@ import logging
 
 
 class VisionLanguageModel:
-    """Vision Language Model for enhanced scene understanding."""
-    
+    """Vision Language Model for enhanced scene understanding - supports Moondream and LLaVA."""
+
     def __init__(self, config):
         """
         Initialize VLM for scene understanding.
-        
+
         Args:
             config: Configuration manager
         """
         self.config = config
-        self.model_name = config.get('models.llm.vision', 'llava:7b')
+        self.model_name = config.get('models.llm.vision', 'moondream')
         self.temperature = config.get('models.llm.temperature', 0.6)
         self.max_tokens = config.get('models.llm.max_tokens', 150)
-        self.ollama_url = "http://localhost:11434/api/generate"
-        
+        self.use_moondream = self.model_name.lower() in ['moondream', 'moondream2']
+
         # Scene analysis settings
         self.analysis_interval = config.get('models.llm.scene_analysis_interval', 5)
         self.last_analysis_time = 0
         self.scene_cache = {}
         self.scene_history = []
-        
-        logging.info(f"VLM initialized: {self.model_name}")
+
+        # Initialize Moondream if selected
+        if self.use_moondream:
+            self._init_moondream()
+        else:
+            # Fallback to Ollama-based VLM
+            self.ollama_url = "http://localhost:11434/api/generate"
+            logging.info(f"VLM initialized: {self.model_name} (Ollama)")
+
+    def _init_moondream(self):
+        """Initialize Moondream VLM."""
+        try:
+            from transformers import AutoModelForCausalLM, AutoTokenizer
+            from PIL import Image
+            import torch
+
+            logging.info("Loading Moondream2 VLM...")
+
+            # Load Moondream2 with latest revision
+            model_id = "vikhyatk/moondream2"
+            revision = "2025-06-21"  # Latest release
+
+            self.moondream_model = AutoModelForCausalLM.from_pretrained(
+                model_id,
+                revision=revision,
+                trust_remote_code=True,
+                torch_dtype=torch.float16,
+                device_map="auto"
+            )
+            self.moondream_tokenizer = AutoTokenizer.from_pretrained(
+                model_id,
+                revision=revision
+            )
+
+            # Move to MPS if available
+            if torch.backends.mps.is_available():
+                self.moondream_model = self.moondream_model.to("mps")
+                logging.info("✓ Moondream2 loaded on MPS (Apple Silicon)")
+            elif torch.cuda.is_available():
+                self.moondream_model = self.moondream_model.to("cuda")
+                logging.info("✓ Moondream2 loaded on CUDA")
+            else:
+                logging.info("✓ Moondream2 loaded on CPU")
+
+            self.moondream_available = True
+
+        except Exception as e:
+            logging.warning(f"Failed to load Moondream: {e}")
+            logging.warning("Falling back to Ollama-based VLM")
+            self.use_moondream = False
+            self.moondream_available = False
+            self.ollama_url = "http://localhost:11434/api/generate"
     
     def encode_image(self, frame: np.ndarray) -> str:
         """
@@ -66,30 +116,103 @@ class VisionLanguageModel:
     
     def analyze_scene(self, frame: np.ndarray, detections: List[Dict]) -> Dict:
         """
-        Analyze scene using Vision Language Model.
-        
+        Analyze scene using Vision Language Model (Moondream or Ollama).
+
         Args:
             frame: Input frame
             detections: List of detected objects
-            
+
         Returns:
             Scene analysis dictionary
         """
         current_time = time.time()
-        
+
         # Check if we should analyze this frame
         if current_time - self.last_analysis_time < self.analysis_interval:
             return self.scene_cache.get('last_analysis', {})
-        
+
         try:
-            # Encode image
-            img_base64 = self.encode_image(frame)
-            
-            # Create detection context
-            detection_context = self._create_detection_context(detections)
-            
-            # VLM prompt for navigation assistance
-            prompt = f"""You are a navigation assistant for visually impaired users. Analyze this scene and provide helpful guidance.
+            if self.use_moondream and self.moondream_available:
+                # Use Moondream VLM
+                analysis = self._analyze_with_moondream(frame, detections)
+            else:
+                # Use Ollama-based VLM
+                analysis = self._analyze_with_ollama(frame, detections)
+
+            # Update cache and history
+            self.scene_cache['last_analysis'] = analysis
+            self.scene_cache['timestamp'] = current_time
+            self.last_analysis_time = current_time
+
+            # Add to history (keep last 5 analyses)
+            self.scene_history.append({
+                'timestamp': current_time,
+                'analysis': analysis,
+                'detections': len(detections)
+            })
+            if len(self.scene_history) > 5:
+                self.scene_history.pop(0)
+
+            logging.info(f"Scene analysis completed: {analysis.get('scene_type', 'unknown')}")
+            return analysis
+
+        except Exception as e:
+            logging.error(f"VLM scene analysis error: {e}")
+            return self._fallback_scene_analysis(detections)
+
+    def _analyze_with_moondream(self, frame: np.ndarray, detections: List[Dict]) -> Dict:
+        """Analyze scene using Moondream VLM."""
+        from PIL import Image
+        import torch
+
+        # Convert frame to PIL Image
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        pil_image = Image.fromarray(rgb_frame)
+
+        # Resize for efficiency (maintain aspect ratio)
+        pil_image.thumbnail((512, 512), Image.Resampling.LANCZOS)
+
+        # Create detection context
+        detection_context = self._create_detection_context(detections)
+
+        # Query Moondream for scene description
+        question1 = "Describe this scene briefly for a blind person. What is the environment and where are the main objects?"
+
+        with torch.no_grad():
+            answer1 = self.moondream_model.query(
+                image=pil_image,
+                question=question1
+            )["answer"]
+
+        # Query for navigation guidance
+        question2 = f"Given these detected objects: {detection_context}. What navigation advice would you give to a blind person in this scene?"
+
+        with torch.no_grad():
+            answer2 = self.moondream_model.query(
+                image=pil_image,
+                question=question2
+            )["answer"]
+
+        # Combine answers
+        scene_description = f"{answer1} {answer2}"
+
+        # Parse and structure the response
+        analysis = self._parse_scene_analysis(scene_description, detections)
+        analysis['vlm_raw_response'] = scene_description
+        analysis['vlm_model'] = 'moondream2'
+
+        return analysis
+
+    def _analyze_with_ollama(self, frame: np.ndarray, detections: List[Dict]) -> Dict:
+        """Analyze scene using Ollama-based VLM."""
+        # Encode image
+        img_base64 = self.encode_image(frame)
+
+        # Create detection context
+        detection_context = self._create_detection_context(detections)
+
+        # VLM prompt for navigation assistance
+        prompt = f"""You are a navigation assistant for visually impaired users. Analyze this scene and provide helpful guidance.
 
 Detected objects: {detection_context}
 
@@ -102,48 +225,31 @@ Please describe:
 
 Keep your response concise and actionable for a visually impaired person."""
 
-            # Prepare request
-            payload = {
-                "model": self.model_name,
-                "prompt": prompt,
-                "images": [img_base64],
-                "stream": False,
-                "options": {
-                    "temperature": self.temperature,
-                    "num_predict": self.max_tokens
-                }
+        # Prepare request
+        payload = {
+            "model": self.model_name,
+            "prompt": prompt,
+            "images": [img_base64],
+            "stream": False,
+            "options": {
+                "temperature": self.temperature,
+                "num_predict": self.max_tokens
             }
-            
-            # Make request to Ollama
-            response = requests.post(self.ollama_url, json=payload, timeout=30)
-            response.raise_for_status()
-            
-            result = response.json()
-            scene_description = result.get('response', '')
-            
-            # Parse and structure the response
-            analysis = self._parse_scene_analysis(scene_description, detections)
-            
-            # Update cache and history
-            self.scene_cache['last_analysis'] = analysis
-            self.scene_cache['timestamp'] = current_time
-            self.last_analysis_time = current_time
-            
-            # Add to history (keep last 5 analyses)
-            self.scene_history.append({
-                'timestamp': current_time,
-                'analysis': analysis,
-                'detections': len(detections)
-            })
-            if len(self.scene_history) > 5:
-                self.scene_history.pop(0)
-            
-            logging.info(f"Scene analysis completed: {analysis.get('scene_type', 'unknown')}")
-            return analysis
-            
-        except Exception as e:
-            logging.error(f"VLM scene analysis error: {e}")
-            return self._fallback_scene_analysis(detections)
+        }
+
+        # Make request to Ollama
+        response = requests.post(self.ollama_url, json=payload, timeout=30)
+        response.raise_for_status()
+
+        result = response.json()
+        scene_description = result.get('response', '')
+
+        # Parse and structure the response
+        analysis = self._parse_scene_analysis(scene_description, detections)
+        analysis['vlm_raw_response'] = scene_description
+        analysis['vlm_model'] = self.model_name
+
+        return analysis
     
     def _create_detection_context(self, detections: List[Dict]) -> str:
         """Create context string from detections."""
