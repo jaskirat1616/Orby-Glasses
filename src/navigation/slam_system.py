@@ -416,14 +416,24 @@ class SLAMSystem:
                     )
 
                     if success:
-                        # Create transformation matrix
+                        # Create transformation matrix with bounds checking
                         R, _ = cv2.Rodrigues(rvec)
-                        T = np.eye(4, dtype=np.float32)
+                        T = np.eye(4, dtype=np.float64)  # Use float64 to avoid overflow
                         T[:3, :3] = R
-                        T[:3, 3] = tvec.flatten()
 
-                        # Update pose
-                        self.current_pose = T
+                        # Check for reasonable translation values (prevent overflow)
+                        tvec_flat = tvec.flatten()
+                        max_translation = 1000.0  # Maximum reasonable translation in meters
+
+                        if np.any(np.abs(tvec_flat) > max_translation):
+                            # Translation too large - likely tracking error, use prediction
+                            logging.warning(f"SLAM: Translation overflow detected ({np.max(np.abs(tvec_flat)):.1f}m), using prediction")
+                            T = predicted_pose
+                        else:
+                            T[:3, 3] = tvec_flat
+
+                        # Convert back to float32 safely
+                        self.current_pose = T.astype(np.float32)
 
                         # Update velocity for motion model
                         if dt > 0.001:
