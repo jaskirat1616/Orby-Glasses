@@ -3,9 +3,9 @@
 # Camera Settings
 camera:
   source: 0       # 0 = webcam, or URL for IP camera
-  width: 640      # Resolution width
-  height: 480     # Resolution height
-  fps: 30         # Frames per second
+  width: 320      # Reduced for better performance
+  height: 240     # Reduced for better performance
+  fps: 20         # Lower FPS for better performance
 
 # BREAKTHROUGH AI MODELS - Industry-Leading 2025 Technology
 models:
@@ -24,27 +24,27 @@ models:
     path: "depth-anything/Depth-Anything-V2-Small-hf"
     device: "mps"
     half_precision: true
-    max_resolution: 518  # Optimal resolution for SHARP metric depth
+    max_resolution: 256  # Smaller resolution for faster processing
 
   # Vision-Language Model - Moondream2 (Fast 2B param VLM)
   # Provides scene understanding + navigation guidance
   llm:
-    primary: "gemma3:4b"
-    vision: "moondream"  # Moondream2: 1.86B params, <3s inference
+    primary: "moondream:latest"
+    vision: "moondream:latest"  # Moondream2: 1.86B params, <3s inference
     temperature: 0.6
     max_tokens: 100
     vlm_enabled: true  # BREAKTHROUGH: Real-time scene understanding
-    scene_analysis_interval: 15  # Smart scene analysis
+    scene_analysis_interval: 8  # Faster scene analysis for blind users (was 15s)
 
 # Voice Commands (Optional)
 conversation:
-  enabled: false  # Turn on for voice control
+  enabled: true  # Now optimized for zero-lag background listening
   model: "gemma3:4b"
-  temperature: 0.7
-  max_tokens: 200
+  temperature: 0.6  # Lower for more focused, safety-oriented responses
+  max_tokens: 100  # Reduced for faster responses (blind users need quick answers)
   voice_input: true
   activation_phrase: "hey orby"
-  check_interval: 1.0
+  check_interval: 0.5  # Faster check interval (non-blocking)
   simple_commands: true
   command_phrases:
     - "what's around me"
@@ -62,9 +62,9 @@ audio:
   tts_engine: "pyttsx3"
   tts_rate: 190  # Optimized for clarity + speed
   tts_volume: 1.0  # Full volume
-  echolocation_enabled: true  # Biomimetic audio cues
+  echolocation_enabled: false  # Biomimetic audio cues
   spatial_audio: true  # 3D positional audio
-  adaptive_beaconing_enabled: true  # Dynamic audio beacons
+  adaptive_beaconing_enabled: false  # Dynamic audio beacons
   beacon_safe_frequency: 440  # Clear path tone
   beacon_obstacle_frequency: 880  # Obstacle warning tone
   warning_pulse_rate: 0.12  # Rapid warnings for urgent hazards
@@ -95,9 +95,9 @@ safety:
 
 # Logging
 logging:
-  level: "WARNING"  # WARNING, INFO, or DEBUG
+  level: "DEBUG"  # WARNING, INFO, or DEBUG
   log_file: "data/logs/orbyglass.log"
-  save_detections: true
+  save_detections: false
   save_frames: false
 
 # BREAKTHROUGH Performance - Real-time Multi-sensor Fusion
@@ -105,10 +105,10 @@ performance:
   audio_update_interval: 1.2  # Fast, responsive feedback
   danger_audio_interval: 0.25  # CRITICAL: Instant danger alerts
   stats_interval: 200
-  max_detections: 8  # Comprehensive obstacle detection
-  depth_skip_frames: 1  # Every 2nd frame (high-quality depth)
-  frame_skip: 0
-  enable_multithreading: true  # Parallel AI processing
+  max_detections: 5  # Reduced for better performance
+  depth_skip_frames: 1  # Skip more frames for better performance (process every 3rd frame)
+  frame_skip: 1
+  enable_multithreading: true  # Enable for parallel processing
   cache_depth_maps: true
 
 # 3D Mapping - DISABLED
@@ -122,28 +122,28 @@ mapping3d:
   fy: 500
   skip_bbox: true
 
-# BREAKTHROUGH: Highly Accurate Real-time SLAM
+# BREAKTHROUGH: Real-time Visual SLAM for Environment Mapping
 slam:
-  enabled: true  # Optimized for accuracy
-  grid_size: [400, 400]  # Larger grid for better mapping
-  grid_resolution: 0.1  # Finer resolution (was 0.2)
+  enabled: true  # ORB-SLAM3 style real-time mapping
+  grid_size: [300, 300]
+  grid_resolution: 0.2
   save_maps: true
-  visualize: true  # Show SLAM in separate window
-  orb_features: 2000  # More features for better tracking (was 1000)
-  fast_threshold: 15  # Lower for more features (was 20)
-  min_matches: 25  # Higher for better accuracy (was 15)
+  visualize: true
+  orb_features: 1000
+  fast_threshold: 20
+  min_matches: 15
   motion_model: true
-  pose_smoothing: 0.85  # Higher smoothing for accuracy (was 0.7)
+  pose_smoothing: 0.7
   temporal_consistency_check: true
-  max_position_jump: 0.15  # Tighter constraint (was 0.3)
-  max_rotation_jump: 0.15  # Tighter constraint (was 0.3)
-  min_tracked_features: 30  # Higher minimum (was 20)
-  keyframe_threshold: 30  # More selective keyframes (was 20)
-  reprojection_threshold: 2.0  # Stricter (was 3.0)
+  max_position_jump: 0.3
+  max_rotation_jump: 0.3
+  min_tracked_features: 20
+  keyframe_threshold: 20
+  reprojection_threshold: 3.0
   min_depth: 0.1
   max_depth: 10.0
-  loop_closure: true  # Enable for accuracy
-  bundle_adjustment: true  # Enable for refinement
+  loop_closure: true
+  bundle_adjustment: true
 
 # BREAKTHROUGH: PathFinder-style Obstacle-Free Navigation
 indoor_navigation:

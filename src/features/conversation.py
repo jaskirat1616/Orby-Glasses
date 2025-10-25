@@ -145,8 +145,8 @@ class ConversationManager:
             while not self.stop_listening:
                 try:
                     with self.microphone as source:
-                        # Very short timeout to avoid blocking
-                        audio = self.recognizer.listen(source, timeout=0.5, phrase_time_limit=2)
+                        # Ultra-short timeout to completely avoid blocking main thread
+                        audio = self.recognizer.listen(source, timeout=0.2, phrase_time_limit=2)
 
                     # Recognize speech in background
                     try:
@@ -594,7 +594,7 @@ class ConversationManager:
 
         detected_str = ", ".join([obj['label'] for obj in self.context.get('detected_objects', [])[:5]])
 
-        prompt = f"""You are OrbyGlasses, an AI navigation assistant for blind users. You provide clear, concise, and precise navigation guidance.
+        prompt = f"""You are OrbyGlasses, an AI navigation assistant for BLIND users. Lives depend on your guidance.
 
 Current Context:
 - Detected objects: {detected_str if detected_str else 'none'}
@@ -608,16 +608,19 @@ Current Context:
             prompt += f"- Destination: {self.destination}\n"
 
         prompt += """
-Instructions:
-1. Be concise (1-2 sentences max)
-2. Focus on safety and clear directions
-3. Use spatial terms: "ahead", "left", "right", "behind"
-4. Give exact distances when mentioning obstacles
-5. If user asks about destination, help them navigate there
-6. If user asks what you see, describe the scene clearly
-7. Always prioritize immediate safety over destination
+CRITICAL INSTRUCTIONS:
+1. MAXIMUM 2 SENTENCES - blind users need quick, clear info
+2. SAFETY FIRST - warn about immediate dangers BEFORE anything else
+3. PRECISE SPATIAL TERMS - "2 meters ahead", "on your left", "directly in front"
+4. ACTIONABLE - tell them exactly what to do: "stop", "turn left", "step right"
+5. NO FLUFF - every word must help them navigate safely
+6. If path blocked, suggest SPECIFIC alternative direction
+7. IMMEDIATE dangers override ALL other information
 
-Respond naturally and helpfully."""
+Response format:
+- Danger: "STOP! [danger] at [distance] [direction]. [Action]."
+- Clear: "Path clear [direction]. [Brief landmark]."
+- Question: Answer in 1 sentence with safety context."""
 
         return prompt
 

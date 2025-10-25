@@ -30,11 +30,14 @@ class VisionLanguageModel:
         self.max_tokens = config.get('models.llm.max_tokens', 150)
         self.use_moondream = self.model_name.lower() in ['moondream', 'moondream2']
 
-        # Scene analysis settings
+        # Scene analysis settings - OPTIMIZED FOR BLIND USERS
         self.analysis_interval = config.get('models.llm.scene_analysis_interval', 5)
         self.last_analysis_time = 0
         self.scene_cache = {}
         self.scene_history = []
+
+        # Force more frequent updates when danger detected
+        self.danger_analysis_interval = 2.0  # Faster updates in dangerous situations
 
         # Initialize Moondream if selected
         if self.use_moondream:
@@ -127,8 +130,12 @@ class VisionLanguageModel:
         """
         current_time = time.time()
 
+        # Check for danger objects - force more frequent analysis if danger present
+        has_danger = any(d.get('depth', 10) < 1.5 for d in detections)
+        active_interval = self.danger_analysis_interval if has_danger else self.analysis_interval
+
         # Check if we should analyze this frame
-        if current_time - self.last_analysis_time < self.analysis_interval:
+        if current_time - self.last_analysis_time < active_interval:
             return self.scene_cache.get('last_analysis', {})
 
         try:
@@ -175,26 +182,22 @@ class VisionLanguageModel:
         # Create detection context
         detection_context = self._create_detection_context(detections)
 
-        # Query Moondream for scene description
-        question1 = "Describe this scene briefly for a blind person. What is the environment and where are the main objects?"
+        # Query Moondream with safety-first approach
+        # Single optimized query for speed and safety
+        question = f"""You are guiding a BLIND person. Detected: {detection_context}
+
+CRITICAL: Identify immediate dangers (stairs, drop-offs, traffic, obstacles in path).
+Then give clear navigation instruction in 1-2 sentences.
+
+Format: If danger: "STOP! [danger] ahead." Otherwise: "[Clear direction with landmarks]."
+
+What should this blind person do right now?"""
 
         with torch.no_grad():
-            answer1 = self.moondream_model.query(
+            scene_description = self.moondream_model.query(
                 image=pil_image,
-                question=question1
+                question=question
             )["answer"]
-
-        # Query for navigation guidance
-        question2 = f"Given these detected objects: {detection_context}. What navigation advice would you give to a blind person in this scene?"
-
-        with torch.no_grad():
-            answer2 = self.moondream_model.query(
-                image=pil_image,
-                question=question2
-            )["answer"]
-
-        # Combine answers
-        scene_description = f"{answer1} {answer2}"
 
         # Parse and structure the response
         analysis = self._parse_scene_analysis(scene_description, detections)
@@ -211,19 +214,21 @@ class VisionLanguageModel:
         # Create detection context
         detection_context = self._create_detection_context(detections)
 
-        # VLM prompt for navigation assistance
-        prompt = f"""You are a navigation assistant for visually impaired users. Analyze this scene and provide helpful guidance.
+        # VLM prompt optimized for blind navigation - CRITICAL SAFETY FOCUS
+        prompt = f"""You are an AI navigation assistant for a BLIND person. Your guidance must be:
+1. SAFETY FIRST: Immediately warn about dangers (stairs, obstacles, drop-offs, traffic)
+2. PRECISE: Use exact spatial terms (left/right, ahead, behind, distances)
+3. ACTIONABLE: Give clear movement instructions
+4. CONCISE: Maximum 2 sentences
 
 Detected objects: {detection_context}
 
-Please describe:
-1. The overall scene (indoor/outdoor, room type, etc.)
-2. Navigation hazards or obstacles
-3. Safe paths or clear areas
-4. Important landmarks or reference points
-5. Recommended actions for safe navigation
+Analyze and respond in this format:
+- If DANGER present: "STOP! [danger] directly ahead at [distance]. Move [direction]."
+- If obstacles present: "[Obstacle] at [distance] on your [direction]. [Safe path suggestion]."
+- If path clear: "Path clear ahead. [Brief landmark or environment description]."
 
-Keep your response concise and actionable for a visually impaired person."""
+Priority: Immediate safety > Navigation guidance > Environment description."""
 
         # Prepare request
         payload = {
