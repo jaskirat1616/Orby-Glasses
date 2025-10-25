@@ -277,8 +277,10 @@ class OrbyGlasses:
         self.last_audio_time = 0
         self.audio_interval = self.config.get('performance.audio_update_interval', 2.0)
         self.danger_audio_interval = self.config.get('performance.danger_audio_interval', 0.8)
-        self.skip_depth_frames = self.config.get('performance.depth_skip_frames', 1)  # BREAKTHROUGH: Every 2nd frame for sharp depth
+        self.skip_depth_frames = self.config.get('performance.depth_skip_frames', 0)  # BREAKTHROUGH: Every 2nd frame for sharp depth
         self.last_depth_map = None  # Cache last depth map
+        self.last_path_clear_time = 0  # Track last time "Path clear" was spoken
+        self.last_vlm_guidance_time = 0 # Track last time VLM guidance was spoken
 
         # Performance optimizations
         self.enable_multithreading = self.config.get('performance.enable_multithreading', True)
@@ -513,12 +515,8 @@ class OrbyGlasses:
             # Smart depth estimation with motion-based caching and threading
             self.perf_monitor.start_timer('depth')
 
-            # Compute motion score for intelligent caching
-            prev_frame = self.smart_cache.get_previous_frame()
-            motion_score = self.smart_cache.compute_motion_score(frame, prev_frame)
-
-            # Simplified depth computation with caching (no threading - causes issues)
-            if self.smart_cache.should_recompute_depth(motion_score, self.frame_count):
+            # Simplified depth computation with frame skipping
+            if self.frame_count % (self.skip_depth_frames + 1) == 0:
                 depth_map = self.detection_pipeline.depth_estimator.estimate_depth(frame)
                 self.last_depth_map = depth_map
             else:
@@ -632,7 +630,10 @@ class OrbyGlasses:
 
             # Generate LLM guidance (always, for display)
             self.perf_monitor.start_timer('narrative')
-            guidance = self._generate_fast_guidance(detections, nav_summary)
+            if self.vlm_enabled and self.scene_processor:
+                guidance = self._generate_enhanced_guidance(detections, nav_summary, scene_analysis)
+            else:
+                guidance = self._generate_fast_guidance(detections, nav_summary)
             narr_time = self.perf_monitor.stop_timer('narrative')
 
             # Generate audio cues
@@ -724,7 +725,16 @@ class OrbyGlasses:
                         'predictive': '',
                         'combined': f"⚠️ Stop! {closest_danger['label']} ahead - {navigation_guidance}"
                     }
-                
+                # Check for caution objects and combine with VLM guidance
+                caution_objects = nav_summary.get('caution_objects', [])
+                if caution_objects and navigation_guidance:
+                    closest_caution = min(caution_objects, key=lambda x: x.get('depth', 10))
+                    return {
+                        'narrative': f"⚠️ Caution! {closest_caution['label']} ahead - {navigation_guidance}",
+                        'predictive': '',
+                        'combined': f"⚠️ Caution! {closest_caution['label']} ahead - {navigation_guidance}"
+                    }
+
                 # Use VLM guidance for other situations
                 if navigation_guidance:
                     return {
@@ -779,7 +789,7 @@ class OrbyGlasses:
 
             # Clear path
             msg = "Path clear"
-            return {'narrative': msg, 'predictive': '', 'combined': msg}
+            return {'narrative': msg, 'predictive': '', 'combined': ''}
 
         except Exception as e:
             return {'narrative': 'Continue', 'predictive': '', 'combined': 'Continue'}
@@ -930,7 +940,9 @@ class OrbyGlasses:
         self.logger.info(f"Press '{self.config.get('safety.emergency_stop_key', 'q')}' to quit")
 
         try:
+            self.logger.debug("Entering main processing loop.")
             while self.running:
+                self.logger.debug("Attempting to read frame from camera.")
                 # Capture frame
                 ret, frame = self.camera.read()
 
@@ -938,6 +950,7 @@ class OrbyGlasses:
                     self.logger.warning("Failed to capture frame")
                     break
 
+                self.logger.debug("Frame read successfully. Processing frame.")
                 self.frame_count += 1
 
                 # Process frame
@@ -1005,8 +1018,6 @@ class OrbyGlasses:
                         self.conversation_manager.handle_conversation_interaction(scene_context)
 
                 # Smart Audio System - Priority-based alerts
-                time_since_last = current_time - self.last_audio_time
-
                 # Check for danger zone objects (< 1m) - PRIORITY ALERT
                 danger_objects = [d for d in detections if d.get('depth', 10) < self.danger_distance]
                 has_danger = len(danger_objects) > 0
@@ -1014,10 +1025,9 @@ class OrbyGlasses:
                 # Determine appropriate interval based on danger level
                 active_interval = self.danger_audio_interval if has_danger else self.audio_interval
 
-                # Only generate and queue new audio if interval passed and not speaking
-                if time_since_last > active_interval and not self.audio_manager.is_speaking:
-                    # DANGER ZONE - Priority alert
-                    if has_danger:
+                # DANGER ZONE - Priority alert
+                if has_danger:
+                    if (current_time - self.last_audio_time) > self.danger_audio_interval and not self.audio_manager.is_speaking:
                         closest_danger = min(danger_objects, key=lambda x: x['depth'])
                         depth = closest_danger['depth']
 
@@ -1041,37 +1051,44 @@ class OrbyGlasses:
                         msg = f"{closest_danger['label']} {distance_term} {direction}"
                         self.logger.error(f"🚨 DANGER ALERT: \"{msg}\"")
                         self.audio_manager.speak(msg, priority=True)
+                        self.last_audio_time = current_time
 
-                    # Use indoor navigation guidance if available, otherwise use Ollama-generated narrative
-                    elif indoor_guidance:
+                # Use indoor navigation guidance if available, otherwise use Ollama-generated narrative
+                elif indoor_guidance:
+                    if (current_time - self.last_audio_time) > self.audio_interval and not self.audio_manager.is_speaking:
                         msg = indoor_guidance
                         self.logger.info(f"🔊 Indoor Navigation: \"{msg}\"")
                         self.audio_manager.speak(msg, priority=False)
-                    elif guidance.get('combined'):
+                        self.last_audio_time = current_time
+                elif guidance.get('combined'):
+                    if self.vlm_enabled and (current_time - self.last_vlm_guidance_time) > 5.0 and not self.audio_manager.is_speaking:
                         msg = guidance['combined']
-                        self.logger.info(f"🔊 Audio: \"{msg}\"")
+                        self.logger.info(f"🔊 VLM Guidance: \"{msg}\"")
                         self.audio_manager.speak(msg, priority=False)
+                        self.last_vlm_guidance_time = current_time
 
-                    # Fallback to simple message
-                    elif len(detections) > 0:
+                # Fallback to simple message
+                elif len(detections) > 0:
+                    if (current_time - self.last_audio_time) > self.audio_interval and not self.audio_manager.is_speaking:
                         closest = min(detections, key=lambda x: x.get('depth', 10))
                         msg = f"{closest['label']} at {closest['depth']:.1f} meters"
                         self.logger.info(f"🔊 Audio: \"{msg}\"")
                         self.audio_manager.speak(msg, priority=False)
+                        self.last_audio_time = current_time
 
-                    # Path clear
-                    else:
+                # Path clear
+                else:
+                    if (current_time - self.last_path_clear_time) > 10.0 and not self.audio_manager.is_speaking: # Only speak "Path clear" every 10 seconds
                         msg = "Path clear"
                         self.logger.info(f"🔊 Audio: \"{msg}\"")
                         self.audio_manager.speak(msg, priority=False)
+                        self.last_path_clear_time = current_time
 
-                    # Update timer
-                    self.last_audio_time = current_time
-
+                self.logger.debug("Frame processed. Displaying windows.")
                 # Clean robot-style display
                 if display:
-                    # Main camera view - keep original size to avoid unnecessary resize
-                    cv2.imshow('OrbyGlasses', annotated_frame)
+                    # Main camera view - flip horizontally for mirror effect
+                    cv2.imshow('OrbyGlasses', cv2.flip(annotated_frame, 1))
 
                     # Show SLAM map in a separate window if requested
                     if separate_slam and self.slam_enabled and self.slam_map_viewer and slam_result:
@@ -1087,8 +1104,8 @@ class OrbyGlasses:
                         else:
                             # Fallback to old method
                             depth_colored = self._create_ultra_clear_depth_colormap(depth_map)
-                        # Display depth map
-                        cv2.imshow('Depth Map', depth_colored)
+                        # Display depth map - flip horizontally for mirror effect
+                        cv2.imshow('Depth Map', cv2.flip(depth_colored, 1))
 
                     # Show SLAM map viewer (original working version)
                     if self.slam_enabled and self.slam_map_viewer and slam_result and not separate_slam:
@@ -1096,12 +1113,17 @@ class OrbyGlasses:
                         map_image = self.slam_map_viewer.get_map_image()
                         cv2.imshow('Map', map_image)
 
+                    # Show 3D Occupancy Grid if enabled
+                    if self.occupancy_grid_enabled and self.occupancy_grid is not None:
+                        occupancy_grid_image = self.occupancy_grid.visualize_3d_interactive(slam_result['position'] if slam_result else None)
+                        cv2.imshow('Occupancy Grid', occupancy_grid_image)
+
                 # Save video
                 if video_writer:
                     video_writer.write(annotated_frame)
 
                 # Check for quit and handle keyboard controls
-                key = cv2.waitKey(1) & 0xFF
+                key = cv2.waitKey(10) & 0xFF
                 emergency_key = self.config.get('safety.emergency_stop_key', 'q')
 
                 # Handle occupancy grid controls
