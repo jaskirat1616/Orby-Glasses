@@ -700,13 +700,13 @@ class OrbyGlasses:
 
     def _generate_enhanced_guidance(self, detections: List[Dict], nav_summary: Dict, scene_analysis: Optional[Dict]) -> Dict:
         """
-        Generate enhanced guidance using VLM scene understanding.
-        
+        Generate enhanced guidance using VLM scene understanding with improved extraction.
+
         Args:
             detections: List of detected objects
             nav_summary: Navigation summary
             scene_analysis: VLM scene analysis
-            
+
         Returns:
             Enhanced guidance dictionary
         """
@@ -714,40 +714,85 @@ class OrbyGlasses:
             # Use VLM analysis if available
             if scene_analysis and scene_analysis.get('vlm_analysis'):
                 vlm_analysis = scene_analysis['vlm_analysis']
-                navigation_guidance = scene_analysis.get('navigation_guidance', '')
-                
-                # Check for immediate danger
+
+                # ACCURACY IMPROVEMENT: Extract navigation guidance from VLM raw response
+                vlm_raw = vlm_analysis.get('vlm_raw_response', '')
+
+                # Try to extract the NAVIGATION section from multi-step analysis
+                navigation_guidance = ''
+                if 'NAVIGATION:' in vlm_raw:
+                    # Extract everything after "NAVIGATION:"
+                    parts = vlm_raw.split('NAVIGATION:')
+                    if len(parts) > 1:
+                        navigation_guidance = parts[1].strip()
+                else:
+                    # Fallback to navigation_guidance field
+                    navigation_guidance = scene_analysis.get('navigation_guidance', '')
+
+                # If still empty, use the vlm_raw_response directly
+                if not navigation_guidance:
+                    navigation_guidance = vlm_analysis.get('navigation_guidance', '')
+
+                # Clean up the guidance (remove extra formatting)
+                navigation_guidance = navigation_guidance.replace('...', '').strip()
+
+                # Check for immediate danger in VLM response
+                has_vlm_danger = any(keyword in navigation_guidance.upper() for keyword in ['STOP', 'DANGER', 'WARNING', 'CAUTION'])
+
+                # Check for immediate danger from detections
                 danger_objects = nav_summary.get('danger_objects', [])
-                if danger_objects:
-                    closest_danger = min(danger_objects, key=lambda x: x.get('depth', 10))
+                if danger_objects or has_vlm_danger:
+                    if danger_objects:
+                        closest_danger = min(danger_objects, key=lambda x: x.get('depth', 10))
+                        depth = closest_danger.get('depth', 0)
+
+                        # Combine detection info with VLM guidance
+                        if navigation_guidance and not has_vlm_danger:
+                            msg = f"STOP! {closest_danger['label']} at {depth:.1f}m. {navigation_guidance}"
+                        else:
+                            msg = navigation_guidance if navigation_guidance else f"STOP! {closest_danger['label']} at {depth:.1f}m ahead"
+                    else:
+                        # VLM detected danger but YOLO didn't
+                        msg = navigation_guidance
+
                     return {
-                        'narrative': f"⚠️ Stop! {closest_danger['label']} ahead - {navigation_guidance}",
+                        'narrative': msg,
                         'predictive': '',
-                        'combined': f"⚠️ Stop! {closest_danger['label']} ahead - {navigation_guidance}"
-                    }
-                # Check for caution objects and combine with VLM guidance
-                caution_objects = nav_summary.get('caution_objects', [])
-                if caution_objects and navigation_guidance:
-                    closest_caution = min(caution_objects, key=lambda x: x.get('depth', 10))
-                    return {
-                        'narrative': f"⚠️ Caution! {closest_caution['label']} ahead - {navigation_guidance}",
-                        'predictive': '',
-                        'combined': f"⚠️ Caution! {closest_caution['label']} ahead - {navigation_guidance}"
+                        'combined': msg
                     }
 
-                # Use VLM guidance for other situations
+                # Check for caution objects and combine with VLM guidance
+                caution_objects = nav_summary.get('caution_objects', [])
+                if caution_objects:
+                    closest_caution = min(caution_objects, key=lambda x: x.get('depth', 10))
+                    depth = closest_caution.get('depth', 0)
+
+                    if navigation_guidance:
+                        msg = f"{closest_caution['label']} at {depth:.1f}m. {navigation_guidance}"
+                    else:
+                        msg = f"Caution: {closest_caution['label']} at {depth:.1f}m"
+
+                    return {
+                        'narrative': msg,
+                        'predictive': '',
+                        'combined': msg
+                    }
+
+                # Use VLM guidance for clear path situations
                 if navigation_guidance:
                     return {
                         'narrative': navigation_guidance,
                         'predictive': '',
                         'combined': navigation_guidance
                     }
-            
+
             # Fallback to fast guidance if VLM unavailable
             return self._generate_fast_guidance(detections, nav_summary)
-            
+
         except Exception as e:
             self.logger.error(f"Enhanced guidance generation error: {e}")
+            import traceback
+            traceback.print_exc()
             return self._generate_fast_guidance(detections, nav_summary)
 
     def _generate_fast_guidance(self, detections: List[Dict], nav_summary: Dict) -> Dict:

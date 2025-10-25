@@ -93,28 +93,41 @@ class VisionLanguageModel:
     
     def encode_image(self, frame: np.ndarray) -> str:
         """
-        Encode frame to base64 for VLM input.
-        
+        Encode frame to base64 for VLM input with enhanced preprocessing for accuracy.
+
         Args:
             frame: Input frame (BGR format)
-            
+
         Returns:
             Base64 encoded image string
         """
-        # Resize frame for VLM processing (optimize for speed)
+        # ACCURACY IMPROVEMENT: Higher resolution for better detail recognition
+        # Use 768x768 instead of 512x512 for better object/scene recognition
         h, w = frame.shape[:2]
-        if h > 512 or w > 512:
-            scale = min(512/h, 512/w)
+        target_size = 768  # Increased from 512
+
+        if h > target_size or w > target_size:
+            scale = min(target_size/h, target_size/w)
             new_h, new_w = int(h * scale), int(w * scale)
-            frame = cv2.resize(frame, (new_w, new_h))
-        
-        # Convert BGR to RGB
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        
-        # Encode to JPEG
-        _, buffer = cv2.imencode('.jpg', rgb_frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            # Use LANCZOS interpolation for better quality
+            frame = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LANCZOS4)
+
+        # ACCURACY IMPROVEMENT: Enhance contrast and brightness for better VLM perception
+        # Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)
+        lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+        l = clahe.apply(l)
+        enhanced_frame = cv2.merge([l, a, b])
+
+        # Convert LAB back to BGR, then to RGB
+        enhanced_frame = cv2.cvtColor(enhanced_frame, cv2.COLOR_LAB2BGR)
+        rgb_frame = cv2.cvtColor(enhanced_frame, cv2.COLOR_BGR2RGB)
+
+        # ACCURACY IMPROVEMENT: Higher JPEG quality (95 instead of 85)
+        _, buffer = cv2.imencode('.jpg', rgb_frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
         img_base64 = base64.b64encode(buffer).decode('utf-8')
-        
+
         return img_base64
     
     def analyze_scene(self, frame: np.ndarray, detections: List[Dict]) -> Dict:
@@ -176,28 +189,49 @@ class VisionLanguageModel:
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         pil_image = Image.fromarray(rgb_frame)
 
-        # Resize for efficiency (maintain aspect ratio)
-        pil_image.thumbnail((512, 512), Image.Resampling.LANCZOS)
+        # ACCURACY IMPROVEMENT: Higher resolution for Moondream (768x768)
+        pil_image.thumbnail((768, 768), Image.Resampling.LANCZOS)
 
         # Create detection context
         detection_context = self._create_detection_context(detections)
 
-        # Query Moondream with safety-first approach
-        # Single optimized query for speed and safety
-        question = f"""You are guiding a BLIND person. Detected: {detection_context}
+        # ACCURACY IMPROVEMENT: Multi-step reasoning for better VLM accuracy
+        # First pass: Identify what's in the scene
+        question1 = f"""Look at this image carefully. Detected objects: {detection_context}
 
-CRITICAL: Identify immediate dangers (stairs, drop-offs, traffic, obstacles in path).
-Then give clear navigation instruction in 1-2 sentences.
+What do you see in this scene? Describe:
+1. The environment type (indoor room, outdoor street, hallway, etc.)
+2. All visible objects and their locations (left/right/center, near/far)
+3. Any potential hazards (stairs, drop-offs, obstacles, traffic, narrow spaces)
+4. Clear pathways or open areas
 
-Format: If danger: "STOP! [danger] ahead." Otherwise: "[Clear direction with landmarks]."
-
-What should this blind person do right now?"""
+Be specific and detailed."""
 
         with torch.no_grad():
-            scene_description = self.moondream_model.query(
+            scene_analysis = self.moondream_model.query(
                 image=pil_image,
-                question=question
+                question=question1
             )["answer"]
+
+        # Second pass: Generate navigation guidance based on analysis
+        question2 = f"""Based on this scene: {scene_analysis}
+
+You are guiding a BLIND person. Give them navigation instructions:
+- If DANGER (stairs, drop-off, immediate obstacle): "STOP! [danger] at [distance] [direction]."
+- If obstacles present: Warn and suggest safe alternative
+- If clear: Tell them which direction is safe
+
+Use exact spatial terms: "2 meters ahead", "on your left", "directly in front"
+Maximum 2 sentences. What should they do RIGHT NOW?"""
+
+        with torch.no_grad():
+            navigation_guidance = self.moondream_model.query(
+                image=pil_image,
+                question=question2
+            )["answer"]
+
+        # Combine both for structured response
+        scene_description = f"{scene_analysis} NAVIGATION: {navigation_guidance}"
 
         # Parse and structure the response
         analysis = self._parse_scene_analysis(scene_description, detections)
@@ -214,40 +248,69 @@ What should this blind person do right now?"""
         # Create detection context
         detection_context = self._create_detection_context(detections)
 
-        # VLM prompt optimized for blind navigation - CRITICAL SAFETY FOCUS
-        prompt = f"""You are an AI navigation assistant for a BLIND person. Your guidance must be:
-1. SAFETY FIRST: Immediately warn about dangers (stairs, obstacles, drop-offs, traffic)
-2. PRECISE: Use exact spatial terms (left/right, ahead, behind, distances)
-3. ACTIONABLE: Give clear movement instructions
-4. CONCISE: Maximum 2 sentences
+        # ACCURACY IMPROVEMENT: Enhanced multi-step prompting for Ollama VLMs
+        # First query: Scene understanding
+        scene_prompt = f"""Analyze this image carefully for a blind person navigation system.
 
-Detected objects: {detection_context}
+DETECTED OBJECTS WITH POSITIONS: {detection_context}
 
-Analyze and respond in this format:
-- If DANGER present: "STOP! [danger] directly ahead at [distance]. Move [direction]."
-- If obstacles present: "[Obstacle] at [distance] on your [direction]. [Safe path suggestion]."
-- If path clear: "Path clear ahead. [Brief landmark or environment description]."
+Provide detailed analysis:
+1. Environment type: Is this indoor (room/hallway/office) or outdoor (street/sidewalk/park)?
+2. Spatial layout: Describe object positions using left/center/right and near/far
+3. Hazards: Identify ANY potential dangers (stairs, ledges, obstacles blocking path, traffic, narrow passages)
+4. Clear areas: Where can they safely walk?
+5. Key landmarks: What can help them orient?
 
-Priority: Immediate safety > Navigation guidance > Environment description."""
+Be thorough and precise. This person cannot see."""
 
-        # Prepare request
-        payload = {
+        scene_payload = {
             "model": self.model_name,
-            "prompt": prompt,
+            "prompt": scene_prompt,
             "images": [img_base64],
             "stream": False,
             "options": {
-                "temperature": self.temperature,
-                "num_predict": self.max_tokens
+                "temperature": 0.3,  # Lower temperature for more accurate scene understanding
+                "num_predict": 200  # More tokens for detailed analysis
+            }
+        }
+
+        scene_response = requests.post(self.ollama_url, json=scene_payload, timeout=30)
+        scene_response.raise_for_status()
+        scene_analysis = scene_response.json().get('response', '')
+
+        # Second query: Navigation guidance based on analysis
+        nav_prompt = f"""Based on this scene analysis: {scene_analysis}
+
+DETECTED OBJECTS: {detection_context}
+
+You are guiding a BLIND person. Generate navigation instructions:
+
+RULES:
+- If IMMEDIATE DANGER (stairs, drop-off, obstacle <1m): "STOP! [danger] at [exact distance] [direction]."
+- If obstacles nearby (1-2m): "Caution. [object] at [distance] [direction]. Safe path: [specific instruction]."
+- If path clear: "Path clear [direction]. [Brief landmark for orientation]."
+
+Use EXACT measurements and directions. Maximum 2 sentences. Lives depend on accuracy."""
+
+        nav_payload = {
+            "model": self.model_name,
+            "prompt": nav_prompt,
+            "images": [img_base64],
+            "stream": False,
+            "options": {
+                "temperature": 0.4,  # Slightly higher for natural language
+                "num_predict": 100  # Concise navigation instructions
             }
         }
 
         # Make request to Ollama
-        response = requests.post(self.ollama_url, json=payload, timeout=30)
-        response.raise_for_status()
+        nav_response = requests.post(self.ollama_url, json=nav_payload, timeout=30)
+        nav_response.raise_for_status()
 
-        result = response.json()
-        scene_description = result.get('response', '')
+        navigation_guidance = nav_response.json().get('response', '')
+
+        # Combine scene analysis with navigation guidance
+        scene_description = f"SCENE: {scene_analysis}\n\nNAVIGATION: {navigation_guidance}"
 
         # Parse and structure the response
         analysis = self._parse_scene_analysis(scene_description, detections)
@@ -257,17 +320,41 @@ Priority: Immediate safety > Navigation guidance > Environment description."""
         return analysis
     
     def _create_detection_context(self, detections: List[Dict]) -> str:
-        """Create context string from detections."""
+        """Create enriched context string from detections with spatial information."""
         if not detections:
             return "No objects detected"
-        
+
         context_parts = []
-        for det in detections[:5]:  # Limit to top 5 detections
+        for det in detections[:8]:  # Increased from 5 to 8 for more context
             label = det.get('label', 'unknown')
             confidence = det.get('confidence', 0.0)
             depth = det.get('depth', 0.0)
-            context_parts.append(f"{label} (confidence: {confidence:.2f}, distance: {depth:.1f}m)")
-        
+
+            # ACCURACY IMPROVEMENT: Add spatial position context
+            bbox = det.get('bbox', [0, 0, 0, 0])
+            center = det.get('center', [(bbox[0] + bbox[2])/2, (bbox[1] + bbox[3])/2])
+
+            # Determine spatial position (left/center/right)
+            frame_center = 160  # Assuming 320 width
+            if center[0] < frame_center - 50:
+                position = "left"
+            elif center[0] > frame_center + 50:
+                position = "right"
+            else:
+                position = "center"
+
+            # Determine vertical position
+            if center[1] < 80:  # Top third
+                vertical = "upper"
+            elif center[1] > 160:  # Bottom third
+                vertical = "lower"
+            else:
+                vertical = "middle"
+
+            context_parts.append(
+                f"{label} at {depth:.1f}m ({position} {vertical}, conf: {confidence:.2f})"
+            )
+
         return "; ".join(context_parts)
     
     def _parse_scene_analysis(self, description: str, detections: List[Dict]) -> Dict:

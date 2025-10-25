@@ -31,10 +31,10 @@ models:
   llm:
     primary: "moondream:latest"
     vision: "moondream:latest"  # Moondream2: 1.86B params, <3s inference
-    temperature: 0.6
-    max_tokens: 100
+    temperature: 0.4  # Lower for more accurate scene understanding (was 0.6)
+    max_tokens: 150  # Increased for detailed analysis (was 100)
     vlm_enabled: true  # BREAKTHROUGH: Real-time scene understanding
-    scene_analysis_interval: 8  # Faster scene analysis for blind users (was 15s)
+    scene_analysis_interval: 6  # More frequent for accuracy (was 8s, original 15s)
 
 # Voice Commands (Optional)
 conversation:
