@@ -950,6 +950,9 @@ class OrbyGlasses:
                     self.logger.warning("Failed to capture frame")
                     break
 
+                # Flip frame horizontally for mirror effect (before processing)
+                frame = cv2.flip(frame, 1)
+
                 self.logger.debug("Frame read successfully. Processing frame.")
                 self.frame_count += 1
 
@@ -1087,8 +1090,8 @@ class OrbyGlasses:
                 self.logger.debug("Frame processed. Displaying windows.")
                 # Clean robot-style display
                 if display:
-                    # Main camera view - flip horizontally for mirror effect
-                    cv2.imshow('OrbyGlasses', cv2.flip(annotated_frame, 1))
+                    # Main camera view - already flipped before processing
+                    cv2.imshow('OrbyGlasses', annotated_frame)
 
                     # Show SLAM map in a separate window if requested
                     if separate_slam and self.slam_enabled and self.slam_map_viewer and slam_result:
@@ -1104,8 +1107,8 @@ class OrbyGlasses:
                         else:
                             # Fallback to old method
                             depth_colored = self._create_ultra_clear_depth_colormap(depth_map)
-                        # Display depth map - flip horizontally for mirror effect
-                        cv2.imshow('Depth Map', cv2.flip(depth_colored, 1))
+                        # Display depth map - already flipped before processing
+                        cv2.imshow('Depth Map', depth_colored)
 
                     # Show SLAM map viewer (original working version)
                     if self.slam_enabled and self.slam_map_viewer and slam_result and not separate_slam:
