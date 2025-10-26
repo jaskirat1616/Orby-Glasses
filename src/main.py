@@ -1086,24 +1086,32 @@ class OrbyGlasses:
                         closest_danger = min(danger_objects, key=lambda x: x['depth'])
                         depth = closest_danger['depth']
 
-                        # Use relatable distance terms
-                        if depth < 0.3:
-                            distance_term = "immediately ahead"
-                        elif depth < 0.5:
-                            distance_term = "arm's length away"
-                        else:
-                            distance_term = "one step away"
+                        # Use relatable distance terms with specific actions
+                        label = closest_danger['label']
 
-                        # Determine direction
+                        if depth < 0.3:
+                            distance_term = "very close"
+                            urgency = "Stop now!"
+                        elif depth < 0.5:
+                            distance_term = "close"
+                            urgency = "Caution!"
+                        else:
+                            distance_term = "ahead"
+                            urgency = "Watch out!"
+
+                        # Determine direction with specific action
                         center = closest_danger.get('center', [160, 160])
                         if center[0] < 106:
-                            direction = "on your left, step right"
+                            direction = "on your left"
+                            action = "Move right"
                         elif center[0] > 213:
-                            direction = "on your right, step left"
+                            direction = "on your right"
+                            action = "Move left"
                         else:
-                            direction = "straight ahead, step aside"
+                            direction = "directly ahead"
+                            action = "Stop and step aside"
 
-                        msg = f"{closest_danger['label']} {distance_term} {direction}"
+                        msg = f"{urgency} {label} {distance_term} {direction}. {action}"
                         self.logger.error(f"🚨 DANGER ALERT: \"{msg}\"")
                         self.audio_manager.speak(msg, priority=True)
                         self.last_audio_time = current_time
@@ -1122,36 +1130,59 @@ class OrbyGlasses:
                         self.audio_manager.speak(msg, priority=False)
                         self.last_vlm_guidance_time = current_time
 
-                # Fallback to simple message - FRIENDLY for blind users
+                # Fallback to simple message - HELPFUL for blind users
                 elif len(detections) > 0:
                     if (current_time - self.last_audio_time) > self.audio_interval and not self.audio_manager.is_speaking:
-                        closest = min(detections, key=lambda x: x.get('depth', 10))
-                        depth = closest['depth']
-                        label = closest['label']
+                        # Find closest objects on left, right, and center
+                        left_objects = [d for d in detections if d.get('center', [160, 160])[0] < 106]
+                        right_objects = [d for d in detections if d.get('center', [160, 160])[0] > 213]
+                        center_objects = [d for d in detections if 106 <= d.get('center', [160, 160])[0] <= 213]
 
-                        # Use friendly distance terms instead of numbers
-                        if depth < 1.5:
-                            distance_term = "nearby"
-                        elif depth < 3.0:
-                            distance_term = "ahead"
-                        elif depth < 5.0:
-                            distance_term = "in the distance"
-                        else:
-                            distance_term = "far ahead"
+                        # Build helpful message
+                        messages = []
 
-                        # Determine direction in friendly way
-                        center = closest.get('center', [160, 160])
-                        if center[0] < 106:
-                            direction = "to your left"
-                        elif center[0] > 213:
-                            direction = "to your right"
-                        else:
-                            direction = "in front"
+                        # Center (most important)
+                        if center_objects:
+                            closest_center = min(center_objects, key=lambda x: x.get('depth', 10))
+                            depth = closest_center['depth']
+                            label = closest_center['label']
 
-                        msg = f"{label} {distance_term} {direction}"
-                        self.logger.info(f"🔊 Audio: \"{msg}\"")
-                        self.audio_manager.speak(msg, priority=False)
-                        self.last_audio_time = current_time
+                            if depth < 1.5:
+                                messages.append(f"{label} ahead, keep to the side")
+                            elif depth < 3.0:
+                                messages.append(f"{label} coming up ahead")
+
+                        # Left side
+                        if left_objects:
+                            closest_left = min(left_objects, key=lambda x: x.get('depth', 10))
+                            if closest_left['depth'] < 2.0:
+                                messages.append(f"{closest_left['label']} on your left")
+
+                        # Right side
+                        if right_objects:
+                            closest_right = min(right_objects, key=lambda x: x.get('depth', 10))
+                            if closest_right['depth'] < 2.0:
+                                messages.append(f"{closest_right['label']} on your right")
+
+                        # If nothing specific, describe overall scene
+                        if not messages:
+                            closest = min(detections, key=lambda x: x.get('depth', 10))
+                            if closest['depth'] < 5.0:
+                                center = closest.get('center', [160, 160])
+                                if center[0] < 106:
+                                    direction = "to your left"
+                                elif center[0] > 213:
+                                    direction = "to your right"
+                                else:
+                                    direction = "ahead"
+                                messages.append(f"{closest['label']} {direction}")
+
+                        # Combine messages
+                        if messages:
+                            msg = ". ".join(messages[:2])  # Max 2 items
+                            self.logger.info(f"🔊 Audio: \"{msg}\"")
+                            self.audio_manager.speak(msg, priority=False)
+                            self.last_audio_time = current_time
 
                 # Path clear
                 else:

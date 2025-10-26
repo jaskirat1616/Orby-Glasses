@@ -197,15 +197,15 @@ class VisionLanguageModel:
 
         # ACCURACY IMPROVEMENT: Multi-step reasoning for better VLM accuracy
         # First pass: Identify what's in the scene
-        question1 = f"""Look at this image. Detected: {detection_context}
+        question1 = f"""Analyze this image. Objects detected: {detection_context}
 
-Describe what you see:
-- Environment type (room, street, hallway, etc.)
-- Objects and their locations (use "left", "right", "ahead", "nearby")
-- Any hazards (stairs, obstacles, drop-offs)
-- Clear areas to walk
+What is in this scene?
+1. Type of place: room, hallway, street, sidewalk, store, etc.
+2. Main objects and where they are: left side, right side, center, close, far
+3. Dangers: stairs, holes, walls, poles, obstacles blocking the path
+4. Open space: where is it safe to walk?
 
-Use simple words, no measurements."""
+Answer clearly."""
 
         with torch.no_grad():
             scene_analysis = self.moondream_model.query(
@@ -214,11 +214,16 @@ Use simple words, no measurements."""
             )["answer"]
 
         # Second pass: Generate navigation guidance based on analysis
-        question2 = f"""Scene: {scene_analysis}
+        question2 = f"""Scene analysis: {scene_analysis}
+Objects: {detection_context}
 
-Give walking directions for this scene. Use simple, natural language.
-Say "nearby", "ahead", "to your left/right" instead of numbers.
-If danger, say "Stop!" first. Maximum 2 sentences."""
+You are helping someone who cannot see. Tell them:
+- If there's danger close by, say "Stop! [what danger] is very close [where]"
+- If obstacles are near, say what they are and where: "[object] is nearby on your [left/right]"
+- If path is clear, say "Safe to walk ahead" or "Clear on your [left/right]"
+- Give ONE clear action they should take right now
+
+Be specific. 1-2 short sentences."""
 
         with torch.no_grad():
             navigation_guidance = self.moondream_model.query(
@@ -246,16 +251,18 @@ If danger, say "Stop!" first. Maximum 2 sentences."""
 
         # ACCURACY IMPROVEMENT: Enhanced multi-step prompting for Ollama VLMs
         # First query: Scene understanding
-        scene_prompt = f"""Analyze this image for navigation. Objects detected: {detection_context}
+        scene_prompt = f"""Look at this image. Detected objects: {detection_context}
 
-Describe:
-1. Environment: Indoor or outdoor? What type of space?
-2. Layout: Where are objects located? (left/right/center, near/far)
-3. Hazards: Any dangers like stairs, obstacles, or drop-offs?
-4. Safe areas: Where is clear space to walk?
-5. Landmarks: Notable features for orientation?
+Describe this scene:
+1. What type of place is this? (indoor room, outdoor sidewalk, hallway, store, etc.)
+2. What objects do you see and where are they located?
+   - Use: left side, right side, center, close, far away
+3. Are there any dangers or obstacles?
+   - Stairs, drop-offs, walls, poles, things blocking the path
+4. Where is there open space to walk safely?
+5. Any important landmarks or features?
 
-Be descriptive and clear."""
+Be specific and clear."""
 
         scene_payload = {
             "model": self.model_name,
@@ -273,11 +280,23 @@ Be descriptive and clear."""
         scene_analysis = scene_response.json().get('response', '')
 
         # Second query: Navigation guidance based on analysis
-        nav_prompt = f"""Scene analysis: {scene_analysis}
+        nav_prompt = f"""Scene: {scene_analysis}
 Objects: {detection_context}
 
-Provide walking directions. Use natural language (nearby, ahead, left, right).
-If danger, say "Stop!" first. 1-2 sentences only."""
+Give clear walking instructions for a blind person:
+
+IF DANGER CLOSE BY:
+- Say: "Stop! [what] is very close [where]. [What to do]"
+- Example: "Stop! Wall very close ahead. Step to your right"
+
+IF OBSTACLES NEARBY:
+- Say: "[Object] nearby on your [left/right]. [Suggestion]"
+- Example: "Chair nearby on your left. Walk to the right"
+
+IF PATH CLEAR:
+- Say: "Safe to walk [direction]" or "Path is clear ahead"
+
+Give ONE specific action. 1-2 sentences maximum."""
 
         nav_payload = {
             "model": self.model_name,
