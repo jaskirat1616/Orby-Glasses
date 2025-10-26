@@ -195,31 +195,16 @@ class VisionLanguageModel:
         # Create detection context
         detection_context = self._create_detection_context(detections)
 
-        # ACCURACY IMPROVEMENT: Multi-step reasoning for better VLM accuracy
-        # First pass: Identify what's in the scene
-        question1 = f"""What do you see in this image? Objects detected: {detection_context}
+        # Single direct query - no multi-step to avoid "SCENE:" labels
+        question = f"""Look at this image. Objects detected: {detection_context}
 
-Describe the environment, objects and their locations, any hazards, and where it's safe to walk."""
-
-        with torch.no_grad():
-            scene_analysis = self.moondream_model.query(
-                image=pil_image,
-                question=question1
-            )["answer"]
-
-        # Second pass: Generate navigation guidance based on analysis
-        question2 = f"""Based on what you see: {scene_analysis}
-
-Give walking directions. If there's danger, warn them first. Tell them what to do. Keep it short."""
+Tell someone who can't see what they need to know to walk safely. Warn about dangers. Keep it short."""
 
         with torch.no_grad():
-            navigation_guidance = self.moondream_model.query(
+            scene_description = self.moondream_model.query(
                 image=pil_image,
-                question=question2
+                question=question
             )["answer"]
-
-        # Combine both for structured response
-        scene_description = f"{scene_analysis} NAVIGATION: {navigation_guidance}"
 
         # Parse and structure the response
         analysis = self._parse_scene_analysis(scene_description, detections)
@@ -236,51 +221,26 @@ Give walking directions. If there's danger, warn them first. Tell them what to d
         # Create detection context
         detection_context = self._create_detection_context(detections)
 
-        # ACCURACY IMPROVEMENT: Enhanced multi-step prompting for Ollama VLMs
-        # First query: Scene understanding
-        scene_prompt = f"""Describe what you see in this image. Objects detected: {detection_context}
+        # Single direct query - avoid multi-step that adds labels
+        prompt = f"""Look at this image. Objects detected: {detection_context}
 
-What type of place is this? What objects are visible and where are they? Are there any hazards? Where is it safe to walk?"""
+Give walking guidance for a blind person. Mention dangers and where to go. Be brief."""
 
-        scene_payload = {
+        payload = {
             "model": self.model_name,
-            "prompt": scene_prompt,
+            "prompt": prompt,
             "images": [img_base64],
             "stream": False,
             "options": {
-                "temperature": 0.3,  # Lower temperature for more accurate scene understanding
-                "num_predict": 200  # More tokens for detailed analysis
+                "temperature": 0.5,
+                "num_predict": 80  # Short, concise guidance only
             }
         }
 
-        scene_response = requests.post(self.ollama_url, json=scene_payload, timeout=30)
-        scene_response.raise_for_status()
-        scene_analysis = scene_response.json().get('response', '')
+        response = requests.post(self.ollama_url, json=payload, timeout=30)
+        response.raise_for_status()
 
-        # Second query: Navigation guidance based on analysis
-        nav_prompt = f"""Based on this: {scene_analysis}
-
-Give walking directions for someone who can't see. If danger, warn them. Tell them where to go. Short and clear."""
-
-        nav_payload = {
-            "model": self.model_name,
-            "prompt": nav_prompt,
-            "images": [img_base64],
-            "stream": False,
-            "options": {
-                "temperature": 0.4,  # Slightly higher for natural language
-                "num_predict": 100  # Concise navigation instructions
-            }
-        }
-
-        # Make request to Ollama
-        nav_response = requests.post(self.ollama_url, json=nav_payload, timeout=30)
-        nav_response.raise_for_status()
-
-        navigation_guidance = nav_response.json().get('response', '')
-
-        # Combine scene analysis with navigation guidance
-        scene_description = f"SCENE: {scene_analysis}\n\nNAVIGATION: {navigation_guidance}"
+        scene_description = response.json().get('response', '')
 
         # Parse and structure the response
         analysis = self._parse_scene_analysis(scene_description, detections)
