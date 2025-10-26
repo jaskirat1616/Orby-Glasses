@@ -1136,61 +1136,57 @@ class OrbyGlasses:
 
                 # Fallback to simple message - ALWAYS provide audio feedback
                 if len(detections) > 0 and (current_time - self.last_audio_time) > self.audio_interval and not self.audio_manager.is_speaking:
-                    # Find closest objects on left, right, and center
-                    left_objects = [d for d in detections if d.get('center', [160, 160])[0] < 106]
-                    right_objects = [d for d in detections if d.get('center', [160, 160])[0] > 213]
-                    center_objects = [d for d in detections if 106 <= d.get('center', [160, 160])[0] <= 213]
+                    # Get closest object overall
+                    closest = min(detections, key=lambda x: x.get('depth', 10))
+                    label = closest.get('label', 'object')
+                    depth = closest.get('depth', 5.0)
+                    center = closest.get('center', [160, 160])
 
-                    # Build helpful message
-                    messages = []
-
-                    # Center (most important)
-                    if center_objects:
-                        closest_center = min(center_objects, key=lambda x: x.get('depth', 10))
-                        depth = closest_center['depth']
-                        label = closest_center['label']
-
-                        if depth < 1.5:
-                            messages.append(f"{label} ahead, keep to the side")
-                        elif depth < 3.0:
-                            messages.append(f"{label} coming up ahead")
-
-                    # Left side
-                    if left_objects:
-                        closest_left = min(left_objects, key=lambda x: x.get('depth', 10))
-                        if closest_left['depth'] < 2.0:
-                            messages.append(f"{closest_left['label']} on your left")
-
-                    # Right side
-                    if right_objects:
-                        closest_right = min(right_objects, key=lambda x: x.get('depth', 10))
-                        if closest_right['depth'] < 2.0:
-                            messages.append(f"{closest_right['label']} on your right")
-
-                    # If nothing specific, describe overall scene
-                    if not messages:
-                        closest = min(detections, key=lambda x: x.get('depth', 10))
-                        if closest['depth'] < 5.0:
-                            center = closest.get('center', [160, 160])
-                            if center[0] < 106:
-                                direction = "to your left"
-                            elif center[0] > 213:
-                                direction = "to your right"
-                            else:
-                                direction = "ahead"
-                            messages.append(f"{closest['label']} {direction}")
-
-                    # Combine messages - ALWAYS speak if we have detections
-                    if messages:
-                        msg = ". ".join(messages[:2])  # Max 2 items
-                        self.logger.info(f"🔊 Audio: \"{msg}\"")
-                        self.audio_manager.speak(msg, priority=False)
-                        self.last_audio_time = current_time
+                    # Determine position
+                    if center[0] < 106:
+                        position = "on your left"
+                    elif center[0] > 213:
+                        position = "on your right"
                     else:
-                        # No good messages but we have detections - say something
-                        self.logger.info(f"🔊 Audio: \"Objects detected\"")
-                        self.audio_manager.speak("Objects detected", priority=False)
-                        self.last_audio_time = current_time
+                        position = "ahead"
+
+                    # Determine distance term
+                    if depth < 1.5:
+                        distance = "nearby"
+                    elif depth < 3.0:
+                        distance = ""  # Don't mention far objects
+                    else:
+                        distance = "in the distance"
+
+                    # Build message
+                    if distance:
+                        msg = f"{label} {distance} {position}"
+                    else:
+                        msg = f"{label} {position}"
+
+                    # Look for additional nearby objects
+                    additional = []
+                    for det in detections[1:3]:  # Check next 2 objects
+                        if det.get('depth', 10) < 2.5:
+                            det_center = det.get('center', [160, 160])
+                            if det_center[0] < 106:
+                                det_pos = "left"
+                            elif det_center[0] > 213:
+                                det_pos = "right"
+                            else:
+                                det_pos = "center"
+
+                            # Don't repeat same position
+                            if det_pos not in msg.lower():
+                                additional.append(f"{det.get('label', 'object')} on {det_pos}")
+
+                    # Add one additional object if found
+                    if additional:
+                        msg = f"{msg}. {additional[0]}"
+
+                    self.logger.info(f"🔊 Audio: \"{msg}\"")
+                    self.audio_manager.speak(msg, priority=False)
+                    self.last_audio_time = current_time
 
                 # Path clear
                 else:
