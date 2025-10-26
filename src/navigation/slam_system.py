@@ -53,6 +53,7 @@ class SLAMSystem:
         """
         self.config = config
         self.enabled = config.get('slam.enabled', True)
+        self.logger = logging.getLogger(self.__class__.__name__)
 
         # Camera intrinsics
         self.fx = config.get('mapping3d.fx', 500)
@@ -84,7 +85,7 @@ class SLAMSystem:
             scoreType=cv2.ORB_HARRIS_SCORE
         )
 
-        logging.info(f"ORB configured: {nfeatures} features, FAST threshold {fast_threshold}")
+        self.logger.info(f"ORB configured: {nfeatures} features, FAST threshold {fast_threshold}")
 
         # Multiple matcher strategies
         self.bf_matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
@@ -155,10 +156,10 @@ class SLAMSystem:
         self.last_positions = deque(maxlen=5)
         self.velocity_history = deque(maxlen=10)
 
-        logging.info("SLAM System initialized (camera-only, no IMU)")
-        logging.info(f"Camera matrix: fx={self.fx}, fy={self.fy}, cx={self.cx:.1f}, cy={self.cy:.1f}")
-        logging.info(f"ORB features: {nfeatures}, Min matches: {self.min_matches}")
-        logging.info(f"Temporal consistency: {self.temporal_consistency_check}")
+        self.logger.info("SLAM System initialized (camera-only, no IMU)")
+        self.logger.info(f"Camera matrix: fx={self.fx}, fy={self.fy}, cx={self.cx:.1f}, cy={self.cy:.1f}")
+        self.logger.info(f"ORB features: {nfeatures}, Min matches: {self.min_matches}")
+        self.logger.info(f"Temporal consistency: {self.temporal_consistency_check}")
 
     def process_frame(self, frame: np.ndarray, depth_map: Optional[np.ndarray] = None) -> Dict:
         """
@@ -175,15 +176,22 @@ class SLAMSystem:
             return self._empty_result()
 
         self.frame_count += 1
+        self.logger.debug(f"SLAM: Processing frame {self.frame_count}")
 
         # Convert to grayscale
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        self.logger.debug(f"SLAM: Converted to grayscale.")
 
-        # Improve contrast for better feature detection
-        gray = cv2.equalizeHist(gray)
+        # ACCURACY IMPROVEMENT: Better contrast enhancement with CLAHE
+        # Use adaptive histogram equalization for better feature distribution
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        gray = clahe.apply(gray)
+        self.logger.debug(f"SLAM: Applied CLAHE for better features.")
 
         # Detect ORB features with parameters
+        self.logger.debug(f"SLAM: Detecting ORB features...")
         keypoints, descriptors = self.orb.detectAndCompute(gray, None)
+        self.logger.debug(f"SLAM: Detected {len(keypoints) if keypoints else 0} features.")
 
         # Log feature count for debugging
         if self.frame_count % 30 == 0:  # Log every 30 frames
@@ -213,7 +221,7 @@ class SLAMSystem:
                     'relative_movement': relative_movement.tolist()
                 }
             else:
-                logging.warning(f"Insufficient features for initialization: {len(keypoints) if keypoints else 0}")
+                self.logger.warning(f"Insufficient features for initialization: {len(keypoints) if keypoints else 0}")
                 return self._empty_result()
 
         # Store current descriptors and keypoints for next frame
@@ -233,7 +241,7 @@ class SLAMSystem:
 
         # Check pose is valid before using it
         if not np.all(np.isfinite(self.current_pose)):
-            logging.warning("Non-finite pose detected! Resetting to previous valid pose.")
+            self.logger.warning("Non-finite pose detected! Resetting to previous valid pose.")
             if len(self.pose_history) > 0:
                 self.current_pose = self.pose_history[-1].copy()
             else:
@@ -244,7 +252,7 @@ class SLAMSystem:
 
         # Validate position before using
         if not np.all(np.isfinite(position)):
-            logging.warning(f"Non-finite position detected: {position}. Resetting to origin.")
+            self.logger.warning(f"Non-finite position detected: {position}. Resetting to origin.")
             position = np.array([0.0, 0.0, 0.0], dtype=np.float32)
             self.current_pose[:3, 3] = position
 
@@ -283,7 +291,7 @@ class SLAMSystem:
                     raise ValueError("Relative movement has non-finite values")
 
             except (np.linalg.LinAlgError, ValueError, cv2.error) as e:
-                logging.warning(f"Error calculating relative movement: {e}. Using zero.")
+                self.logger.warning(f"Error calculating relative movement: {e}. Using zero.")
                 relative_movement = np.zeros(6)
 
         result['relative_movement'] = relative_movement.tolist()
@@ -302,7 +310,8 @@ class SLAMSystem:
         """
         Initialize SLAM with first frame.
         """
-        logging.info("Initializing SLAM with first frame...")
+        self.logger.info("Initializing SLAM with first frame...")
+        self.logger.debug("SLAM Init: Creating initial keyframe.")
 
         # Create initial keyframe at origin
         initial_pose = np.eye(4, dtype=np.float32)
@@ -315,6 +324,7 @@ class SLAMSystem:
         )
         self.keyframes.append(keyframe)
         self.next_keyframe_id += 1
+        self.logger.debug("SLAM Init: Keyframe created. Initializing map points.")
 
         # Initialize map points with proper depth
         for kp, desc in zip(keypoints[:500], descriptors[:500]):
@@ -343,7 +353,8 @@ class SLAMSystem:
         self.is_initialized = True
         self.position_history.append([0, 0, 0])
 
-        logging.info(f"SLAM initialized with {len(self.map_points)} map points")
+        self.logger.info(f"SLAM initialized with {len(self.map_points)} map points")
+        self.logger.debug("SLAM Init: Map points initialized. Returning result.")
 
         return {
             'pose': initial_pose,
@@ -360,16 +371,33 @@ class SLAMSystem:
         Simplified track camera motion by matching features with previous frame.
         Includes temporal consistency checks and pose estimation.
         """
-        # Use FLANN-based matcher for better performance
+        # ACCURACY IMPROVEMENT: Better feature matching with stricter ratio test
         matches = self.flann_matcher.knnMatch(descriptors, self.last_descriptors, k=2)
 
-        # Apply Lowe's ratio test to filter out bad matches
+        # Apply stricter Lowe's ratio test (0.65 instead of 0.7) for higher quality matches
         good_matches = []
         for match_pair in matches:
             if len(match_pair) == 2:
                 m, n = match_pair
-                if m.distance < 0.7 * n.distance:
+                # ACCURACY: Stricter ratio test = fewer but better matches
+                if m.distance < 0.65 * n.distance:
                     good_matches.append(m)
+
+        # ACCURACY IMPROVEMENT: Cross-check matching for bidirectional consistency
+        if len(good_matches) > self.min_matches:
+            # Verify matches are consistent both ways
+            reverse_matches = self.flann_matcher.knnMatch(self.last_descriptors, descriptors, k=1)
+            reverse_map = {m[0].trainIdx: m[0].queryIdx for m in reverse_matches if len(m) > 0}
+
+            # Keep only matches that are consistent in both directions
+            consistent_matches = []
+            for m in good_matches:
+                if m.queryIdx in reverse_map and reverse_map[m.queryIdx] == m.trainIdx:
+                    consistent_matches.append(m)
+
+            # Use consistent matches if we have enough, otherwise keep all good matches
+            if len(consistent_matches) >= self.min_matches:
+                good_matches = consistent_matches
 
         num_matches = len(good_matches)
 
@@ -409,13 +437,32 @@ class SLAMSystem:
                     object_points = np.float32(object_points)
                     image_points = np.float32(image_points)
 
-                    # Estimate pose with PnP
+                    # ACCURACY IMPROVEMENT: Better pose estimation with refined RANSAC
+                    # Use more iterations and stricter threshold for accurate tracking
                     success, rvec, tvec, inliers = cv2.solvePnPRansac(
                         object_points, image_points, self.K, None,
-                        iterationsCount=100, reprojectionError=self.reprojection_threshold
+                        iterationsCount=200,  # More iterations for accuracy (was 100)
+                        reprojectionError=2.0,  # Stricter threshold (was 3.0)
+                        confidence=0.99,  # Higher confidence requirement
+                        flags=cv2.SOLVEPNP_ITERATIVE  # Iterative refinement
                     )
 
-                    if success:
+                    if success and inliers is not None and len(inliers) >= 5:
+                        # ACCURACY IMPROVEMENT: Refine pose using inliers only
+                        inlier_object_points = object_points[inliers.flatten()]
+                        inlier_image_points = image_points[inliers.flatten()]
+
+                        # Refine with iterative PnP using only inliers
+                        refined_success, rvec_refined, tvec_refined = cv2.solvePnP(
+                            inlier_object_points, inlier_image_points, self.K, None,
+                            rvec, tvec,  # Use RANSAC result as initial guess
+                            useExtrinsicGuess=True,
+                            flags=cv2.SOLVEPNP_ITERATIVE
+                        )
+
+                        if refined_success:
+                            rvec, tvec = rvec_refined, tvec_refined
+
                         # Create transformation matrix with bounds checking
                         R, _ = cv2.Rodrigues(rvec)
                         T = np.eye(4, dtype=np.float64)  # Use float64 to avoid overflow
@@ -423,14 +470,40 @@ class SLAMSystem:
 
                         # Check for reasonable translation values (prevent overflow)
                         tvec_flat = tvec.flatten()
-                        max_translation = 1000.0  # Maximum reasonable translation in meters
+                        max_translation = 10.0  # More reasonable max (was 1000.0)
 
-                        if np.any(np.abs(tvec_flat) > max_translation):
+                        # ACCURACY IMPROVEMENT: Check for unrealistic movement
+                        if len(self.pose_history) > 0:
+                            prev_position = self.pose_history[-1][:3, 3]
+                            current_position = tvec_flat
+                            movement = np.linalg.norm(current_position - prev_position)
+
+                            # If movement too large (> 1m per frame), likely error
+                            if movement > 1.0:
+                                logging.warning(f"SLAM: Large movement detected ({movement:.2f}m), using smoothed prediction")
+                                # Blend with prediction for stability
+                                T[:3, 3] = 0.7 * prev_position + 0.3 * tvec_flat
+                            else:
+                                T[:3, 3] = tvec_flat
+                        elif np.any(np.abs(tvec_flat) > max_translation):
                             # Translation too large - likely tracking error, use prediction
                             logging.warning(f"SLAM: Translation overflow detected ({np.max(np.abs(tvec_flat)):.1f}m), using prediction")
                             T = predicted_pose
                         else:
                             T[:3, 3] = tvec_flat
+
+                        # ACCURACY IMPROVEMENT: Smooth pose with exponential filter
+                        # Blend new pose with smoothed history for stability
+                        alpha = 0.3  # Smoothing factor (lower = more smoothing)
+                        if len(self.pose_history) > 0:
+                            prev_pose = self.pose_history[-1]
+                            # Smooth translation
+                            T[:3, 3] = alpha * T[:3, 3] + (1 - alpha) * prev_pose[:3, 3]
+                            # Smooth rotation (interpolate rotation matrices)
+                            T[:3, :3] = alpha * T[:3, :3] + (1 - alpha) * prev_pose[:3, :3]
+                            # Re-orthogonalize rotation matrix
+                            U, _, Vt = np.linalg.svd(T[:3, :3])
+                            T[:3, :3] = U @ Vt
 
                         # Convert back to float32 safely
                         self.current_pose = T.astype(np.float32)
@@ -536,11 +609,11 @@ class SLAMSystem:
         try:
             rel_transform = np.linalg.inv(prev_pose) @ new_pose
         except np.linalg.LinAlgError:
-            logging.warning("Failed to compute inverse of previous pose, assuming inconsistency.")
+            self.logger.warning("Failed to compute inverse of previous pose, assuming inconsistency.")
             return False
 
         if not np.all(np.isfinite(rel_transform)):
-            logging.warning("Non-finite relative transform, assuming inconsistency.")
+            self.logger.warning("Non-finite relative transform, assuming inconsistency.")
             return False
         
         # Check translation magnitude
@@ -553,11 +626,11 @@ class SLAMSystem:
         try:
             rotation_vec = cv2.Rodrigues(rotation_matrix)[0]
         except cv2.error:
-            logging.warning("Failed to compute Rodrigues vector for consistency check.")
+            self.logger.warning("Failed to compute Rodrigues vector for consistency check.")
             return False
 
         if not np.all(np.isfinite(rotation_vec)):
-            logging.warning("Non-finite rotation vector, assuming inconsistency.")
+            self.logger.warning("Non-finite rotation vector, assuming inconsistency.")
             return False
 
         rot_magnitude = np.linalg.norm(rotation_vec)
@@ -576,7 +649,7 @@ class SLAMSystem:
         Decide whether to insert a new keyframe based on multiple criteria.
         """
         if not np.isfinite(tracking_quality):
-            logging.warning(f"Invalid tracking quality ({tracking_quality}), skipping keyframe insertion check.")
+            self.logger.warning(f"Invalid tracking quality ({tracking_quality}), skipping keyframe insertion check.")
             return False
 
         # Always insert if quality is very high but not done recently
@@ -651,7 +724,7 @@ class SLAMSystem:
             self.map_points[self.next_point_id] = map_point
             self.next_point_id += 1
 
-        logging.info(f"Inserted keyframe {keyframe.id} at position {self.current_pose[:3, 3]}, "
+        self.logger.info(f"Inserted keyframe {keyframe.id} at position {self.current_pose[:3, 3]}, "
                     f"quality: {tracking_quality:.2f}")
 
     def _calculate_motion_consistency(self) -> float:
