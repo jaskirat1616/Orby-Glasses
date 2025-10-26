@@ -12,8 +12,8 @@ models:
   # Object Detection - YOLOv11n (SOTA 2024)
   yolo:
     path: "models/yolo/yolo11n.pt"
-    confidence: 0.45  # Optimized for blind navigation
-    iou_threshold: 0.45
+    confidence: 0.55  # Higher = more accurate, fewer false positives (was 0.45)
+    iou_threshold: 0.50  # Higher = better accuracy (was 0.45)
     device: "mps"
     half_precision: true
 
@@ -24,7 +24,7 @@ models:
     path: "depth-anything/Depth-Anything-V2-Small-hf"
     device: "mps"
     half_precision: true
-    max_resolution: 256  # Smaller resolution for faster processing
+    max_resolution: 224  # Reduced for speed - still accurate (was 256)
 
   # Vision-Language Model - Moondream2 (Fast 2B param VLM)
   # Provides scene understanding + navigation guidance
@@ -38,7 +38,7 @@ models:
 
 # Voice Commands (Optional)
 conversation:
-  enabled: true  # Now optimized for zero-lag background listening
+  enabled: false  # Disabled for speed - use audio output instead
   model: "gemma3:4b"
   temperature: 0.6  # Lower for more focused, safety-oriented responses
   max_tokens: 100  # Reduced for faster responses (blind users need quick answers)
@@ -105,9 +105,9 @@ performance:
   audio_update_interval: 1.2  # Fast, responsive feedback
   danger_audio_interval: 0.25  # CRITICAL: Instant danger alerts
   stats_interval: 200
-  max_detections: 5  # Reduced for better performance
-  depth_skip_frames: 1  # Skip more frames for better performance (process every 3rd frame)
-  frame_skip: 1
+  max_detections: 10  # More for better accuracy (was 5)
+  depth_skip_frames: 2  # Process every 3rd frame - saves 66% time (was 1)
+  frame_skip: 0  # Process all frames for accuracy
   enable_multithreading: true  # Enable for parallel processing
   cache_depth_maps: true
 
