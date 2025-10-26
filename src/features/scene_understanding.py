@@ -197,15 +197,15 @@ class VisionLanguageModel:
 
         # ACCURACY IMPROVEMENT: Multi-step reasoning for better VLM accuracy
         # First pass: Identify what's in the scene
-        question1 = f"""Look at this image carefully. Detected objects: {detection_context}
+        question1 = f"""Look at this image. Detected: {detection_context}
 
-What do you see in this scene? Describe using NATURAL LANGUAGE (no numbers):
-1. The environment type (indoor room, outdoor street, hallway, etc.)
-2. All visible objects and their locations using words like: "to the left", "nearby", "in front"
-3. Any potential hazards (stairs, drop-offs, obstacles, traffic, narrow spaces)
-4. Clear pathways or open areas
+Describe what you see:
+- Environment type (room, street, hallway, etc.)
+- Objects and their locations (use "left", "right", "ahead", "nearby")
+- Any hazards (stairs, obstacles, drop-offs)
+- Clear areas to walk
 
-Use friendly, conversational language. NO measurements or numbers."""
+Use simple words, no measurements."""
 
         with torch.no_grad():
             scene_analysis = self.moondream_model.query(
@@ -214,21 +214,11 @@ Use friendly, conversational language. NO measurements or numbers."""
             )["answer"]
 
         # Second pass: Generate navigation guidance based on analysis
-        question2 = f"""Based on this scene: {scene_analysis}
+        question2 = f"""Scene: {scene_analysis}
 
-You are guiding a BLIND person using FRIENDLY, natural language.
-
-CRITICAL - NO NUMBERS:
-- Say "very close", "nearby", "ahead", "in the distance" (NOT "2 meters", "5 feet")
-- Say "to your left", "to your right", "in front" (NOT "90 degrees")
-- Be calm and conversational
-
-Examples:
-- "Stop! There's a chair very close ahead, step to your right"
-- "Path is clear ahead, you can continue walking"
-- "There's a table nearby on your left"
-
-Maximum 2 sentences. What should they do RIGHT NOW?"""
+Give walking directions for this scene. Use simple, natural language.
+Say "nearby", "ahead", "to your left/right" instead of numbers.
+If danger, say "Stop!" first. Maximum 2 sentences."""
 
         with torch.no_grad():
             navigation_guidance = self.moondream_model.query(
@@ -256,18 +246,16 @@ Maximum 2 sentences. What should they do RIGHT NOW?"""
 
         # ACCURACY IMPROVEMENT: Enhanced multi-step prompting for Ollama VLMs
         # First query: Scene understanding
-        scene_prompt = f"""Analyze this image carefully for a blind person navigation system.
+        scene_prompt = f"""Analyze this image for navigation. Objects detected: {detection_context}
 
-DETECTED OBJECTS WITH POSITIONS: {detection_context}
+Describe:
+1. Environment: Indoor or outdoor? What type of space?
+2. Layout: Where are objects located? (left/right/center, near/far)
+3. Hazards: Any dangers like stairs, obstacles, or drop-offs?
+4. Safe areas: Where is clear space to walk?
+5. Landmarks: Notable features for orientation?
 
-Provide detailed analysis:
-1. Environment type: Is this indoor (room/hallway/office) or outdoor (street/sidewalk/park)?
-2. Spatial layout: Describe object positions using left/center/right and near/far
-3. Hazards: Identify ANY potential dangers (stairs, ledges, obstacles blocking path, traffic, narrow passages)
-4. Clear areas: Where can they safely walk?
-5. Key landmarks: What can help them orient?
-
-Be thorough and precise. This person cannot see."""
+Be descriptive and clear."""
 
         scene_payload = {
             "model": self.model_name,
@@ -285,22 +273,11 @@ Be thorough and precise. This person cannot see."""
         scene_analysis = scene_response.json().get('response', '')
 
         # Second query: Navigation guidance based on analysis
-        nav_prompt = f"""Based on this scene analysis: {scene_analysis}
+        nav_prompt = f"""Scene analysis: {scene_analysis}
+Objects: {detection_context}
 
-DETECTED OBJECTS: {detection_context}
-
-You are guiding a BLIND person. Generate FRIENDLY navigation instructions:
-
-CRITICAL RULES - NO NUMBERS:
-- Use words: "very close", "nearby", "ahead", "in the distance" (NEVER "2m", "5 feet", etc.)
-- Use words: "to your left", "to your right", "in front" (NEVER "90 degrees", angles)
-- Be calm, clear, and conversational
-- Examples:
-  * "Stop! There's a wall very close ahead, step to your left"
-  * "A chair is nearby on your right"
-  * "Path is clear, you can walk forward"
-
-Maximum 2 sentences. Be friendly and helpful."""
+Provide walking directions. Use natural language (nearby, ahead, left, right).
+If danger, say "Stop!" first. 1-2 sentences only."""
 
         nav_payload = {
             "model": self.model_name,

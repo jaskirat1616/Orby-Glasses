@@ -131,7 +131,7 @@ slam:
   visualize: true
   orb_features: 1000
   fast_threshold: 20
-  min_matches: 15
+  min_matches: 10  # Lowered from 15 for more reliable tracking
   motion_model: true
   pose_smoothing: 0.7
   temporal_consistency_check: true

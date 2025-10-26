@@ -384,22 +384,29 @@ class SLAMSystem:
                     good_matches.append(m)
 
         # ACCURACY IMPROVEMENT: Cross-check matching for bidirectional consistency
-        if len(good_matches) > self.min_matches:
-            # Verify matches are consistent both ways
-            reverse_matches = self.flann_matcher.knnMatch(self.last_descriptors, descriptors, k=1)
-            reverse_map = {m[0].trainIdx: m[0].queryIdx for m in reverse_matches if len(m) > 0}
+        # Only do cross-check if we have plenty of matches (to avoid being too strict)
+        if len(good_matches) > self.min_matches * 2:
+            try:
+                # Verify matches are consistent both ways
+                reverse_matches = self.flann_matcher.knnMatch(self.last_descriptors, descriptors, k=1)
+                reverse_map = {m[0].trainIdx: m[0].queryIdx for m in reverse_matches if len(m) > 0}
 
-            # Keep only matches that are consistent in both directions
-            consistent_matches = []
-            for m in good_matches:
-                if m.queryIdx in reverse_map and reverse_map[m.queryIdx] == m.trainIdx:
-                    consistent_matches.append(m)
+                # Keep only matches that are consistent in both directions
+                consistent_matches = []
+                for m in good_matches:
+                    if m.queryIdx in reverse_map and reverse_map[m.queryIdx] == m.trainIdx:
+                        consistent_matches.append(m)
 
-            # Use consistent matches if we have enough, otherwise keep all good matches
-            if len(consistent_matches) >= self.min_matches:
-                good_matches = consistent_matches
+                # Use consistent matches if we have enough, otherwise keep all good matches
+                if len(consistent_matches) >= self.min_matches:
+                    good_matches = consistent_matches
+                    self.logger.debug(f"Cross-check: {len(good_matches)} -> {len(consistent_matches)} matches")
+            except Exception as e:
+                self.logger.warning(f"Cross-check matching failed: {e}, using regular matches")
+                # Keep original good_matches if cross-check fails
 
         num_matches = len(good_matches)
+        self.logger.debug(f"SLAM Track: {num_matches} good matches found")
 
         # Initialize defaults
         position = self.current_pose[:3, 3].tolist()
@@ -413,6 +420,7 @@ class SLAMSystem:
 
         if num_matches < self.min_matches:
             # Use predicted pose when tracking is weak
+            self.logger.warning(f"SLAM: Weak tracking - only {num_matches} matches (min {self.min_matches})")
             if num_matches >= 10:
                 # Partial tracking - blend prediction with motion model
                 self.current_pose = predicted_pose
@@ -422,6 +430,7 @@ class SLAMSystem:
                 self.current_pose = predicted_pose
                 tracking_quality = 0.1
                 self.lost_frames += 1
+                self.logger.warning(f"SLAM: Very weak tracking - using motion prediction")
         else:
             # Good tracking - estimate pose from features
             if len(good_matches) >= 5:  # Need at least 5 points for PnP
