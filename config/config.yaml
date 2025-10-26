@@ -129,9 +129,9 @@ slam:
   grid_resolution: 0.2
   save_maps: true
   visualize: true
-  orb_features: 1000
-  fast_threshold: 20
-  min_matches: 10  # Lowered from 15 for more reliable tracking
+  orb_features: 1500  # More features for better tracking (was 1000)
+  fast_threshold: 15  # Lower = more features detected (was 20)
+  min_matches: 8  # Even lower for easier tracking (was 10)
   motion_model: true
   pose_smoothing: 0.7
   temporal_consistency_check: true

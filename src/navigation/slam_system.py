@@ -374,36 +374,17 @@ class SLAMSystem:
         # ACCURACY IMPROVEMENT: Better feature matching with stricter ratio test
         matches = self.flann_matcher.knnMatch(descriptors, self.last_descriptors, k=2)
 
-        # Apply stricter Lowe's ratio test (0.65 instead of 0.7) for higher quality matches
+        # Apply Lowe's ratio test - relaxed for better tracking
         good_matches = []
         for match_pair in matches:
             if len(match_pair) == 2:
                 m, n = match_pair
-                # ACCURACY: Stricter ratio test = fewer but better matches
-                if m.distance < 0.65 * n.distance:
+                # Relaxed ratio test for more matches (0.75 instead of 0.65)
+                if m.distance < 0.75 * n.distance:
                     good_matches.append(m)
 
-        # ACCURACY IMPROVEMENT: Cross-check matching for bidirectional consistency
-        # Only do cross-check if we have plenty of matches (to avoid being too strict)
-        if len(good_matches) > self.min_matches * 2:
-            try:
-                # Verify matches are consistent both ways
-                reverse_matches = self.flann_matcher.knnMatch(self.last_descriptors, descriptors, k=1)
-                reverse_map = {m[0].trainIdx: m[0].queryIdx for m in reverse_matches if len(m) > 0}
-
-                # Keep only matches that are consistent in both directions
-                consistent_matches = []
-                for m in good_matches:
-                    if m.queryIdx in reverse_map and reverse_map[m.queryIdx] == m.trainIdx:
-                        consistent_matches.append(m)
-
-                # Use consistent matches if we have enough, otherwise keep all good matches
-                if len(consistent_matches) >= self.min_matches:
-                    good_matches = consistent_matches
-                    self.logger.debug(f"Cross-check: {len(good_matches)} -> {len(consistent_matches)} matches")
-            except Exception as e:
-                self.logger.warning(f"Cross-check matching failed: {e}, using regular matches")
-                # Keep original good_matches if cross-check fails
+        # DISABLED: Cross-check matching (too strict, prevents tracking)
+        # Keeping it simple for better tracking reliability
 
         num_matches = len(good_matches)
         self.logger.debug(f"SLAM Track: {num_matches} good matches found")
@@ -446,31 +427,18 @@ class SLAMSystem:
                     object_points = np.float32(object_points)
                     image_points = np.float32(image_points)
 
-                    # ACCURACY IMPROVEMENT: Better pose estimation with refined RANSAC
-                    # Use more iterations and stricter threshold for accurate tracking
+                    # Pose estimation with RANSAC - balanced for speed and tracking
                     success, rvec, tvec, inliers = cv2.solvePnPRansac(
                         object_points, image_points, self.K, None,
-                        iterationsCount=200,  # More iterations for accuracy (was 100)
-                        reprojectionError=2.0,  # Stricter threshold (was 3.0)
-                        confidence=0.99,  # Higher confidence requirement
+                        iterationsCount=100,  # Balanced iterations (was 200)
+                        reprojectionError=3.0,  # Relaxed for better tracking (was 2.0)
+                        confidence=0.95,  # Relaxed confidence (was 0.99)
                         flags=cv2.SOLVEPNP_ITERATIVE  # Iterative refinement
                     )
 
-                    if success and inliers is not None and len(inliers) >= 5:
-                        # ACCURACY IMPROVEMENT: Refine pose using inliers only
-                        inlier_object_points = object_points[inliers.flatten()]
-                        inlier_image_points = image_points[inliers.flatten()]
-
-                        # Refine with iterative PnP using only inliers
-                        refined_success, rvec_refined, tvec_refined = cv2.solvePnP(
-                            inlier_object_points, inlier_image_points, self.K, None,
-                            rvec, tvec,  # Use RANSAC result as initial guess
-                            useExtrinsicGuess=True,
-                            flags=cv2.SOLVEPNP_ITERATIVE
-                        )
-
-                        if refined_success:
-                            rvec, tvec = rvec_refined, tvec_refined
+                    if success and inliers is not None and len(inliers) >= 4:
+                        # Simpler pose without extra refinement for speed
+                        # Just use RANSAC result directly
 
                         # Create transformation matrix with bounds checking
                         R, _ = cv2.Rodrigues(rvec)
@@ -501,18 +469,12 @@ class SLAMSystem:
                         else:
                             T[:3, 3] = tvec_flat
 
-                        # ACCURACY IMPROVEMENT: Smooth pose with exponential filter
-                        # Blend new pose with smoothed history for stability
-                        alpha = 0.3  # Smoothing factor (lower = more smoothing)
+                        # Light smoothing only
                         if len(self.pose_history) > 0:
                             prev_pose = self.pose_history[-1]
-                            # Smooth translation
+                            # Very light smoothing (alpha = 0.7 means mostly use new pose)
+                            alpha = 0.7
                             T[:3, 3] = alpha * T[:3, 3] + (1 - alpha) * prev_pose[:3, 3]
-                            # Smooth rotation (interpolate rotation matrices)
-                            T[:3, :3] = alpha * T[:3, :3] + (1 - alpha) * prev_pose[:3, :3]
-                            # Re-orthogonalize rotation matrix
-                            U, _, Vt = np.linalg.svd(T[:3, :3])
-                            T[:3, :3] = U @ Vt
 
                         # Convert back to float32 safely
                         self.current_pose = T.astype(np.float32)
