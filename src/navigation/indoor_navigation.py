@@ -436,6 +436,33 @@ class IndoorNavigator:
         """Get all saved locations."""
         return self.saved_locations.copy()
 
+    def navigate_to_location(self, location_name: str) -> bool:
+        """
+        Navigate to a saved location by name.
+
+        Args:
+            location_name: Name of the saved location
+
+        Returns:
+            True if navigation started successfully, False otherwise
+        """
+        if location_name not in self.saved_locations:
+            logging.error(f"Location '{location_name}' not found. Available: {list(self.saved_locations.keys())}")
+            return False
+
+        target_position = self.saved_locations[location_name]
+        goal = NavigationGoal(
+            name=location_name,
+            position=target_position,
+            timestamp=time.time()
+        )
+
+        return self.set_goal(goal)
+
+    def list_saved_locations(self) -> List[str]:
+        """Get list of saved location names."""
+        return list(self.saved_locations.keys())
+
     def clear_goal(self):
         """Clear current navigation goal."""
         self.current_goal = None

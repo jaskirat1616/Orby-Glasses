@@ -221,10 +221,17 @@ Tell someone who can't see what they need to know to walk safely. Warn about dan
         # Create detection context
         detection_context = self._create_detection_context(detections)
 
-        # Single direct query - avoid multi-step that adds labels
-        prompt = f"""Look at this image. Objects detected: {detection_context}
+        # Enhanced prompt for context-aware navigation
+        prompt = f"""You are assisting a blind person navigate. Analyze this scene.
 
-Give walking guidance for a blind person. Mention dangers and where to go. Be brief."""
+Objects detected: {detection_context}
+
+Provide in under 25 words:
+1. Environment type (room, hallway, outdoor, etc.)
+2. Immediate obstacles with LEFT/RIGHT/AHEAD direction
+3. Safest path to take
+
+Be specific and actionable. Focus on navigation, not description."""
 
         payload = {
             "model": self.model_name,

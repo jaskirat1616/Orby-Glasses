@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # OrbyGlasses Launcher
+# Usage: ./run.sh [--fast] [--nav]
 
 # Colors
 RED='\033[0;31m'
@@ -11,12 +12,29 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 NC='\033[0m'
 
+# Parse arguments
+FAST_MODE=false
+NAV_MODE=false
+for arg in "$@"; do
+    if [ "$arg" = "--fast" ]; then
+        FAST_MODE=true
+    elif [ "$arg" = "--nav" ]; then
+        NAV_MODE=true
+    fi
+done
+
 clear
 
 echo ""
 echo -e "${BOLD}${CYAN}╔═══════════════════════════════════════════════════════════╗${NC}"
 echo -e "${BOLD}${CYAN}║                                                           ║${NC}"
 echo -e "${BOLD}${CYAN}║              OrbyGlasses Navigation System                ║${NC}"
+if [ "$FAST_MODE" = true ]; then
+echo -e "${BOLD}${CYAN}║                    (Fast Mode)                            ║${NC}"
+fi
+if [ "$NAV_MODE" = true ]; then
+echo -e "${BOLD}${CYAN}║              (Navigation Panel Enabled)                   ║${NC}"
+fi
 echo -e "${BOLD}${CYAN}║                                                           ║${NC}"
 echo -e "${BOLD}${CYAN}╚═══════════════════════════════════════════════════════════╝${NC}"
 echo ""
@@ -53,27 +71,56 @@ echo -e "${GREEN}✓ Camera ready${NC}"
 mkdir -p data/logs data/maps models/yolo models/depth
 
 echo ""
-echo -e "${BOLD}System Features (2024-2025 State-of-the-Art):${NC}"
-echo -e "  ${GREEN}✓${NC} YOLOv11n: Latest real-time object detection"
-echo -e "  ${GREEN}✓${NC} Apple Depth Pro: Sharpest depth estimation (2.25MP in <0.3s)"
-echo -e "  ${GREEN}✓${NC} Visual SLAM: Indoor navigation & mapping"
-echo -e "  ${GREEN}✓${NC} Enhanced Visualizations: Depth zones, safety arrows"
-echo -e "  ${GREEN}✓${NC} Smart audio: Clear voice directions with priority alerts"
-echo -e "  ${GREEN}✓${NC} Performance: 15-25 FPS real-time on Apple Silicon"
+
+if [ "$FAST_MODE" = true ]; then
+    echo -e "${BOLD}Fast Mode Features:${NC}"
+    echo -e "  ${GREEN}✓${NC} Object detection: YOLOv11n"
+    echo -e "  ${GREEN}✓${NC} Depth estimation: 320x240 resolution"
+    echo -e "  ${GREEN}✓${NC} SLAM navigation"
+    echo -e "  ${GREEN}✓${NC} Audio guidance"
+    echo -e "  ${GREEN}✓${NC} Performance: 20-30 FPS"
+else
+    echo -e "${BOLD}System Features:${NC}"
+    echo -e "  ${GREEN}✓${NC} YOLOv11n: Real-time object detection"
+    echo -e "  ${GREEN}✓${NC} Apple Depth Pro: High-quality depth estimation"
+    echo -e "  ${GREEN}✓${NC} Visual SLAM: Indoor navigation & mapping"
+    echo -e "  ${GREEN}✓${NC} Audio guidance with priority alerts"
+    echo -e "  ${GREEN}✓${NC} Performance: 15-25 FPS"
+fi
+
+if [ "$NAV_MODE" = true ]; then
+    echo ""
+    echo -e "${BOLD}Navigation Panel:${NC}"
+    echo -e "  ${GREEN}✓${NC} Overhead compass view"
+    echo -e "  ${GREEN}✓${NC} Real-time position tracking"
+    echo -e "  ${GREEN}✓${NC} Indoor map display"
+fi
+
 echo ""
 echo -e "${BOLD}For Blind & Visually Impaired Users:${NC}"
 echo -e "  • Clear audio directions with distance information"
 echo -e "  • Immediate danger zone warnings (<1m)"
 echo -e "  • Safe path suggestions with directional guidance"
-echo -e "  • Visual depth zones (red=danger, yellow=caution, green=safe)"
 echo ""
 echo -e "${BOLD}Controls:${NC} Press 'q' to stop | Arrow keys for SLAM controls"
 echo ""
-echo -e "${GREEN}Starting OrbyGlasses with enhanced visualizations...${NC}"
+echo -e "${GREEN}Starting OrbyGlasses...${NC}"
 echo ""
 
-# Run system with SLAM in separate window, larger text, and enhanced depth colors
-python3 src/main.py --separate-slam
+# Run system
+if [ "$FAST_MODE" = true ]; then
+    if [ "$NAV_MODE" = true ]; then
+        python3 src/main.py --config config/config_fast.yaml
+    else
+        python3 src/main.py --config config/config_fast.yaml
+    fi
+else
+    if [ "$NAV_MODE" = true ]; then
+        python3 src/main.py
+    else
+        python3 src/main.py --separate-slam
+    fi
+fi
 
 # Cleanup
 echo ""

@@ -1,84 +1,84 @@
-# OrbyGlasses Config - Simple Settings
+# OrbyGlasses Configuration - Standard Mode
 
 # Camera Settings
 camera:
   source: 0       # 0 = webcam, or URL for IP camera
-  width: 320      # Reduced for better performance
-  height: 240     # Reduced for better performance
-  fps: 20         # Lower FPS for better performance
+  width: 320
+  height: 240
+  fps: 20
 
-# BREAKTHROUGH AI MODELS - Industry-Leading 2025 Technology
+# AI Models
 models:
-  # Object Detection - YOLOv11n (SOTA 2024)
+  # Object Detection - YOLOv11n
   yolo:
     path: "models/yolo/yolo11n.pt"
-    confidence: 0.55  # Higher = more accurate, fewer false positives (was 0.45)
-    iou_threshold: 0.50  # Higher = better accuracy (was 0.45)
+    confidence: 0.55
+    iou_threshold: 0.50
     device: "mps"
     half_precision: true
 
-  # Depth Estimation - Depth Anything V2 Small (SOTA 2024)
-  # Research: Best accuracy/speed tradeoff (0.22s, MAE 0.454m)
-  # Beats MiDaS 3.1, ZoeDepth, outperforms all competitors
+  # Depth Estimation - Depth Anything V2 Small
   depth:
     path: "depth-anything/Depth-Anything-V2-Small-hf"
     device: "mps"
     half_precision: true
-    max_resolution: 224  # Reduced for speed - still accurate (was 256)
+    max_resolution: 224
 
-  # Vision-Language Model - Moondream2 (Fast 2B param VLM)
-  # Provides scene understanding + navigation guidance
+  # Vision-Language Model - Moondream2
   llm:
     primary: "moondream:latest"
-    vision: "moondream:latest"  # Moondream2: 1.86B params, <3s inference
-    temperature: 0.4  # Lower for more accurate scene understanding (was 0.6)
-    max_tokens: 150  # Increased for detailed analysis (was 100)
-    vlm_enabled: true  # BREAKTHROUGH: Real-time scene understanding
-    scene_analysis_interval: 6  # More frequent for accuracy (was 8s, original 15s)
+    vision: "moondream:latest"
+    temperature: 0.4
+    max_tokens: 150
+    vlm_enabled: true
+    scene_analysis_interval: 6
 
-# Voice Commands (Optional)
+# Voice Commands
 conversation:
-  enabled: false  # Disabled for speed - use audio output instead
+  enabled: true
   model: "gemma3:4b"
-  temperature: 0.6  # Lower for more focused, safety-oriented responses
-  max_tokens: 100  # Reduced for faster responses (blind users need quick answers)
+  temperature: 0.6
+  max_tokens: 100
   voice_input: true
   activation_phrase: "hey orby"
-  check_interval: 0.5  # Faster check interval (non-blocking)
+  check_interval: 0.5
   simple_commands: true
   command_phrases:
     - "what's around me"
     - "is the path clear"
     - "where am I"
+    - "save location"
+    - "take me to"
+    - "help"
 
-# Social Navigation (Optional)
+# Social Navigation
 social_navigation:
   enabled: true
-  region: "us"  # 'us', 'uk', 'japan', etc.
+  region: "us"
   voice_announce: true
 
-# BREAKTHROUGH Audio - Multi-modal Sensory Feedback
+# Audio
 audio:
   tts_engine: "pyttsx3"
-  tts_rate: 190  # Optimized for clarity + speed
-  tts_volume: 1.0  # Full volume
-  echolocation_enabled: false  # Biomimetic audio cues
-  spatial_audio: true  # 3D positional audio
-  adaptive_beaconing_enabled: false  # Dynamic audio beacons
-  beacon_safe_frequency: 440  # Clear path tone
-  beacon_obstacle_frequency: 880  # Obstacle warning tone
-  warning_pulse_rate: 0.12  # Rapid warnings for urgent hazards
-  door_beacon: 660  # Door detection
-  stairs_beacon: 1320  # Stair warning
-  clear_path_beacon: 330  # Safe navigation tone
+  tts_rate: 190
+  tts_volume: 1.0
+  echolocation_enabled: false
+  spatial_audio: true
+  adaptive_beaconing_enabled: false
+  beacon_safe_frequency: 440
+  beacon_obstacle_frequency: 880
+  warning_pulse_rate: 0.12
+  door_beacon: 660
+  stairs_beacon: 1320
+  clear_path_beacon: 330
 
 # Echolocation
 echolocation:
-  room_dimensions: [10, 10, 3]  # meters
+  room_dimensions: [10, 10, 3]
   sample_rate: 16000
   duration: 0.1
 
-# RL Prediction (Optional)
+# RL Prediction
 prediction:
   enabled: false
   model_path: "models/rl/ppo_navigation.zip"
@@ -88,32 +88,32 @@ prediction:
 # Safety
 safety:
   min_safe_distance: 1.5  # meters
-  danger_distance: 1.0    # meters
-  caution_distance: 2.5   # meters
+  danger_distance: 1.0
+  caution_distance: 2.5
   emergency_stop_key: "q"
   max_obstacle_alerts: 3
 
 # Logging
 logging:
-  level: "DEBUG"  # WARNING, INFO, or DEBUG
+  level: "DEBUG"
   log_file: "data/logs/orbyglass.log"
   save_detections: false
   save_frames: false
 
-# BREAKTHROUGH Performance - Real-time Multi-sensor Fusion
+# Performance
 performance:
-  audio_update_interval: 1.2  # Fast, responsive feedback
-  danger_audio_interval: 0.25  # CRITICAL: Instant danger alerts
+  audio_update_interval: 1.2
+  danger_audio_interval: 0.25
   stats_interval: 200
-  max_detections: 10  # More for better accuracy (was 5)
-  depth_skip_frames: 2  # Process every 3rd frame - saves 66% time (was 1)
-  frame_skip: 0  # Process all frames for accuracy
-  enable_multithreading: true  # Enable for parallel processing
+  max_detections: 10
+  depth_skip_frames: 2
+  frame_skip: 0
+  enable_multithreading: true
   cache_depth_maps: true
 
-# 3D Mapping - DISABLED
+# 3D Mapping
 mapping3d:
-  enabled: false  # Not needed for navigation
+  enabled: false
   max_depth: 6.0
   voxel_size: 0.15
   subsample_step: 8
@@ -122,16 +122,16 @@ mapping3d:
   fy: 500
   skip_bbox: true
 
-# BREAKTHROUGH: Real-time Visual SLAM for Environment Mapping
+# Visual SLAM
 slam:
-  enabled: true  # ORB-SLAM3 style real-time mapping
+  enabled: true
   grid_size: [300, 300]
   grid_resolution: 0.2
   save_maps: true
   visualize: true
-  orb_features: 1500  # More features for better tracking (was 1000)
-  fast_threshold: 15  # Lower = more features detected (was 20)
-  min_matches: 8  # Even lower for easier tracking (was 10)
+  orb_features: 1500
+  fast_threshold: 15
+  min_matches: 8
   motion_model: true
   pose_smoothing: 0.7
   temporal_consistency_check: true
@@ -145,45 +145,64 @@ slam:
   loop_closure: true
   bundle_adjustment: true
 
-# BREAKTHROUGH: PathFinder-style Obstacle-Free Navigation
+# Indoor Navigation
 indoor_navigation:
-  enabled: true  # DFS path planning for longest obstacle-free route
+  enabled: true
   path_planning: true
   save_locations: true
 
-# Trajectory Prediction - DISABLED
+# Trajectory Prediction
 trajectory_prediction:
-  enabled: false  # Too complex
+  enabled: false
   max_history: 10
   prediction_horizon: 3
   time_step: 0.5
   visualize: false
   collision_warning: true
 
-# 3D Occupancy Grid - DISABLED
+# 3D Occupancy Grid
 occupancy_grid_3d:
-  enabled: false  # Not needed
+  enabled: false
   grid_size: [10.0, 10.0, 3.0]
   resolution: 0.1
   max_range: 5.0
   visualize: false
 
-# Point Cloud - DISABLED
+# Point Cloud
 point_cloud_viewer:
-  enabled: false  # Visual feature, not for blind users
+  enabled: false
   max_points: 100000
   subsample: 3
   min_depth: 0.1
   max_depth: 5.0
 
-# Movement Visualizer - DISABLED
+# Movement Visualizer
 movement_visualizer:
-  enabled: false  # Visual feature, not needed
+  enabled: false
   canvas_size: [700, 700]
   trail_length: 200
   show_stats: true
 
-# Advanced Navigation Panel - Robotics-style multi-view display
+# Haptic Feedback
+haptic:
+  enabled: false  # Enable if haptic device connected
+  device_type: "generic"  # generic, vuzix, xreal
+  num_motors: 10
+  intensity: 0.7
+  patterns:
+    danger_left: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    danger_right: [0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
+    danger_ahead: [0, 0, 0, 0, 1, 1, 0, 0, 0, 0]
+    all_clear: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+# Adaptive System Features
+adaptive_system:
+  time_based_adjustments: true  # Auto-adjust for night/day
+  emergency_mode_enabled: true  # Enable emergency alert (press 'e')
+  battery_monitoring: true  # Auto battery saver
+  battery_saver_threshold: 20  # Activate below 20%
+
+# Visualization
 visualization:
-  advanced_nav_panel: true  # Show advanced navigation panel with overhead view
-  use_fast_depth: true  # Fast depth visualization
+  advanced_nav_panel: true
+  use_fast_depth: true

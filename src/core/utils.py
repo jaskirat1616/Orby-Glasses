@@ -145,6 +145,12 @@ class AudioManager:
         self.tts_thread.start()
         print("✓ TTS worker thread started")
 
+        # Thread-safe queue for audio playback (for beaconing)
+        self.audio_queue = queue.Queue()
+        self.audio_thread = threading.Thread(target=self._audio_worker, daemon=True)
+        self.audio_thread.start()
+        print("✓ Audio worker thread started")
+
     def _tts_worker(self):
         """Worker thread for TTS to avoid blocking."""
         import subprocess
@@ -188,6 +194,49 @@ class AudioManager:
             except Exception as e:
                 print(f"✗ TTS worker error: {e}")
                 self.is_speaking = False
+
+    def _audio_worker(self):
+        """Worker thread for playing audio from queue to avoid blocking."""
+        import pyaudio
+        print("Audio worker thread running...")
+        p = None
+        stream = None
+
+        while True:
+            try:
+                audio_data, sample_rate = self.audio_queue.get(timeout=1)
+                if audio_data is not None:
+                    if p is None:
+                        p = pyaudio.PyAudio()
+                    
+                    # Open stream if not already open or if parameters changed
+                    if stream is None or stream.is_stopped() or stream.get_sample_rate() != sample_rate or stream.get_channels() != (2 if len(audio_data.shape) > 1 else 1):
+                        if stream is not None:
+                            stream.stop_stream()
+                            stream.close()
+                        stream = p.open(format=pyaudio.paInt64,
+                                      channels=2 if len(audio_data.shape) > 1 else 1,
+                                      rate=sample_rate,
+                                      output=True)
+                    
+                    stream.write(audio_data.tobytes())
+                    print(f"✓ Played audio beacon")
+
+                self.audio_queue.task_done()
+            except queue.Empty:
+                continue
+            except Exception as e:
+                print(f"✗ Audio worker error: {e}")
+            finally:
+                # Ensure stream and pyaudio are closed on exit or error
+                if not self.audio_queue.empty(): # Only close if queue is empty
+                    if stream is not None:
+                        stream.stop_stream()
+                        stream.close()
+                        stream = None
+                    if p is not None:
+                        p.terminate()
+                        p = None
 
     def speak(self, text: str, priority: bool = False):
         """
@@ -241,7 +290,7 @@ class AudioManager:
 
     def play_sound(self, audio_data: np.ndarray, sample_rate: int = 16000):
         """
-        Play audio from numpy array.
+        Queue audio from numpy array for non-blocking playback.
 
         Args:
             audio_data: Audio samples as numpy array
@@ -251,19 +300,9 @@ class AudioManager:
             # Normalize audio
             audio_data = np.clip(audio_data, -1, 1)
             audio_data = (audio_data * 32767).astype(np.int16)
-
-            # Play using PyAudio
-            p = pyaudio.PyAudio()
-            stream = p.open(format=pyaudio.paInt16,
-                          channels=2 if len(audio_data.shape) > 1 else 1,
-                          rate=sample_rate,
-                          output=True)
-            stream.write(audio_data.tobytes())
-            stream.stop_stream()
-            stream.close()
-            p.terminate()
+            self.audio_queue.put((audio_data, sample_rate))
         except Exception as e:
-            logging.error(f"Error playing sound: {e}")
+            logging.error(f"Error queuing sound: {e}")
 
     def stop(self):
         """Stop all audio playback."""
@@ -271,6 +310,12 @@ class AudioManager:
         while not self.tts_queue.empty():
             try:
                 self.tts_queue.get_nowait()
+            except queue.Empty:
+                break
+        # Clear audio queue
+        while not self.audio_queue.empty():
+            try:
+                self.audio_queue.get_nowait()
             except queue.Empty:
                 break
 

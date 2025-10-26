@@ -1,14 +1,14 @@
-# OrbyGlasses - Fast Performance Config
-# Optimized for 20+ FPS on any hardware
+# OrbyGlasses Configuration - Fast Mode
+# Optimized for 20-30 FPS
 
-# Camera Settings - Lower resolution for speed
+# Camera Settings
 camera:
   source: 0
-  width: 320       # Reduced from 640 (4x faster)
-  height: 240      # Reduced from 480
+  width: 320
+  height: 240
   fps: 30
 
-# Models - Optimized
+# AI Models
 models:
   yolo:
     path: "models/yolo/yolo11n.pt"
@@ -21,43 +21,43 @@ models:
     path: "depth-anything/Depth-Anything-V2-Small-hf"
     device: "mps"
     half_precision: true
-    max_resolution: 256  # Much lower for speed
-    use_v2: false  # Disable for now (slow)
+    max_resolution: 256
+    use_v2: false
 
   llm:
     primary: "gemma3:4b"
-    vision: "moondream"
+    vision: "moondream:latest"
     temperature: 0.6
     max_tokens: 100
-    vlm_enabled: false  # Disable VLM (slow)
+    vlm_enabled: true
     scene_analysis_interval: 30
 
-# Voice Commands - Disabled for speed
+# Voice Commands
 conversation:
   enabled: false
 
 # Social Navigation
 social_navigation:
-  enabled: false  # Disable (not critical)
+  enabled: false
   region: "us"
   voice_announce: false
 
-# Audio - Keep simple
+# Audio
 audio:
   tts_engine: "pyttsx3"
   tts_rate: 200
   tts_volume: 1.0
-  echolocation_enabled: false  # Disable (not critical)
+  echolocation_enabled: false
   spatial_audio: false
   adaptive_beaconing_enabled: false
 
-# Echolocation - Disabled
+# Echolocation
 echolocation:
   room_dimensions: [10, 10, 3]
   sample_rate: 16000
   duration: 0.1
 
-# RL Prediction - Disabled
+# RL Prediction
 prediction:
   enabled: false
 
@@ -69,74 +69,74 @@ safety:
   emergency_stop_key: "q"
   max_obstacle_alerts: 3
 
-# Logging - Minimal
+# Logging
 logging:
-  level: "ERROR"  # Only errors
+  level: "ERROR"
   log_file: "data/logs/orbyglass.log"
   save_detections: false
   save_frames: false
 
-# Performance - Optimized for SPEED
+# Performance
 performance:
-  audio_update_interval: 2.0  # Less frequent audio
-  danger_audio_interval: 0.5
-  stats_interval: 500  # Less frequent stats
-  max_detections: 5  # Fewer objects to track
-  depth_skip_frames: 3  # Skip MORE frames (every 4th)
-  frame_skip: 0
+  audio_update_interval: 1.5
+  danger_audio_interval: 0.4
+  stats_interval: 500
+  max_detections: 4
+  depth_skip_frames: 1
+  frame_skip: 1
   enable_multithreading: true
   cache_depth_maps: true
 
-# 3D Mapping - DISABLED
+# 3D Mapping
 mapping3d:
   enabled: false
 
-# SLAM - SIMPLIFIED
+# Visual SLAM
 slam:
   enabled: true
-  use_simple: false  # Use regular SLAM but optimized
-  grid_size: [200, 200]  # Smaller grid
-  grid_resolution: 0.2  # Lower resolution
+  use_simple: false
+  grid_size: [200, 200]
+  grid_resolution: 0.2
   save_maps: false
-  visualize: false  # Disable SLAM window
-  orb_features: 500  # Fewer features (was 2000)
+  visualize: false
+  orb_features: 500
   fast_threshold: 20
-  min_matches: 10  # Lower threshold
+  min_matches: 10
   motion_model: true
   pose_smoothing: 0.7
-  temporal_consistency_check: false  # Disable extra checks
+  temporal_consistency_check: false
   max_position_jump: 0.5
   max_rotation_jump: 0.5
   min_tracked_features: 15
-  keyframe_threshold: 50  # Less frequent keyframes
+  keyframe_threshold: 50
   reprojection_threshold: 3.0
   min_depth: 0.1
   max_depth: 10.0
-  loop_closure: false  # Disable (slow)
-  bundle_adjustment: false  # Disable (slow)
+  loop_closure: false
+  bundle_adjustment: false
 
-# Indoor Navigation - Simplified
+# Indoor Navigation
 indoor_navigation:
-  enabled: false  # Disable for speed
+  enabled: false
   path_planning: false
   save_locations: false
 
-# Trajectory Prediction - DISABLED
+# Trajectory Prediction
 trajectory_prediction:
   enabled: false
 
-# 3D Occupancy Grid - DISABLED
+# 3D Occupancy Grid
 occupancy_grid_3d:
   enabled: false
 
-# Point Cloud - DISABLED
+# Point Cloud
 point_cloud_viewer:
   enabled: false
 
-# Movement Visualizer - DISABLED
+# Movement Visualizer
 movement_visualizer:
   enabled: false
 
-# Haptic - DISABLED
+# Haptic
 haptic:
   enabled: false
