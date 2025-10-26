@@ -91,11 +91,19 @@ class AdvancedNavigationPanel:
             if len(self.trajectory) > self.max_trajectory_points:
                 self.trajectory.pop(0)
 
-            # Extract heading from pose matrix if available
+            # Extract heading from pose matrix if available (FIXED for accuracy)
             if 'pose' in slam_result:
                 pose = slam_result['pose']
-                # Extract yaw from rotation matrix (simplified)
+                # Properly extract yaw from rotation matrix
+                # For a 4x4 transformation matrix, rotation is in top-left 3x3
+                # Yaw (rotation around Z-axis) is: atan2(R[1,0], R[0,0])
                 self.current_heading = np.arctan2(pose[1, 0], pose[0, 0])
+            elif len(self.trajectory) > 1:
+                # Fallback: Calculate heading from trajectory movement
+                dx = self.trajectory[-1][0] - self.trajectory[-2][0]
+                dy = self.trajectory[-1][1] - self.trajectory[-2][1]
+                if abs(dx) > 0.01 or abs(dy) > 0.01:  # Only update if moved
+                    self.current_heading = np.arctan2(dy, dx)
 
         # Update obstacles from detections
         self.obstacles = []
@@ -136,27 +144,28 @@ class AdvancedNavigationPanel:
         panel = np.full((self.height, self.width, 3), self.BG_COLOR, dtype=np.uint8)
 
         # Layout: Overhead view (top), Compass (middle), Info (bottom)
+        # FIXED: Add more spacing to prevent overlap
         y_offset = 10
 
         # 1. Overhead birds-eye view
         overhead = self._render_overhead_view()
         panel[y_offset:y_offset+self.overhead_size,
               (self.width-self.overhead_size)//2:(self.width+self.overhead_size)//2] = overhead
-        y_offset += self.overhead_size + 20
+        y_offset += self.overhead_size + 15  # Reduced spacing
 
-        # 2. Compass and heading
+        # 2. Compass and heading (smaller for more space)
         compass = self._render_compass()
         compass_x = (self.width - self.compass_size) // 2
         panel[y_offset:y_offset+self.compass_size,
               compass_x:compass_x+self.compass_size] = compass
-        y_offset += self.compass_size + 20
+        y_offset += self.compass_size + 15  # Reduced spacing
 
-        # 3. Navigation info panel
+        # 3. Navigation info panel (more space for text)
         self._render_info_panel(panel, y_offset)
 
         # Title
-        cv2.putText(panel, "NAVIGATION", (10, 25),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, self.WHITE, 2)
+        cv2.putText(panel, "NAV", (10, 25),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, self.WHITE, 2)
 
         return panel
 
@@ -316,54 +325,53 @@ class AdvancedNavigationPanel:
 
     def _render_info_panel(self, panel: np.ndarray, y_start: int):
         """
-        Render navigation info text panel with bounds checking.
+        Render navigation info text panel with proper spacing (FIXED).
 
         Args:
             panel: Panel image to draw on
             y_start: Y position to start drawing
         """
-        info_x = 15
+        info_x = 10
         y = y_start
-        max_y = self.height - 10  # Leave 10px margin at bottom
+        max_y = self.height - 15  # Leave more margin at bottom
+        line_spacing = 16  # FIXED: Consistent spacing between lines
 
-        # Helper to check bounds before drawing
-        def safe_text(text, pos_y, color, size=0.4, bold=1):
-            if pos_y < max_y:
+        # Helper to check bounds and handle spacing properly
+        def safe_text(text, pos_y, color, size=0.35, bold=1):
+            if pos_y + line_spacing < max_y:
                 cv2.putText(panel, text, (info_x, pos_y),
                            cv2.FONT_HERSHEY_SIMPLEX, size, color, bold)
-                return pos_y + int(20 * size)
+                return pos_y + line_spacing
             return pos_y
 
-        # Position
+        # Position (compact format)
         x, y_pos, z = self.current_position
-        y = safe_text(f"Position:", y, self.CYAN, 0.45, 1)
-        y = safe_text(f"  X: {x:6.2f}m", y, self.WHITE, 0.35, 1)
-        y = safe_text(f"  Y: {y_pos:6.2f}m", y, self.WHITE, 0.35, 1)
-        y += 5
+        y = safe_text(f"Pos: {x:.1f}, {y_pos:.1f}m", y, self.CYAN, 0.38, 1)
+        y += 3
 
         # Heading
         heading_deg = int(np.degrees(self.current_heading) % 360)
-        y = safe_text(f"Heading: {heading_deg}", y, self.CYAN, 0.45, 1)
-        y += 5
+        y = safe_text(f"Heading: {heading_deg}", y, self.CYAN, 0.38, 1)
+        y += 3
 
         # Distance traveled
         distance = sum(np.sqrt((self.trajectory[i+1][0] - self.trajectory[i][0])**2 +
                               (self.trajectory[i+1][1] - self.trajectory[i][1])**2)
                       for i in range(len(self.trajectory)-1)) if len(self.trajectory) > 1 else 0
-        y = safe_text(f"Distance: {distance:.1f}m", y, self.CYAN, 0.45, 1)
+        y = safe_text(f"Dist: {distance:.1f}m", y, self.CYAN, 0.38, 1)
         y += 5
 
         # Obstacles detected
         danger_obs = sum(1 for obs in self.obstacles if obs['depth'] < 1.0)
         caution_obs = sum(1 for obs in self.obstacles if 1.0 <= obs['depth'] < 2.0)
 
-        y = safe_text(f"Obstacles:", y, self.CYAN, 0.45, 1)
+        y = safe_text(f"Obstacles:", y, self.CYAN, 0.38, 1)
         y = safe_text(f"  Danger: {danger_obs}", y, self.RED, 0.35, 1)
         y = safe_text(f"  Caution: {caution_obs}", y, self.YELLOW, 0.35, 1)
         y += 5
 
         # Goal info
-        if self.goal_position and y < max_y:
+        if self.goal_position and y + (line_spacing * 3) < max_y:
             # Calculate distance and bearing to goal
             dx = self.goal_position[0] - self.current_position[0]
             dy = self.goal_position[1] - self.current_position[1]
@@ -371,9 +379,9 @@ class AdvancedNavigationPanel:
             bearing_to_goal = np.arctan2(dy, dx)
             bearing_deg = int(np.degrees(bearing_to_goal) % 360)
 
-            y = safe_text(f"Goal:", y, self.PURPLE, 0.45, 1)
-            y = safe_text(f"  Dist: {dist_to_goal:.2f}m", y, self.WHITE, 0.35, 1)
-            y = safe_text(f"  Bearing: {bearing_deg}", y, self.WHITE, 0.35, 1)
+            y = safe_text(f"Goal:", y, self.PURPLE, 0.38, 1)
+            y = safe_text(f"  {dist_to_goal:.1f}m", y, self.WHITE, 0.35, 1)
+            y = safe_text(f"  {bearing_deg}", y, self.WHITE, 0.35, 1)
 
     def set_goal(self, x: float, y: float):
         """Set navigation goal position."""
