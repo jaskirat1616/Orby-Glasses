@@ -216,12 +216,18 @@ Be specific and detailed."""
         # Second pass: Generate navigation guidance based on analysis
         question2 = f"""Based on this scene: {scene_analysis}
 
-You are guiding a BLIND person. Give them navigation instructions:
-- If DANGER (stairs, drop-off, immediate obstacle): "STOP! [danger] at [distance] [direction]."
-- If obstacles present: Warn and suggest safe alternative
-- If clear: Tell them which direction is safe
+You are guiding a BLIND person using FRIENDLY, natural language.
 
-Use exact spatial terms: "2 meters ahead", "on your left", "directly in front"
+CRITICAL - NO NUMBERS:
+- Say "very close", "nearby", "ahead", "in the distance" (NOT "2 meters", "5 feet")
+- Say "to your left", "to your right", "in front" (NOT "90 degrees")
+- Be calm and conversational
+
+Examples:
+- "Stop! There's a chair very close ahead, step to your right"
+- "Path is clear ahead, you can continue walking"
+- "There's a table nearby on your left"
+
 Maximum 2 sentences. What should they do RIGHT NOW?"""
 
         with torch.no_grad():
@@ -283,14 +289,18 @@ Be thorough and precise. This person cannot see."""
 
 DETECTED OBJECTS: {detection_context}
 
-You are guiding a BLIND person. Generate navigation instructions:
+You are guiding a BLIND person. Generate FRIENDLY navigation instructions:
 
-RULES:
-- If IMMEDIATE DANGER (stairs, drop-off, obstacle <1m): "STOP! [danger] at [exact distance] [direction]."
-- If obstacles nearby (1-2m): "Caution. [object] at [distance] [direction]. Safe path: [specific instruction]."
-- If path clear: "Path clear [direction]. [Brief landmark for orientation]."
+CRITICAL RULES - NO NUMBERS:
+- Use words: "very close", "nearby", "ahead", "in the distance" (NEVER "2m", "5 feet", etc.)
+- Use words: "to your left", "to your right", "in front" (NEVER "90 degrees", angles)
+- Be calm, clear, and conversational
+- Examples:
+  * "Stop! There's a wall very close ahead, step to your left"
+  * "A chair is nearby on your right"
+  * "Path is clear, you can walk forward"
 
-Use EXACT measurements and directions. Maximum 2 sentences. Lives depend on accuracy."""
+Maximum 2 sentences. Be friendly and helpful."""
 
         nav_payload = {
             "model": self.model_name,

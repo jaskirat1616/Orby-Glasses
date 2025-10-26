@@ -1122,11 +1122,33 @@ class OrbyGlasses:
                         self.audio_manager.speak(msg, priority=False)
                         self.last_vlm_guidance_time = current_time
 
-                # Fallback to simple message
+                # Fallback to simple message - FRIENDLY for blind users
                 elif len(detections) > 0:
                     if (current_time - self.last_audio_time) > self.audio_interval and not self.audio_manager.is_speaking:
                         closest = min(detections, key=lambda x: x.get('depth', 10))
-                        msg = f"{closest['label']} at {closest['depth']:.1f} meters"
+                        depth = closest['depth']
+                        label = closest['label']
+
+                        # Use friendly distance terms instead of numbers
+                        if depth < 1.5:
+                            distance_term = "nearby"
+                        elif depth < 3.0:
+                            distance_term = "ahead"
+                        elif depth < 5.0:
+                            distance_term = "in the distance"
+                        else:
+                            distance_term = "far ahead"
+
+                        # Determine direction in friendly way
+                        center = closest.get('center', [160, 160])
+                        if center[0] < 106:
+                            direction = "to your left"
+                        elif center[0] > 213:
+                            direction = "to your right"
+                        else:
+                            direction = "in front"
+
+                        msg = f"{label} {distance_term} {direction}"
                         self.logger.info(f"🔊 Audio: \"{msg}\"")
                         self.audio_manager.speak(msg, priority=False)
                         self.last_audio_time = current_time
@@ -1142,8 +1164,12 @@ class OrbyGlasses:
                 self.logger.debug("Frame processed. Displaying windows.")
                 # Clean robot-style display
                 if display:
-                    # Main camera view - already flipped before processing
-                    cv2.imshow('OrbyGlasses', annotated_frame)
+                    # Main camera view - resize to smaller size for cleaner desktop
+                    display_width = 480  # Reduced from 640
+                    display_height = 360  # Reduced from 480
+                    camera_display = cv2.resize(annotated_frame, (display_width, display_height),
+                                               interpolation=cv2.INTER_LINEAR)
+                    cv2.imshow('OrbyGlasses', camera_display)
 
                     # Show SLAM map in a separate window if requested
                     if separate_slam and self.slam_enabled and self.slam_map_viewer and slam_result:
@@ -1151,7 +1177,7 @@ class OrbyGlasses:
                         map_image = self.slam_map_viewer.get_map_image()
                         cv2.imshow('SLAM Map', map_image)  # Keep original SLAM map size
 
-                    # Show depth map in separate window
+                    # Show depth map in separate window - smaller size
                     if depth_map is not None:
                         # Use new fast dark visualizer if available
                         if self.depth_viz:
@@ -1159,8 +1185,13 @@ class OrbyGlasses:
                         else:
                             # Fallback to old method
                             depth_colored = self._create_ultra_clear_depth_colormap(depth_map)
-                        # Display depth map - already flipped before processing
-                        cv2.imshow('Depth Map', depth_colored)
+
+                        # Resize depth map to smaller size
+                        depth_display_width = 480
+                        depth_display_height = 360
+                        depth_display = cv2.resize(depth_colored, (depth_display_width, depth_display_height),
+                                                  interpolation=cv2.INTER_LINEAR)
+                        cv2.imshow('Depth Map', depth_display)
 
                     # Show SLAM map viewer MERGED with Advanced Navigation Panel
                     if self.slam_enabled and self.slam_map_viewer and slam_result and not separate_slam:
