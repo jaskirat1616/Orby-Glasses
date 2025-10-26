@@ -182,3 +182,8 @@ movement_visualizer:
   canvas_size: [700, 700]
   trail_length: 200
   show_stats: true
+
+# Advanced Navigation Panel - Robotics-style multi-view display
+visualization:
+  advanced_nav_panel: true  # Show advanced navigation panel with overhead view
+  use_fast_depth: true  # Fast depth visualization

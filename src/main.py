@@ -78,6 +78,7 @@ from navigation.indoor_navigation import IndoorNavigator
 
 # Visualization
 from visualization.robot_ui import RobotUI
+from visualization.advanced_nav_panel import AdvancedNavigationPanel
 
 # Optional features (loaded conditionally)
 from features.conversation import ConversationManager
@@ -309,6 +310,12 @@ class OrbyGlasses:
         # UI
         self.robot_ui = RobotUI(width=self.frame_width, height=self.frame_height)
         self.logger.info("✓ UI initialized")
+
+        # Advanced Navigation Panel - Robotics-style multi-view display
+        self.advanced_nav_enabled = self.config.get('visualization.advanced_nav_panel', True)
+        if self.advanced_nav_enabled:
+            self.advanced_nav_panel = AdvancedNavigationPanel(panel_width=400, panel_height=600)
+            self.logger.info("✓ Advanced navigation panel initialized")
 
         # Error handler
         self.error_handler = ErrorHandler(self.logger.logger)
@@ -1165,6 +1172,19 @@ class OrbyGlasses:
                     if self.occupancy_grid_enabled and self.occupancy_grid is not None:
                         occupancy_grid_image = self.occupancy_grid.visualize_3d_interactive(slam_result['position'] if slam_result else None)
                         cv2.imshow('Occupancy Grid', occupancy_grid_image)
+
+                    # Show Advanced Navigation Panel (robotics-style multi-view)
+                    if self.advanced_nav_enabled:
+                        # Update panel with latest data (10Hz update, non-blocking)
+                        goal_pos = None
+                        if self.indoor_navigator and hasattr(self.indoor_navigator, 'current_goal'):
+                            goal_pos = self.indoor_navigator.current_goal
+
+                        self.advanced_nav_panel.update(slam_result, detections, goal_pos)
+
+                        # Render and display
+                        nav_panel_image = self.advanced_nav_panel.render()
+                        cv2.imshow('Navigation Panel', nav_panel_image)
 
                 # Save video
                 if video_writer:
