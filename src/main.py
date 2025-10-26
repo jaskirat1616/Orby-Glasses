@@ -1162,29 +1162,31 @@ class OrbyGlasses:
                         # Display depth map - already flipped before processing
                         cv2.imshow('Depth Map', depth_colored)
 
-                    # Show SLAM map viewer (original working version)
+                    # Show SLAM map viewer MERGED with Advanced Navigation Panel
                     if self.slam_enabled and self.slam_map_viewer and slam_result and not separate_slam:
                         self.slam_map_viewer.update(slam_result, self.slam.map_points)
                         map_image = self.slam_map_viewer.get_map_image()
-                        cv2.imshow('Map', map_image)
+
+                        # If advanced nav panel enabled, show merged view
+                        if self.advanced_nav_enabled:
+                            # Update panel with latest data (10Hz update, non-blocking)
+                            goal_pos = None
+                            if self.indoor_navigator and hasattr(self.indoor_navigator, 'current_goal'):
+                                goal_pos = self.indoor_navigator.current_goal
+
+                            self.advanced_nav_panel.update(slam_result, detections, goal_pos)
+
+                            # Render side-by-side: SLAM map (left) + Navigation panel (right)
+                            merged_nav_display = self.advanced_nav_panel.render_side_by_side(map_image)
+                            cv2.imshow('Navigation', merged_nav_display)
+                        else:
+                            # Just show SLAM map
+                            cv2.imshow('Map', map_image)
 
                     # Show 3D Occupancy Grid if enabled
                     if self.occupancy_grid_enabled and self.occupancy_grid is not None:
                         occupancy_grid_image = self.occupancy_grid.visualize_3d_interactive(slam_result['position'] if slam_result else None)
                         cv2.imshow('Occupancy Grid', occupancy_grid_image)
-
-                    # Show Advanced Navigation Panel (robotics-style multi-view)
-                    if self.advanced_nav_enabled:
-                        # Update panel with latest data (10Hz update, non-blocking)
-                        goal_pos = None
-                        if self.indoor_navigator and hasattr(self.indoor_navigator, 'current_goal'):
-                            goal_pos = self.indoor_navigator.current_goal
-
-                        self.advanced_nav_panel.update(slam_result, detections, goal_pos)
-
-                        # Render and display
-                        nav_panel_image = self.advanced_nav_panel.render()
-                        cv2.imshow('Navigation Panel', nav_panel_image)
 
                 # Save video
                 if video_writer:

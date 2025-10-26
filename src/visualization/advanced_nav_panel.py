@@ -316,7 +316,7 @@ class AdvancedNavigationPanel:
 
     def _render_info_panel(self, panel: np.ndarray, y_start: int):
         """
-        Render navigation info text panel.
+        Render navigation info text panel with bounds checking.
 
         Args:
             panel: Panel image to draw on
@@ -324,49 +324,46 @@ class AdvancedNavigationPanel:
         """
         info_x = 15
         y = y_start
+        max_y = self.height - 10  # Leave 10px margin at bottom
+
+        # Helper to check bounds before drawing
+        def safe_text(text, pos_y, color, size=0.4, bold=1):
+            if pos_y < max_y:
+                cv2.putText(panel, text, (info_x, pos_y),
+                           cv2.FONT_HERSHEY_SIMPLEX, size, color, bold)
+                return pos_y + int(20 * size)
+            return pos_y
 
         # Position
         x, y_pos, z = self.current_position
-        cv2.putText(panel, f"Position:", (info_x, y),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, self.CYAN, 1)
-        y += 20
-        cv2.putText(panel, f"  X: {x:6.2f}m", (info_x, y),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.4, self.WHITE, 1)
-        y += 18
-        cv2.putText(panel, f"  Y: {y_pos:6.2f}m", (info_x, y),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.4, self.WHITE, 1)
-        y += 25
+        y = safe_text(f"Position:", y, self.CYAN, 0.45, 1)
+        y = safe_text(f"  X: {x:6.2f}m", y, self.WHITE, 0.35, 1)
+        y = safe_text(f"  Y: {y_pos:6.2f}m", y, self.WHITE, 0.35, 1)
+        y += 5
 
         # Heading
         heading_deg = int(np.degrees(self.current_heading) % 360)
-        cv2.putText(panel, f"Heading: {heading_deg}", (info_x, y),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, self.CYAN, 1)
-        y += 25
+        y = safe_text(f"Heading: {heading_deg}", y, self.CYAN, 0.45, 1)
+        y += 5
 
         # Distance traveled
         distance = sum(np.sqrt((self.trajectory[i+1][0] - self.trajectory[i][0])**2 +
                               (self.trajectory[i+1][1] - self.trajectory[i][1])**2)
                       for i in range(len(self.trajectory)-1)) if len(self.trajectory) > 1 else 0
-        cv2.putText(panel, f"Distance: {distance:.1f}m", (info_x, y),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, self.CYAN, 1)
-        y += 25
+        y = safe_text(f"Distance: {distance:.1f}m", y, self.CYAN, 0.45, 1)
+        y += 5
 
         # Obstacles detected
         danger_obs = sum(1 for obs in self.obstacles if obs['depth'] < 1.0)
         caution_obs = sum(1 for obs in self.obstacles if 1.0 <= obs['depth'] < 2.0)
 
-        cv2.putText(panel, f"Obstacles:", (info_x, y),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, self.CYAN, 1)
-        y += 20
-        cv2.putText(panel, f"  Danger: {danger_obs}", (info_x, y),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.4, self.RED, 1)
-        y += 18
-        cv2.putText(panel, f"  Caution: {caution_obs}", (info_x, y),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.4, self.YELLOW, 1)
-        y += 25
+        y = safe_text(f"Obstacles:", y, self.CYAN, 0.45, 1)
+        y = safe_text(f"  Danger: {danger_obs}", y, self.RED, 0.35, 1)
+        y = safe_text(f"  Caution: {caution_obs}", y, self.YELLOW, 0.35, 1)
+        y += 5
 
         # Goal info
-        if self.goal_position:
+        if self.goal_position and y < max_y:
             # Calculate distance and bearing to goal
             dx = self.goal_position[0] - self.current_position[0]
             dy = self.goal_position[1] - self.current_position[1]
@@ -374,14 +371,9 @@ class AdvancedNavigationPanel:
             bearing_to_goal = np.arctan2(dy, dx)
             bearing_deg = int(np.degrees(bearing_to_goal) % 360)
 
-            cv2.putText(panel, f"Goal:", (info_x, y),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, self.PURPLE, 1)
-            y += 20
-            cv2.putText(panel, f"  Dist: {dist_to_goal:.2f}m", (info_x, y),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.4, self.WHITE, 1)
-            y += 18
-            cv2.putText(panel, f"  Bearing: {bearing_deg}", (info_x, y),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.4, self.WHITE, 1)
+            y = safe_text(f"Goal:", y, self.PURPLE, 0.45, 1)
+            y = safe_text(f"  Dist: {dist_to_goal:.2f}m", y, self.WHITE, 0.35, 1)
+            y = safe_text(f"  Bearing: {bearing_deg}", y, self.WHITE, 0.35, 1)
 
     def set_goal(self, x: float, y: float):
         """Set navigation goal position."""
@@ -398,6 +390,50 @@ class AdvancedNavigationPanel:
     def clear_waypoints(self):
         """Clear all waypoints."""
         self.waypoints = []
+
+    def render_side_by_side(self, slam_map_image: Optional[np.ndarray] = None) -> np.ndarray:
+        """
+        Render navigation panel side-by-side with SLAM map for unified display.
+
+        Args:
+            slam_map_image: Optional SLAM map image to display alongside
+
+        Returns:
+            Combined image with SLAM map (left) and navigation info (right)
+        """
+        # Get nav panel
+        nav_panel = self.render()
+
+        if slam_map_image is None:
+            # No SLAM map, just return nav panel
+            return nav_panel
+
+        # Resize SLAM map to match nav panel height
+        slam_h, slam_w = slam_map_image.shape[:2]
+        target_height = self.height
+
+        # Maintain aspect ratio
+        aspect = slam_w / slam_h
+        target_width = int(target_height * aspect)
+
+        slam_resized = cv2.resize(slam_map_image, (target_width, target_height),
+                                 interpolation=cv2.INTER_LINEAR)
+
+        # Create combined image (SLAM left, Nav panel right)
+        combined_width = target_width + self.width
+        combined = np.zeros((target_height, combined_width, 3), dtype=np.uint8)
+
+        # Place SLAM map on left
+        combined[:, :target_width] = slam_resized
+
+        # Place nav panel on right
+        combined[:, target_width:] = nav_panel
+
+        # Draw separator line
+        cv2.line(combined, (target_width, 0), (target_width, target_height),
+                (80, 80, 80), 2)
+
+        return combined
 
     def reset(self):
         """Reset all navigation data."""
