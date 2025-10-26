@@ -197,15 +197,9 @@ class VisionLanguageModel:
 
         # ACCURACY IMPROVEMENT: Multi-step reasoning for better VLM accuracy
         # First pass: Identify what's in the scene
-        question1 = f"""Analyze this image. Objects detected: {detection_context}
+        question1 = f"""What do you see in this image? Objects detected: {detection_context}
 
-What is in this scene?
-1. Type of place: room, hallway, street, sidewalk, store, etc.
-2. Main objects and where they are: left side, right side, center, close, far
-3. Dangers: stairs, holes, walls, poles, obstacles blocking the path
-4. Open space: where is it safe to walk?
-
-Answer clearly."""
+Describe the environment, objects and their locations, any hazards, and where it's safe to walk."""
 
         with torch.no_grad():
             scene_analysis = self.moondream_model.query(
@@ -214,16 +208,9 @@ Answer clearly."""
             )["answer"]
 
         # Second pass: Generate navigation guidance based on analysis
-        question2 = f"""Scene analysis: {scene_analysis}
-Objects: {detection_context}
+        question2 = f"""Based on what you see: {scene_analysis}
 
-You are helping someone who cannot see. Tell them:
-- If there's danger close by, say "Stop! [what danger] is very close [where]"
-- If obstacles are near, say what they are and where: "[object] is nearby on your [left/right]"
-- If path is clear, say "Safe to walk ahead" or "Clear on your [left/right]"
-- Give ONE clear action they should take right now
-
-Be specific. 1-2 short sentences."""
+Give walking directions. If there's danger, warn them first. Tell them what to do. Keep it short."""
 
         with torch.no_grad():
             navigation_guidance = self.moondream_model.query(
@@ -251,18 +238,9 @@ Be specific. 1-2 short sentences."""
 
         # ACCURACY IMPROVEMENT: Enhanced multi-step prompting for Ollama VLMs
         # First query: Scene understanding
-        scene_prompt = f"""Look at this image. Detected objects: {detection_context}
+        scene_prompt = f"""Describe what you see in this image. Objects detected: {detection_context}
 
-Describe this scene:
-1. What type of place is this? (indoor room, outdoor sidewalk, hallway, store, etc.)
-2. What objects do you see and where are they located?
-   - Use: left side, right side, center, close, far away
-3. Are there any dangers or obstacles?
-   - Stairs, drop-offs, walls, poles, things blocking the path
-4. Where is there open space to walk safely?
-5. Any important landmarks or features?
-
-Be specific and clear."""
+What type of place is this? What objects are visible and where are they? Are there any hazards? Where is it safe to walk?"""
 
         scene_payload = {
             "model": self.model_name,
@@ -280,23 +258,9 @@ Be specific and clear."""
         scene_analysis = scene_response.json().get('response', '')
 
         # Second query: Navigation guidance based on analysis
-        nav_prompt = f"""Scene: {scene_analysis}
-Objects: {detection_context}
+        nav_prompt = f"""Based on this: {scene_analysis}
 
-Give clear walking instructions for a blind person:
-
-IF DANGER CLOSE BY:
-- Say: "Stop! [what] is very close [where]. [What to do]"
-- Example: "Stop! Wall very close ahead. Step to your right"
-
-IF OBSTACLES NEARBY:
-- Say: "[Object] nearby on your [left/right]. [Suggestion]"
-- Example: "Chair nearby on your left. Walk to the right"
-
-IF PATH CLEAR:
-- Say: "Safe to walk [direction]" or "Path is clear ahead"
-
-Give ONE specific action. 1-2 sentences maximum."""
+Give walking directions for someone who can't see. If danger, warn them. Tell them where to go. Short and clear."""
 
         nav_payload = {
             "model": self.model_name,
