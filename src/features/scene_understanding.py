@@ -199,13 +199,13 @@ class VisionLanguageModel:
         # First pass: Identify what's in the scene
         question1 = f"""Look at this image carefully. Detected objects: {detection_context}
 
-What do you see in this scene? Describe:
+What do you see in this scene? Describe using NATURAL LANGUAGE (no numbers):
 1. The environment type (indoor room, outdoor street, hallway, etc.)
-2. All visible objects and their locations (left/right/center, near/far)
+2. All visible objects and their locations using words like: "to the left", "nearby", "in front"
 3. Any potential hazards (stairs, drop-offs, obstacles, traffic, narrow spaces)
 4. Clear pathways or open areas
 
-Be specific and detailed."""
+Use friendly, conversational language. NO measurements or numbers."""
 
         with torch.no_grad():
             scene_analysis = self.moondream_model.query(
