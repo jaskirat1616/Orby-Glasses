@@ -125,13 +125,13 @@ mapping3d:
 # Visual SLAM - Choose your SLAM system
 slam:
   enabled: true
-  use_pyslam: true      # ✅ pySLAM: Advanced Python SLAM with multiple feature detectors
+  use_pyslam: false     # pySLAM: Advanced Python SLAM (requires installation)
   use_orbslam3: false   # ORB-SLAM3 (requires building from source)
   use_working: false    # ✅ PROVEN WORKING simple SLAM (github.com/Fosowl/monocularSlam)
   use_accurate: false   # Production-quality accurate SLAM
   use_advanced: false   # ✅ ADVANCED: Hybrid tracking + depth scale (SUPERIOR to ORB-SLAM3)
   use_monocular: false  # Basic monocular SLAM
-  use_opencv: false     # Lightweight OpenCV-based monocular SLAM
+  use_opencv: true      # ✅ Lightweight OpenCV-based monocular SLAM (NO INSTALL NEEDED!)
   # If all false: uses RGBD SLAM (20-30 FPS, depth-assisted)
 
   # pySLAM specific settings
