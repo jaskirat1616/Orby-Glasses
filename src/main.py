@@ -77,6 +77,7 @@ from navigation.slam_system import SLAMSystem
 from navigation.monocular_slam import ProperMonocularSLAM
 from navigation.monocular_slam_v2 import MonocularSLAM  # High-accuracy ORB-based SLAM
 from navigation.advanced_monocular_slam import AdvancedMonocularSLAM  # SUPERIOR to ORB-SLAM3
+from navigation.accurate_slam import AccurateSLAM  # Production-quality accurate SLAM
 
 try:
     from navigation.orbslam3_wrapper import ORBSLAM3System
@@ -176,7 +177,8 @@ class OrbyGlasses:
             # Check which SLAM system to use
             use_orbslam3 = self.config.get('slam.use_orbslam3', False)
             use_monocular = self.config.get('slam.use_monocular', False)
-            use_advanced = self.config.get('slam.use_advanced', True)  # Default to advanced
+            use_advanced = self.config.get('slam.use_advanced', False)
+            use_accurate = self.config.get('slam.use_accurate', True)  # Default to accurate
 
             if use_orbslam3 and ORBSLAM3_AVAILABLE:
                 self.logger.info("🏆 Initializing ORB-SLAM3 (Industry Standard)...")
@@ -191,6 +193,13 @@ class OrbyGlasses:
                 self.logger.info("✓ Depth-based scale estimation + Motion model prediction")
                 self.logger.info("✓ 15-20% better accuracy than ORB-SLAM3 (based on 2024 research)")
                 self.logger.info("✓ Expected: 25-35 FPS, superior robustness in dynamic scenes")
+            elif use_accurate:
+                self.logger.info("🎯 Initializing Accurate Monocular SLAM (Production Quality)...")
+                self.slam = AccurateSLAM(self.config)
+                self.logger.info("✓ Proper bundle adjustment with scipy")
+                self.logger.info("✓ Covisibility graph tracking")
+                self.logger.info("✓ Map point culling & keyframe selection")
+                self.logger.info("✓ Focus on accuracy over marketing claims")
             elif use_monocular:
                 self.logger.info("Initializing High-Accuracy Monocular SLAM (ORB-based)...")
                 self.slam = MonocularSLAM(self.config)
