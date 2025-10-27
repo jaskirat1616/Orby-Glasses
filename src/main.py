@@ -1266,7 +1266,9 @@ class OrbyGlasses:
 
                     # Show SLAM map in a separate window if requested
                     if separate_slam and self.slam_enabled and self.slam_map_viewer and slam_result:
-                        self.slam_map_viewer.update(slam_result, self.slam.map_points)
+                        # Get map points using method (some SLAM systems have attribute, some have method)
+                    map_pts = self.slam.map_points if hasattr(self.slam, 'map_points') else self.slam.get_map_points() if hasattr(self.slam, 'get_map_points') else []
+                    self.slam_map_viewer.update(slam_result, map_pts)
                         map_image = self.slam_map_viewer.get_map_image()
                         cv2.imshow('SLAM Map', map_image)  # Keep original SLAM map size
 
@@ -1288,7 +1290,9 @@ class OrbyGlasses:
 
                     # Show SLAM map viewer MERGED with Advanced Navigation Panel
                     if self.slam_enabled and self.slam_map_viewer and slam_result and not separate_slam:
-                        self.slam_map_viewer.update(slam_result, self.slam.map_points)
+                        # Get map points using method (some SLAM systems have attribute, some have method)
+                    map_pts = self.slam.map_points if hasattr(self.slam, 'map_points') else self.slam.get_map_points() if hasattr(self.slam, 'get_map_points') else []
+                    self.slam_map_viewer.update(slam_result, map_pts)
                         map_image = self.slam_map_viewer.get_map_image()
 
                         # If advanced nav panel enabled, show merged view
