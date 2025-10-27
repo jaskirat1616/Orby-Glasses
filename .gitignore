@@ -41,3 +41,4 @@ models/ollama/
 # Temporary files
 *.tmp
 *.temp
+data/orbslam3/

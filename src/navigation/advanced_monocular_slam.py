@@ -144,6 +144,8 @@ class AdvancedMonocularSLAM:
         self.current_pose = np.eye(4, dtype=np.float64)
         self.scale = 1.0  # Updated from depth estimation
         self.scale_confidence = 0.0
+        self.initialization_attempts = 0
+        self.user_notified = False  # Only notify once about camera movement
 
         # Map data structures
         self.map_points: List[Optional[MapPoint]] = []
@@ -166,11 +168,11 @@ class AdvancedMonocularSLAM:
         self.position_history = deque(maxlen=1000)
         self.scale_history = deque(maxlen=100)
 
-        # Adaptive thresholds
-        self.min_matches = 15  # Lower than ORB-SLAM3's 20
-        self.keyframe_min_matches = 40
-        self.ransac_threshold = 1.5  # pixels
-        self.max_reprojection_error = 3.0  # pixels
+        # Adaptive thresholds (relaxed for easier initialization)
+        self.min_matches = 8  # Much lower for easier initialization
+        self.keyframe_min_matches = 30
+        self.ransac_threshold = 2.0  # pixels (more tolerant)
+        self.max_reprojection_error = 4.0  # pixels (more tolerant)
 
         # Performance tracking
         self.tracking_quality_history = deque(maxlen=30)
@@ -252,26 +254,34 @@ class AdvancedMonocularSLAM:
         # Use BFMatcher for initialization (more reliable)
         matches = self.bf_matcher.knnMatch(self.last_frame_desc, desc, k=2)
 
-        # Lowe's ratio test
+        # Lowe's ratio test (more lenient for initialization)
         good_matches = []
         for match_pair in matches:
             if len(match_pair) == 2:
                 m, n = match_pair
-                if m.distance < 0.75 * n.distance:  # Slightly stricter
+                if m.distance < 0.8 * n.distance:  # More lenient for initialization
                     good_matches.append(m)
 
         if len(good_matches) < self.min_matches:
-            self.logger.debug(f"Initializing... {len(good_matches)}/{self.min_matches} matches")
+            self.initialization_attempts += 1
+            if not self.user_notified and self.initialization_attempts > 10:
+                self.logger.info(f"⚠️  SLAM waiting for camera movement (move camera left/right/forward)")
+                self.user_notified = True
+            elif self.initialization_attempts % 30 == 0:
+                self.logger.debug(f"Initializing... {len(good_matches)}/{self.min_matches} matches")
             return self._get_default_result()
 
         # Get matched points
         pts1 = np.float32([self.last_frame_kps[m.queryIdx].pt for m in good_matches])
         pts2 = np.float32([kps[m.trainIdx].pt for m in good_matches])
 
-        # Check for sufficient motion (parallax)
+        # Check for sufficient motion (parallax) - more lenient
         median_motion = np.median(np.linalg.norm(pts2 - pts1, axis=1))
-        if median_motion < 3.0:  # Minimum 3 pixels motion
-            self.logger.debug(f"Insufficient motion: {median_motion:.1f} pixels")
+        if median_motion < 1.5:  # Reduced from 3.0 pixels
+            self.initialization_attempts += 1
+            if not self.user_notified and self.initialization_attempts > 15:
+                self.logger.info(f"⚠️  SLAM needs camera movement ({median_motion:.1f}px motion detected, need 1.5px+)")
+                self.user_notified = True
             return self._get_default_result()
 
         # Estimate essential matrix
@@ -434,18 +444,30 @@ class AdvancedMonocularSLAM:
         matches = self._match_features(self.reference_keyframe.descriptors, desc)
 
         if len(matches) < self.min_matches:
-            self.logger.warning(f"Tracking degraded: {len(matches)} matches")
+            self.logger.debug(f"Low matches: {len(matches)} (trying recovery)")
 
             # Try to recover by matching with multiple keyframes
+            best_matches = matches
+            best_kf = self.reference_keyframe
+
             for kf in reversed(self.keyframes[-5:]):
                 if kf.id == self.reference_keyframe.id:
                     continue
-                matches = self._match_features(kf.descriptors, desc)
-                if len(matches) >= self.min_matches:
-                    self.reference_keyframe = kf
-                    break
+                kf_matches = self._match_features(kf.descriptors, desc)
+                if len(kf_matches) > len(best_matches):
+                    best_matches = kf_matches
+                    best_kf = kf
 
-            if len(matches) < self.min_matches // 2:
+            matches = best_matches
+            if best_kf.id != self.reference_keyframe.id:
+                self.reference_keyframe = best_kf
+                self.logger.debug(f"Switched to keyframe {best_kf.id}: {len(matches)} matches")
+
+            # More lenient tracking loss threshold
+            if len(matches) < max(5, self.min_matches // 3):
+                # Don't spam warnings - only log occasionally
+                if self.frame_count % 30 == 0:
+                    self.logger.warning(f"Tracking degraded: {len(matches)} matches (move camera)")
                 return self._get_tracking_lost_result()
 
         # Get 3D-2D correspondences
