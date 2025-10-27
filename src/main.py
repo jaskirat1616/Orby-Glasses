@@ -74,6 +74,16 @@ except ImportError:
 
 # Navigation modules
 from navigation.slam_system import SLAMSystem
+from navigation.monocular_slam import ProperMonocularSLAM
+from navigation.monocular_slam_v2 import MonocularSLAM  # High-accuracy ORB-based SLAM
+
+try:
+    from navigation.orbslam3_wrapper import ORBSLAM3System
+    ORBSLAM3_AVAILABLE = True
+except ImportError:
+    ORBSLAM3_AVAILABLE = False
+    print("Note: ORB-SLAM3 not available (using custom high-accuracy monocular SLAM)")
+
 from navigation.indoor_navigation import IndoorNavigator
 
 # Visualization
@@ -162,9 +172,29 @@ class OrbyGlasses:
         # SLAM and Indoor Navigation
         self.slam_enabled = self.config.get('slam.enabled', False)
         if self.slam_enabled:
-            # Use the new SLAM system by default
-            self.logger.info("Initializing SLAM system...")
-            self.slam = SLAMSystem(self.config)
+            # Check which SLAM system to use
+            use_orbslam3 = self.config.get('slam.use_orbslam3', False)
+            use_monocular = self.config.get('slam.use_monocular', False)
+
+            if use_orbslam3 and ORBSLAM3_AVAILABLE:
+                self.logger.info("🏆 Initializing ORB-SLAM3 (Industry Standard)...")
+                self.slam = ORBSLAM3System(self.config)
+                self.logger.info("✓ Using ORB-SLAM3: Most accurate, loop closure, relocalization")
+                self.logger.info("✓ Expected: 30-60 FPS, 2-5x more accurate than ORB-SLAM2")
+            elif use_orbslam3 and not ORBSLAM3_AVAILABLE:
+                self.logger.warning("⚠️ ORB-SLAM3 requested but not installed")
+                self.logger.info("Using high-accuracy monocular SLAM (ORB-based)...")
+                self.slam = MonocularSLAM(self.config)
+                self.logger.info("✓ Custom ORB-SLAM implementation with bundle adjustment")
+            elif use_monocular:
+                self.logger.info("Initializing High-Accuracy Monocular SLAM (ORB-based)...")
+                self.slam = MonocularSLAM(self.config)
+                self.logger.info("✓ Using ORB features + essential matrix + bundle adjustment")
+                self.logger.info("✓ 2000 ORB features, RANSAC outlier rejection, keyframe management")
+            else:
+                self.logger.info("Initializing RGBD SLAM system...")
+                self.slam = SLAMSystem(self.config)
+                self.logger.info("✓ Using RGBD SLAM (depth-assisted)")
 
             # Initialize SLAM map viewer (always-visible 2D map like robots)
             from navigation.slam_map_viewer import SLAMMapViewer

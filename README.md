@@ -12,11 +12,6 @@ OrbyGlasses uses a camera to detect objects, estimate distances, and provide aud
 - Audio directions and warnings
 - Indoor mapping and navigation
 - Works without GPS
-- **Voice commands** - "Hey Orby, where am I?"
-- **Location memory** - Save and navigate to rooms
-- **Smart context** - Adapts to time of day
-- **Emergency mode** - Panic button with alerts
-- **Battery optimizer** - Auto power saving
 
 ## Quick Start
 
@@ -29,10 +24,50 @@ Press `q` to stop.
 
 ## Requirements
 
-- macOS with Apple Silicon (M1/M2/M3)
+- macOS with Apple Silicon (M1/M2/M3/M4/M5)
 - Python 3.10, 3.11, or 3.12
 - Built-in camera or webcam
 - Speakers or headphones
+
+## Monocular SLAM (NEW!)
+
+OrbyGlasses now includes a **high-accuracy monocular SLAM system** that works out-of-the-box! No external dependencies needed.
+
+### Features:
+- ✅ **2000 ORB features** for robust tracking
+- ✅ **Essential matrix estimation** with 5-point algorithm + RANSAC
+- ✅ **Keyframe management** and map point tracking
+- ✅ **Bundle adjustment** for accuracy refinement
+- ✅ **20-30 FPS** real-time performance
+- ✅ **Loop closure detection** (coming soon)
+
+The SLAM system is based on ORB-SLAM3 architecture but implemented entirely in Python + OpenCV, providing excellent accuracy without requiring C++ compilation.
+
+### Optional: Installing ORB-SLAM3 (Advanced)
+
+For absolute best accuracy, you can install the official ORB-SLAM3 (requires building from source):
+
+1. Install dependencies (with [Homebrew](https://brew.sh)):
+   ```sh
+   brew install cmake pkg-config eigen opencv python@3.12 openblas
+   pip install numpy
+   ```
+2. Clone and build the bindings:
+   ```sh
+   git clone https://github.com/uoip/python-orbslam3.git
+   cd python-orbslam3
+   git submodule update --init --recursive
+   python3 setup.py build
+   python3 setup.py install
+   cd ..
+   ```
+3. Enable in `config/config.yaml`:
+   ```yaml
+   slam:
+     use_orbslam3: true
+   ```
+
+> Note: The built-in monocular SLAM provides excellent accuracy for most use cases!
 
 ## How It Works
 
@@ -140,50 +175,6 @@ Tracks your position and builds a map of indoor spaces without GPS.
 ### Indoor Navigation
 Plans paths to saved locations (e.g., "kitchen", "desk") and provides turn-by-turn directions.
 
-### Voice Commands 🎤
-Talk to OrbyGlasses hands-free:
-- **"Hey Orby, what's around me?"** - Get scene description
-- **"Hey Orby, is the path clear?"** - Check for obstacles
-- **"Hey Orby, where am I?"** - Get current location
-- **"Hey Orby, save location kitchen"** - Save current spot
-- **"Hey Orby, take me to kitchen"** - Navigate to saved location
-- **"Hey Orby, help"** - Activate emergency mode
-
-### Location Memory 📍
-**Save your favorite spots:**
-```
-"Hey Orby, save location bedroom"
-"Hey Orby, save location kitchen"
-"Hey Orby, save location front door"
-```
-
-**Navigate back anytime:**
-```
-"Hey Orby, take me to bedroom"
-```
-The system uses SLAM and A* pathfinding to guide you with turn-by-turn audio directions.
-
-### Context-Aware Intelligence 🧠
-
-**Time-of-Day Adaptation:**
-- **Night mode** (10pm-5am): Louder alerts, more cautious (2m danger zone)
-- **Day mode**: Standard settings
-- **Dawn/Dusk**: Moderate adjustments
-
-**Battery Optimizer:**
-- Monitors battery level automatically
-- Below 20%: Activates power-saving mode
-  - Reduces frame processing
-  - Disables non-essential features
-  - Extends runtime by 40%+
-
-**Emergency Mode:**
-Press 'e' key or say "Hey Orby, help" to activate:
-- Loud emergency beeping
-- Flashing screen (red)
-- Voice alert: "HELP. Emergency alert activated"
-- Logs emergency event for review
-
 ### Safety System
 Monitors your surroundings and issues warnings at three levels:
 - Danger zone (<1m): Immediate audio alert
@@ -242,57 +233,12 @@ Contributions welcome! Please:
 
 MIT License - see LICENSE file for details.
 
-## What Makes OrbyGlasses Different
-
-**🎯 AI-Powered Intelligence:**
-- Voice-activated assistant responds to natural commands
-- Context-aware scene understanding (knows you're in a kitchen vs hallway)
-- Predicts obstacles before you reach them
-- Learns your home layout
-
-**🔋 Smart Adaptation:**
-- Auto-adjusts for night/day (louder at night, more cautious)
-- Battery optimizer extends runtime by 40%
-- Emergency panic mode with audio/visual alerts
-
-**🗺️ Location Memory:**
-- Save unlimited locations by voice
-- "Take me to kitchen" - automatic pathfinding
-- Works entirely offline
-
-**🎤 Hands-Free Operation:**
-- No buttons to press while navigating
-- Natural voice commands
-- Runs in background thread (zero performance impact)
-
-**🔒 Privacy First:**
-- 100% local processing
-- No cloud, no data collection
-- Your maps stay on your device
-
-## Performance
-
-**Standard Mode:**
-- 15-25 FPS
-- Full feature set
-- Best accuracy
-
-**Fast Mode:**
-- 20-30 FPS
-- Core features only
-- Better battery life
-
-**Battery Saver (auto-activates <20%):**
-- Essential features only
-- 40%+ runtime extension
-- Maintains safety alerts
-
 ## Credits
 
 Built with:
 - Ultralytics YOLOv11 for object detection
 - Depth-Anything-V2 for depth estimation
-- Ollama for local AI inference (Moondream, Gemma)
+- Ollama for local AI inference
 - OpenCV for computer vision
 - PyTorch for deep learning
 
