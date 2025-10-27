@@ -87,6 +87,19 @@ except ImportError:
     ORBSLAM3_AVAILABLE = False
     print("Note: ORB-SLAM3 not available (using advanced monocular SLAM - superior performance)")
 
+try:
+    from navigation.pyslam_wrapper import PySLAMSystem
+    PYSLAM_AVAILABLE = True
+except ImportError:
+    PYSLAM_AVAILABLE = False
+    print("Note: pySLAM not available (run: cd third_party/pyslam && ./scripts/install_all_venv.sh)")
+
+try:
+    from navigation.opencv_mono_slam import OpenCVMonocularSLAM
+    OPENCV_SLAM_AVAILABLE = True
+except ImportError:
+    OPENCV_SLAM_AVAILABLE = False
+
 from navigation.indoor_navigation import IndoorNavigator
 
 # Visualization
@@ -176,13 +189,28 @@ class OrbyGlasses:
         self.slam_enabled = self.config.get('slam.enabled', False)
         if self.slam_enabled:
             # Check which SLAM system to use
+            use_pyslam = self.config.get('slam.use_pyslam', False)
+            use_opencv = self.config.get('slam.use_opencv', False)
             use_orbslam3 = self.config.get('slam.use_orbslam3', False)
             use_monocular = self.config.get('slam.use_monocular', False)
             use_advanced = self.config.get('slam.use_advanced', False)
             use_accurate = self.config.get('slam.use_accurate', False)
-            use_working = self.config.get('slam.use_working', True)  # Default to WORKING
+            use_working = self.config.get('slam.use_working', False)
 
-            if use_orbslam3 and ORBSLAM3_AVAILABLE:
+            if use_pyslam and PYSLAM_AVAILABLE:
+                self.logger.info("🚀 Initializing pySLAM (Advanced Python SLAM Framework)...")
+                self.slam = PySLAMSystem(self.config)
+                feature_type = self.config.get('slam.feature_type', 'ORB')
+                self.logger.info(f"✓ Using pySLAM with {feature_type} features")
+                self.logger.info("✓ Loop closure, bundle adjustment, map persistence")
+                self.logger.info("✓ Multiple feature detector support (ORB, SIFT, SuperPoint)")
+            elif use_opencv and OPENCV_SLAM_AVAILABLE:
+                self.logger.info("⚡ Initializing OpenCV Monocular SLAM (Lightweight)...")
+                self.slam = OpenCVMonocularSLAM(self.config)
+                self.logger.info("✓ Lightweight pure-OpenCV implementation")
+                self.logger.info("✓ No external dependencies, works on any macOS")
+                self.logger.info("✓ Real-time ORB tracking + triangulation")
+            elif use_orbslam3 and ORBSLAM3_AVAILABLE:
                 self.logger.info("🏆 Initializing ORB-SLAM3 (Industry Standard)...")
                 self.slam = ORBSLAM3System(self.config)
                 self.logger.info("✓ Using ORB-SLAM3: Most accurate, loop closure, relocalization")
@@ -1267,8 +1295,8 @@ class OrbyGlasses:
                     # Show SLAM map in a separate window if requested
                     if separate_slam and self.slam_enabled and self.slam_map_viewer and slam_result:
                         # Get map points using method (some SLAM systems have attribute, some have method)
-                    map_pts = self.slam.map_points if hasattr(self.slam, 'map_points') else self.slam.get_map_points() if hasattr(self.slam, 'get_map_points') else []
-                    self.slam_map_viewer.update(slam_result, map_pts)
+                        map_pts = self.slam.map_points if hasattr(self.slam, 'map_points') else self.slam.get_map_points() if hasattr(self.slam, 'get_map_points') else []
+                        self.slam_map_viewer.update(slam_result, map_pts)
                         map_image = self.slam_map_viewer.get_map_image()
                         cv2.imshow('SLAM Map', map_image)  # Keep original SLAM map size
 
@@ -1291,8 +1319,8 @@ class OrbyGlasses:
                     # Show SLAM map viewer MERGED with Advanced Navigation Panel
                     if self.slam_enabled and self.slam_map_viewer and slam_result and not separate_slam:
                         # Get map points using method (some SLAM systems have attribute, some have method)
-                    map_pts = self.slam.map_points if hasattr(self.slam, 'map_points') else self.slam.get_map_points() if hasattr(self.slam, 'get_map_points') else []
-                    self.slam_map_viewer.update(slam_result, map_pts)
+                        map_pts = self.slam.map_points if hasattr(self.slam, 'map_points') else self.slam.get_map_points() if hasattr(self.slam, 'get_map_points') else []
+                        self.slam_map_viewer.update(slam_result, map_pts)
                         map_image = self.slam_map_viewer.get_map_image()
 
                         # If advanced nav panel enabled, show merged view
