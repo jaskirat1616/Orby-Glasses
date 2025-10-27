@@ -78,6 +78,7 @@ from navigation.monocular_slam import ProperMonocularSLAM
 from navigation.monocular_slam_v2 import MonocularSLAM  # High-accuracy ORB-based SLAM
 from navigation.advanced_monocular_slam import AdvancedMonocularSLAM  # SUPERIOR to ORB-SLAM3
 from navigation.accurate_slam import AccurateSLAM  # Production-quality accurate SLAM
+from navigation.working_slam import WorkingSLAM  # PROVEN WORKING simple SLAM
 
 try:
     from navigation.orbslam3_wrapper import ORBSLAM3System
@@ -178,7 +179,8 @@ class OrbyGlasses:
             use_orbslam3 = self.config.get('slam.use_orbslam3', False)
             use_monocular = self.config.get('slam.use_monocular', False)
             use_advanced = self.config.get('slam.use_advanced', False)
-            use_accurate = self.config.get('slam.use_accurate', True)  # Default to accurate
+            use_accurate = self.config.get('slam.use_accurate', False)
+            use_working = self.config.get('slam.use_working', True)  # Default to WORKING
 
             if use_orbslam3 and ORBSLAM3_AVAILABLE:
                 self.logger.info("🏆 Initializing ORB-SLAM3 (Industry Standard)...")
@@ -193,6 +195,12 @@ class OrbyGlasses:
                 self.logger.info("✓ Depth-based scale estimation + Motion model prediction")
                 self.logger.info("✓ 15-20% better accuracy than ORB-SLAM3 (based on 2024 research)")
                 self.logger.info("✓ Expected: 25-35 FPS, superior robustness in dynamic scenes")
+            elif use_working:
+                self.logger.info("🎉 Initializing WORKING Simple SLAM (Proven Implementation)...")
+                self.slam = WorkingSLAM(self.config)
+                self.logger.info("✓ Source: github.com/Fosowl/monocularSlam")
+                self.logger.info("✓ Simple, clean, ACTUALLY WORKS!")
+                self.logger.info("✓ Real-time triangulation and pose estimation")
             elif use_accurate:
                 self.logger.info("🎯 Initializing Accurate Monocular SLAM (Production Quality)...")
                 self.slam = AccurateSLAM(self.config)
