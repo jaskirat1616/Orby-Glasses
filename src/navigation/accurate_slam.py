@@ -100,17 +100,17 @@ class AccurateSLAM:
             [0, 0, 1]
         ], dtype=np.float64)
 
-        # ORB detector - GOOD parameters
+        # ORB detector - ULTRA SENSITIVE for low-texture scenes
         self.orb = cv2.ORB_create(
-            nfeatures=2000,
+            nfeatures=3000,      # More features
             scaleFactor=1.2,
             nlevels=8,
-            edgeThreshold=31,
+            edgeThreshold=10,    # Lower = more edge features (was 31)
             firstLevel=0,
             WTA_K=2,
             scoreType=cv2.ORB_HARRIS_SCORE,
             patchSize=31,
-            fastThreshold=20
+            fastThreshold=5      # VERY sensitive (was 20)
         )
 
         # BF Matcher for reliability
@@ -137,13 +137,14 @@ class AccurateSLAM:
         # History
         self.pose_history = deque(maxlen=1000)
 
-        # Parameters (more lenient for real-world use)
-        self.min_init_matches = 20  # Reduced from 50 (too strict!)
-        self.min_track_matches = 10  # Reduced from 15
-        self.min_parallax = 1.0  # degrees
-        self.max_reproj_error = 3.0  # Increased tolerance
-        self.ba_window = 10  # Bundle adjustment window
+        # Parameters (VERY lenient for low-texture scenes)
+        self.min_init_matches = 10   # Very low (was 20)
+        self.min_track_matches = 5   # Very low (was 10)
+        self.min_parallax = 1.0
+        self.max_reproj_error = 4.0  # More tolerant
+        self.ba_window = 10
         self.init_attempts = 0
+        self.user_notified = False
 
         self.logger.info("✅ Accurate SLAM initialized (production quality)")
         self.logger.info(f"Focus: Bundle adjustment, covisibility, proper culling")
@@ -159,8 +160,16 @@ class AccurateSLAM:
         else:
             gray = frame.copy()
 
-        # Enhance contrast
-        gray = cv2.equalizeHist(gray)
+        # AGGRESSIVE contrast enhancement for low-texture scenes
+        # CLAHE (Contrast Limited Adaptive Histogram Equalization)
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
+        gray = clahe.apply(gray)
+
+        # Sharpen to enhance edges
+        kernel = np.array([[-1,-1,-1],
+                          [-1, 9,-1],
+                          [-1,-1,-1]])
+        gray = cv2.filter2D(gray, -1, kernel)
 
         if timestamp is None:
             timestamp = time.time()
@@ -168,14 +177,17 @@ class AccurateSLAM:
         # Extract features
         kps, desc = self.orb.detectAndCompute(gray, None)
 
-        if desc is None or len(kps) < 10:
-            if self.frame_count % 30 == 0:
-                self.logger.warning(f"Too few features: {len(kps) if kps else 0}")
+        if desc is None or len(kps) < 5:  # Very low threshold
+            if not self.user_notified and self.frame_count > 30:
+                self.logger.warning(f"⚠️  Only {len(kps) if kps else 0} features! Point camera at textured surface (not blank wall)")
+                self.user_notified = True
             return self._get_default_result()
 
         # Log feature count occasionally
-        if self.frame_count % 30 == 0:
-            self.logger.debug(f"Frame {self.frame_count}: {len(kps)} ORB features detected")
+        if self.frame_count == 30:
+            self.logger.info(f"Detecting {len(kps)} ORB features per frame")
+        elif not self.is_initialized and self.frame_count % 60 == 0:
+            self.logger.debug(f"Frame {self.frame_count}: {len(kps)} features")
 
         # Initialize or track
         if not self.is_initialized:
@@ -210,19 +222,23 @@ class AccurateSLAM:
 
         if len(good) < self.min_init_matches:
             self.init_attempts += 1
-            if self.init_attempts == 1 or self.init_attempts % 30 == 0:
-                self.logger.info(f"⚠️  Init: {len(good)}/{self.min_init_matches} matches - Move camera MORE (rotate/translate)")
+            if not self.user_notified and self.init_attempts > 10:
+                self.logger.info(f"⚠️  SLAM needs textured scene! Point camera at desk/bookshelf/poster")
+                self.logger.info(f"Current: {len(good)}/{self.min_init_matches} matches - Move camera while looking at objects")
+                self.user_notified = True
+            elif self.init_attempts % 50 == 0:
+                self.logger.debug(f"Init: {len(good)}/{self.min_init_matches} matches")
             return self._get_default_result()
 
         # Get points
         pts1 = np.float32([self.last_frame_kps[m.queryIdx].pt for m in good])
         pts2 = np.float32([kps[m.trainIdx].pt for m in good])
 
-        # Check parallax (more lenient)
+        # Check parallax (VERY lenient)
         median_motion = np.median(np.linalg.norm(pts2 - pts1, axis=1))
-        if median_motion < 2.0:  # Reduced from 5.0
+        if median_motion < 1.0:  # Very low (was 2.0)
             if self.init_attempts % 30 == 0:
-                self.logger.info(f"Init: motion {median_motion:.1f}px (need 2px+) - Keep moving!")
+                self.logger.info(f"Init: motion {median_motion:.1f}px (need 1px+) - Keep moving!")
             return self._get_default_result()
 
         # Essential matrix
@@ -301,8 +317,9 @@ class AccurateSLAM:
 
             created += 1
 
-        if created < 20:  # Reduced from 50
-            self.logger.info(f"Init: only {created} points (need 20+) - Try more camera movement")
+        if created < 10:  # Very low (was 20)
+            if self.init_attempts % 30 == 0:
+                self.logger.info(f"Init: only {created} points (need 10+) - Point at textured surface")
             return self._get_default_result()
 
         # Add keyframes
