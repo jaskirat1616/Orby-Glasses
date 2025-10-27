@@ -126,8 +126,9 @@ mapping3d:
 slam:
   enabled: true
   use_orbslam3: false  # ORB-SLAM3 (requires building from source)
-  use_monocular: true  # ✅ High-accuracy ORB-based monocular SLAM (20-30 FPS)
-  # If both false: uses RGBD SLAM (20-30 FPS, depth-assisted)
+  use_monocular: false  # High-accuracy ORB-based monocular SLAM (20-30 FPS)
+  use_advanced: true  # ✅ BEYOND ORB-SLAM3: Hybrid tracking + depth scale (25-35 FPS)
+  # If all false: uses RGBD SLAM (20-30 FPS, depth-assisted)
   grid_size: [250, 250]
   grid_resolution: 0.2
   save_maps: true

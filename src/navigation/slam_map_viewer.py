@@ -120,7 +120,15 @@ class SLAMMapViewer:
 
         # Draw map points (landmarks) if available
         if map_points:
-            for point_id, point in map_points.items():
+            # Handle both dict and list formats
+            if isinstance(map_points, dict):
+                point_list = [(point_id, point) for point_id, point in map_points.items()]
+            else:
+                point_list = [(i, point) for i, point in enumerate(map_points)]
+
+            for point_id, point in point_list:
+                if point is None:
+                    continue
                 if hasattr(point, 'position'):
                     px_l, py_l = self.world_to_pixel(point.position[0], point.position[1])
                     if 0 <= px_l < self.map_size and 0 <= py_l < self.map_size:
