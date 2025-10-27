@@ -183,11 +183,10 @@ class AccurateSLAM:
                 self.user_notified = True
             return self._get_default_result()
 
-        # Log feature count occasionally
-        if self.frame_count == 30:
-            self.logger.info(f"Detecting {len(kps)} ORB features per frame")
-        elif not self.is_initialized and self.frame_count % 60 == 0:
-            self.logger.debug(f"Frame {self.frame_count}: {len(kps)} features")
+        # Always log during initialization for debugging
+        if not self.is_initialized:
+            if self.frame_count <= 5 or self.frame_count % 30 == 0:
+                self.logger.info(f"Frame {self.frame_count}: Detected {len(kps)} ORB features")
 
         # Initialize or track
         if not self.is_initialized:
@@ -207,6 +206,8 @@ class AccurateSLAM:
         """Initialize map from first two frames"""
 
         if self.last_frame_desc is None:
+            if self.frame_count == 2:
+                self.logger.info(f"Storing first frame with {len(kps)} features for matching")
             return self._get_default_result()
 
         # Match features
@@ -222,12 +223,11 @@ class AccurateSLAM:
 
         if len(good) < self.min_init_matches:
             self.init_attempts += 1
+            if self.init_attempts <= 3 or self.init_attempts % 30 == 0:
+                self.logger.info(f"🔍 Init: {len(good)}/{self.min_init_matches} matches (Features: {len(kps)}, Prev: {len(self.last_frame_kps)})")
             if not self.user_notified and self.init_attempts > 10:
-                self.logger.info(f"⚠️  SLAM needs textured scene! Point camera at desk/bookshelf/poster")
-                self.logger.info(f"Current: {len(good)}/{self.min_init_matches} matches - Move camera while looking at objects")
+                self.logger.warning(f"⚠️  SLAM stuck! Point camera at TEXTURED surface (desk/bookshelf/poster) and MOVE it")
                 self.user_notified = True
-            elif self.init_attempts % 50 == 0:
-                self.logger.debug(f"Init: {len(good)}/{self.min_init_matches} matches")
             return self._get_default_result()
 
         # Get points
