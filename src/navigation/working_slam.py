@@ -68,7 +68,7 @@ class WorkingSLAM:
             # Get matches and pose
             matches, _ = self.slam.get_vision_matches(frame.copy())
 
-            if matches is not None and len(matches) > 10:
+            if matches is not None and len(matches) > 3:  # Reduced from 10 to 3 for more robust initialization
                 # Triangulate points
                 points = self.slam.triangulate(matches)
 
@@ -96,6 +96,25 @@ class WorkingSLAM:
                     'num_matches': len(matches),
                     'initialized': True
                 }
+            else:
+                # Store frame anyway but return degraded result
+                self.last_frame = frame.copy()
+                if self.is_initialized:
+                    # Return last known good pose
+                    return {
+                        'pose': self.current_pose,
+                        'position': self.current_pose[:3, 3].tolist(),
+                        'tracking_quality': 0.1,
+                        'tracking_state': 'DEGRADED',
+                        'num_map_points': 0,
+                        'num_keyframes': len(self.slam.get_camera_poses()),
+                        'num_matches': len(matches) if matches else 0,
+                        'initialized': True
+                    }
+                else:
+                    if self.frame_count % 30 == 0:
+                        self.logger.info("⚠️  SLAM initializing - MOVE camera while pointing at textured surface")
+                    return self._get_default_result()
 
         except Exception as e:
             if "No matches found" not in str(e):

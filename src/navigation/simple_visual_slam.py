@@ -93,7 +93,8 @@ class Vision():
     def find_matching_points(self, current_frame: Frame):
         assert current_frame.pixels is not None, "No frame passed"
         match = np.mean(current_frame.pixels, axis=2).astype(np.uint8)
-        feats = cv.goodFeaturesToTrack(match, maxCorners=3000, qualityLevel=0.01, minDistance=7)
+        # Reduced qualityLevel and minDistance for more features, increased maxCorners
+        feats = cv.goodFeaturesToTrack(match, maxCorners=5000, qualityLevel=0.001, minDistance=3)
         kps = [cv.KeyPoint(x=f[0][0], y=f[0][1], size=20) for f in feats]
         kps, des = self.orb.compute(current_frame.pixels, kps)
         self.feats = feats
@@ -105,11 +106,13 @@ class Vision():
         for m in self.matcher.match(des, self.last_frame.des):
             kp1 = self.current_frame.kps[m.queryIdx].pt # (float, float)
             kp2 = self.last_frame.kps[m.trainIdx].pt # (float, float)
-            if self.distance_between_points(kp1, kp2) > 25:
+            if self.distance_between_points(kp1, kp2) > 40:  # Increased from 25 to 40 for more matches
                 continue
             if kp1 != kp2:
                 self.matches.append((kp1, kp2))
-        assert len(self.matches) > 0, "No matches found"
+        if len(self.matches) == 0:
+            print("info: no matches found, continuing without matches")
+            return None
         return self.matches
 
     def view_interest_points(self, frame: Frame, matches: List[Tuple[Tuple[float, float], Tuple[float, float]]]):
@@ -221,10 +224,17 @@ class Slam():
         goods &= points3D[2, :] > 0 # check points are in front of camera
         goods &= points3D[2, :] < 500 # check points z are not too far
         goods &= np.abs(points3D[0, :]) < 500 # check points x are not too far
-        if len(goods[goods == True]) < 25:
-            print("error: not enough points")
-            return None
-        points3D = points3D[:, goods]
+        valid_points = len(goods[goods == True])
+        if valid_points < 5:  # Reduced from 25 to 5 for more robust initialization
+            print(f"info: low point count ({valid_points}) but continuing")
+            # Continue with available points instead of failing
+            if valid_points < 1:
+                print("error: no valid points")
+                return None
+            # Use all available points instead of filtering
+            points3D = points3D[:, goods]
+        else:
+            points3D = points3D[:, goods]
         points3D = self.transform_points_3D_openGL(points3D)
         #points3D = self.hand_rule_change(points3D)
         self.points_centroid = sum([v for v in points3D]) / len(points3D)

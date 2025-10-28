@@ -42,3 +42,4 @@ models/ollama/
 *.tmp
 *.temp
 data/orbslam3/
+third_party/pyslam/

@@ -2,7 +2,7 @@
 
 # Camera Settings
 camera:
-  source: 1       # 0 = webcam, or URL for IP camera
+  source: 0       # 0 = webcam, or URL for IP camera
   width: 320
   height: 240
   fps: 30  # Increased target FPS
@@ -125,24 +125,20 @@ mapping3d:
 # Visual SLAM - Choose your SLAM system
 slam:
   enabled: true
-  use_pyslam: false     # pySLAM: Advanced Python SLAM (requires installation)
-  use_orbslam3: false   # ORB-SLAM3 (requires building from source)
-  use_working: false    # ✅ PROVEN WORKING simple SLAM (github.com/Fosowl/monocularSlam)
-  use_accurate: false   # Production-quality accurate SLAM
-  use_advanced: false   # ✅ ADVANCED: Hybrid tracking + depth scale (SUPERIOR to ORB-SLAM3)
+  use_improved: true    # ✅ NEW: Fast and accurate SLAM (RECOMMENDED)
+  use_droid: false      # NEW: DROID-SLAM (deep learning, requires installation)
+  use_orbslam3: false   # ORB-SLAM3 (requires building from source - best if available)
+  use_accurate: false   # Production-quality accurate SLAM (proper BA, covisibility)
+  use_advanced: false   # Hybrid tracking + depth scale (experimental)
   use_monocular: false  # Basic monocular SLAM
-  use_opencv: true      # ✅ Lightweight OpenCV-based monocular SLAM (NO INSTALL NEEDED!)
   # If all false: uses RGBD SLAM (20-30 FPS, depth-assisted)
-
-  # pySLAM specific settings
-  feature_type: "ORB"   # ORB, SIFT, SUPERPOINT (requires pyslam)
   grid_size: [250, 250]
   grid_resolution: 0.2
   save_maps: true
   visualize: false  # Keep OFF for FPS
-  orb_features: 2500  # Increased for better triangulation
-  fast_threshold: 8   # Lower = more corner features
-  min_matches: 8      # Lower for more robust initialization
+  orb_features: 1500  # More features for better triangulation
+  fast_threshold: 12  # Lower = more corner features
+  min_matches: 20  # Higher for monocular (needs good baseline)
   motion_model: true
   pose_smoothing: 0.7
   temporal_consistency_check: true

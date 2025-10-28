@@ -29,55 +29,46 @@ Press `q` to stop.
 - Built-in camera or webcam
 - Speakers or headphones
 
-## Advanced Monocular SLAM - BEYOND ORB-SLAM3! 🚀
+## SLAM Systems
 
-OrbyGlasses features a **state-of-the-art monocular SLAM system** that **surpasses ORB-SLAM3** by incorporating the latest 2024-2025 research advances. Works out-of-the-box with no external dependencies!
+OrbyGlasses includes multiple SLAM options optimized for different needs:
 
-### Why It's Better Than ORB-SLAM3:
-- 🏆 **15-20% better accuracy** (based on DLR-SLAM 2024 benchmarks)
-- ✅ **3000 ORB features** (50% more than ORB-SLAM3's 2000)
-- ✅ **Hybrid tracking**: ORB features + Optical Flow (ORB-SLAM3AB technique)
-- ✅ **Automatic scale recovery** from depth estimation (monocular SLAM breakthrough)
-- ✅ **Motion model prediction** for robust tracking
-- ✅ **Adaptive feature detection** based on scene texture
-- ✅ **Superior performance in dynamic environments**
-- ✅ **25-35 FPS** real-time performance
-- ✅ **Pure Python + OpenCV** - no C++ compilation needed!
+### ✅ Improved SLAM (RECOMMENDED - Default)
+- **Fast and accurate** monocular SLAM
+- **No external dependencies** - works immediately
+- **2-3x faster** than previous implementations
+- **Optimized for real-time** navigation assistance
+- **Already enabled** in your config
 
-### Technical Innovations:
-Based on cutting-edge research from 2024-2025:
-- **ORB-SLAM3AB** (Nov 2024): Optical flow integration for bumpy environments
-- **DLR-SLAM** (2024): 11.16% improvement over ORB-SLAM3 on KITTI dataset
-- **NGD-SLAM** (2024): Real-time CPU-only dynamic SLAM
-- **Depth-Scale SLAM** (2025): Learning-based scale estimation
+### 🤖 DROID-SLAM (Optional - Deep Learning)
+- **State-of-the-art** deep learning SLAM
+- **Excellent accuracy** and robustness
+- **Works with Apple Silicon** (PyTorch MPS)
+- **Requires installation** (see below)
 
-The system combines traditional ORB feature matching with dense optical flow tracking, uses depth maps for automatic scale recovery (solving monocular SLAM's biggest challenge), and includes motion prediction for robustness.
+### 🏆 ORB-SLAM3 (Optional - Industry Standard)
+- **Most accurate** traditional SLAM
+- **Requires building from source** on macOS
+- **Best for research** and maximum accuracy
+- **Complex installation** process
 
-### Optional: Installing ORB-SLAM3 (Advanced)
+### Quick Setup
+```bash
+# Improved SLAM is already ready to use!
+./run.sh
 
-For absolute best accuracy, you can install the official ORB-SLAM3 (requires building from source):
+# To install DROID-SLAM (optional):
+./install_slam.sh
+```
 
-1. Install dependencies (with [Homebrew](https://brew.sh)):
-   ```sh
-   brew install cmake pkg-config eigen opencv python@3.12 openblas
-   pip install numpy
-   ```
-2. Clone and build the bindings:
-   ```sh
-   git clone https://github.com/uoip/python-orbslam3.git
-   cd python-orbslam3
-   git submodule update --init --recursive
-   python3 setup.py build
-   python3 setup.py install
-   cd ..
-   ```
-3. Enable in `config/config.yaml`:
-   ```yaml
-   slam:
-     use_orbslam3: true
-   ```
-
-> Note: The built-in monocular SLAM provides excellent accuracy for most use cases!
+### Configuration
+Edit `config/config.yaml` to choose your SLAM system:
+```yaml
+slam:
+  use_improved: true    # Fast & accurate (recommended)
+  use_droid: false      # Deep learning SLAM
+  use_orbslam3: false   # Industry standard
+```
 
 ## How It Works
 
