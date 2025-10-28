@@ -125,16 +125,16 @@ mapping3d:
 # Visual SLAM - Choose your SLAM system
 slam:
   enabled: true
-  use_pyslam: true      # ✅ PRODUCTION SLAM with 3D Viewer (RECOMMENDED)
+  use_pyslam: false     # pySLAM with 3D Viewer (requires: cd third_party/pyslam && ./scripts/install_all_venv.sh)
   use_droid: false      # DROID-SLAM (deep learning, requires installation)
   use_orbslam3: false   # ORB-SLAM3 (requires building from source - best if available)
-  use_improved: false   # Custom fast SLAM (basic)
+  use_improved: true    # ✅ Fast & accurate SLAM (RECOMMENDED - works out of the box!)
   use_accurate: false   # Production-quality accurate SLAM (proper BA, covisibility)
   use_advanced: false   # Hybrid tracking + depth scale (experimental)
   use_monocular: false  # Basic monocular SLAM
   # If all false: uses RGBD SLAM (20-30 FPS, depth-assisted)
   
-  # pySLAM configuration
+  # pySLAM configuration (when use_pyslam: true)
   feature_type: ORB     # ORB, SIFT, or SUPERPOINT (ORB recommended for speed)
   loop_closure: false   # Enable loop closure detection (slower but more accurate)
   
