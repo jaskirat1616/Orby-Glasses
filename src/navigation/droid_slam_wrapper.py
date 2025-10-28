@@ -154,9 +154,18 @@ class DROIDSLAMWrapper:
         # Extract position from pose matrix (translation part)
         position = self.current_pose[:3, 3].copy()
         
+        # Calculate tracking quality based on state
+        if state == "OK":
+            tracking_quality = 0.9  # DROID-SLAM typically has high quality
+        elif state == "ERROR":
+            tracking_quality = 0.0
+        else:
+            tracking_quality = 0.5
+        
         return {
             'pose': self.current_pose.copy(),
             'position': position,  # Add position for indoor navigation compatibility
+            'tracking_quality': tracking_quality,  # Add tracking quality for UI
             'tracking_state': state,
             'message': message,
             'is_initialized': self.is_initialized,
@@ -172,6 +181,7 @@ class DROIDSLAMWrapper:
         return {
             'pose': self.current_pose.copy(),
             'position': position,  # Add position for indoor navigation compatibility
+            'tracking_quality': 0.0,  # Add tracking quality for UI
             'tracking_state': "ERROR",
             'message': message,
             'is_initialized': False,

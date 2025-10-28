@@ -312,9 +312,18 @@ class ImprovedSLAM:
         # Extract position from pose matrix (translation part)
         position = self.current_pose[:3, 3].copy()
         
+        # Calculate tracking quality based on state and performance
+        if state == "OK":
+            tracking_quality = min(1.0, self.performance_stats.get('tracked_features', 0) / 100.0)
+        elif state == "LOST":
+            tracking_quality = 0.0
+        else:
+            tracking_quality = 0.5
+        
         return {
             'pose': self.current_pose.copy(),
             'position': position,  # Add position for indoor navigation compatibility
+            'tracking_quality': tracking_quality,  # Add tracking quality for UI
             'tracking_state': state,
             'message': message,
             'is_initialized': self.is_initialized,
