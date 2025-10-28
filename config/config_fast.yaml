@@ -94,7 +94,13 @@ mapping3d:
 # Visual SLAM
 slam:
   enabled: true
-  use_simple: false
+  use_improved: true    # ✅ NEW: Fast and accurate SLAM (RECOMMENDED)
+  use_droid: false      # NEW: DROID-SLAM (deep learning, requires installation)
+  use_orbslam3: false   # ORB-SLAM3 (requires building from source - best if available)
+  use_accurate: false   # Production-quality accurate SLAM (proper BA, covisibility)
+  use_advanced: false   # Hybrid tracking + depth scale (experimental)
+  use_monocular: false  # Basic monocular SLAM
+  use_simple: false     # Legacy simple SLAM
   grid_size: [200, 200]
   grid_resolution: 0.2
   save_maps: false
