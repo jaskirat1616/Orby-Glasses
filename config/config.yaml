@@ -125,18 +125,24 @@ mapping3d:
 # Visual SLAM - Choose your SLAM system
 slam:
   enabled: true
-  use_improved: true    # ✅ NEW: Fast and accurate SLAM (RECOMMENDED)
-  use_droid: false      # NEW: DROID-SLAM (deep learning, requires installation)
+  use_pyslam: true      # ✅ PRODUCTION SLAM with 3D Viewer (RECOMMENDED)
+  use_droid: false      # DROID-SLAM (deep learning, requires installation)
   use_orbslam3: false   # ORB-SLAM3 (requires building from source - best if available)
+  use_improved: false   # Custom fast SLAM (basic)
   use_accurate: false   # Production-quality accurate SLAM (proper BA, covisibility)
   use_advanced: false   # Hybrid tracking + depth scale (experimental)
   use_monocular: false  # Basic monocular SLAM
   # If all false: uses RGBD SLAM (20-30 FPS, depth-assisted)
+  
+  # pySLAM configuration
+  feature_type: ORB     # ORB, SIFT, or SUPERPOINT (ORB recommended for speed)
+  loop_closure: false   # Enable loop closure detection (slower but more accurate)
+  
   grid_size: [250, 250]
   grid_resolution: 0.2
   save_maps: true
-  visualize: false  # Keep OFF for FPS
-  orb_features: 1500  # More features for better triangulation
+  visualize: true       # ✅ ENABLE for 3D map visualization!
+  orb_features: 2000    # More features for better tracking (pySLAM recommended: 2000)
   fast_threshold: 12  # Lower = more corner features
   min_matches: 20  # Higher for monocular (needs good baseline)
   motion_model: true

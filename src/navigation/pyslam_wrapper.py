@@ -29,6 +29,11 @@ try:
     from slam import Slam, SlamConfig
     from camera import Camera, PinholeCamera
     from feature_tracker import FeatureTrackerTypes
+    
+    # Import visualization components
+    from viewer3D import Viewer3D
+    from display2D import Display2D
+    
     PYSLAM_AVAILABLE = True
 except ImportError as e:
     PYSLAM_AVAILABLE = False
@@ -108,6 +113,26 @@ class PySLAMSystem:
             self.logger.error(error_msg)
             raise RuntimeError(error_msg)
 
+        # Initialize visualizations if enabled
+        self.enable_visualization = config.get('slam.visualize', False)
+        self.viewer3d = None
+        self.display2d = None
+        
+        if self.enable_visualization and PYSLAM_AVAILABLE:
+            try:
+                # Initialize 3D viewer (map visualization)
+                self.viewer3d = Viewer3D()
+                self.viewer3d.start()
+                self.logger.info("✅ pySLAM 3D Viewer enabled - Real-time 3D map!")
+                
+                # Initialize 2D display (feature tracking visualization)
+                self.display2d = Display2D()
+                self.logger.info("✅ pySLAM 2D Display enabled - Feature tracking!")
+            except Exception as e:
+                self.logger.warning(f"Could not initialize pySLAM visualizations: {e}")
+                self.viewer3d = None
+                self.display2d = None
+
         # State
         self.is_initialized = False
         self.frame_count = 0
@@ -147,6 +172,20 @@ class PySLAMSystem:
         try:
             # Process frame through pySLAM
             self.slam.track(gray, timestamp)
+            
+            # Update visualizations if enabled
+            if self.enable_visualization:
+                try:
+                    # Update 3D viewer with current map state
+                    if self.viewer3d is not None and self.slam.map is not None:
+                        self.viewer3d.draw_map(self.slam.map, self.slam.tracking)
+                    
+                    # Update 2D display with feature tracking
+                    if self.display2d is not None:
+                        self.display2d.draw(self.slam.tracking, gray)
+                except Exception as e:
+                    # Don't crash if visualization fails
+                    pass
 
             # Get tracking state
             is_tracking_good = self.slam.is_tracking_good()
@@ -264,8 +303,17 @@ class PySLAMSystem:
             self.logger.error(f"Failed to reset: {e}")
 
     def shutdown(self):
-        """Shutdown SLAM system."""
+        """Shutdown SLAM system and visualizations."""
         try:
+            # Stop visualizations
+            if self.viewer3d is not None:
+                try:
+                    self.viewer3d.stop()
+                    self.logger.info("✅ 3D Viewer stopped")
+                except Exception as e:
+                    self.logger.warning(f"Could not stop 3D viewer: {e}")
+            
+            # Shutdown SLAM
             self.slam.shutdown()
             self.logger.info("pySLAM shutdown")
         except Exception as e:
