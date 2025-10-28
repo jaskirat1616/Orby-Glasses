@@ -170,6 +170,7 @@ class DROIDSLAMWrapper:
             'message': message,
             'is_initialized': self.is_initialized,
             'trajectory_length': len(self.trajectory),
+            'num_map_points': 0,  # DROID-SLAM doesn't use traditional map points
             'performance': self.performance_stats.copy()
         }
 
@@ -186,6 +187,7 @@ class DROIDSLAMWrapper:
             'message': message,
             'is_initialized': False,
             'trajectory_length': 0,
+            'num_map_points': 0,  # DROID-SLAM doesn't use traditional map points
             'performance': self.performance_stats.copy()
         }
 

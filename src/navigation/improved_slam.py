@@ -329,6 +329,7 @@ class ImprovedSLAM:
             'is_initialized': self.is_initialized,
             'keyframes': len(self.keyframes),
             'map_points': len(self.map_points),
+            'num_map_points': len(self.map_points),  # Add num_map_points for UI compatibility
             'performance': self.performance_stats.copy()
         }
 
