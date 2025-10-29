@@ -19,16 +19,16 @@ from typing import Dict, Optional, Tuple, List
 from collections import deque
 import time
 
-# Check if pySLAM is available by testing the server
+# Check if pySLAM is available by testing the subprocess
 PYSLAM_AVAILABLE = False
 try:
-    # Test if we can import the pySLAM server
-    from navigation.pyslam_server import PySLAMServer
+    # Test if we can import the pySLAM subprocess
+    from navigation.pyslam_subprocess import PySLAMSubprocess
     PYSLAM_AVAILABLE = True
-    logging.info("✅ pySLAM server available!")
+    logging.info("✅ pySLAM subprocess available!")
 except ImportError as e:
     PYSLAM_AVAILABLE = False
-    logging.warning(f"pySLAM server not available: {e}")
+    logging.warning(f"pySLAM subprocess not available: {e}")
     logging.warning("Make sure pySLAM virtual environment is activated")
     logging.warning("Run: cd third_party/pyslam && source pyenv-activate.sh")
 
@@ -42,12 +42,12 @@ class PySLAMSystem:
         self.config = config
         self.logger = logging.getLogger(__name__)
         
-        # Initialize pySLAM server
+        # Initialize pySLAM subprocess
         try:
-            self.server = PySLAMServer(config)
-            self.logger.info("✅ pySLAM server initialized successfully")
+            self.server = PySLAMSubprocess(config)
+            self.logger.info("✅ pySLAM subprocess initialized successfully")
         except Exception as e:
-            error_msg = f"Failed to initialize pySLAM server: {e}"
+            error_msg = f"Failed to initialize pySLAM subprocess: {e}"
             self.logger.error(error_msg)
             raise RuntimeError(error_msg)
 

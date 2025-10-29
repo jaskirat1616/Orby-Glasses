@@ -13,27 +13,31 @@ import cv2
 import subprocess
 from typing import Dict, Optional
 
-# Check if we're running in the pySLAM environment
-def is_pyslam_env():
-    """Check if we're running in the pySLAM virtual environment"""
-    return 'pyslam' in sys.executable or 'pyslam' in os.environ.get('VIRTUAL_ENV', '')
+# Add pySLAM path to sys.path
+pyslam_path = os.path.join(os.path.dirname(__file__), '..', '..', 'third_party', 'pyslam')
+if os.path.exists(pyslam_path) and pyslam_path not in sys.path:
+    sys.path.insert(0, pyslam_path)
 
-# Only try to import pySLAM if we're in the right environment
+# Add pySLAM virtual environment site-packages to sys.path
+pyslam_venv_site_packages = os.path.expanduser('~/.python/venvs/pyslam/lib/python3.11/site-packages')
+if os.path.exists(pyslam_venv_site_packages) and pyslam_venv_site_packages not in sys.path:
+    sys.path.insert(0, pyslam_venv_site_packages)
+
+# Try to import pySLAM modules
 PYSLAM_AVAILABLE = False
-if is_pyslam_env():
-    try:
-        from pyslam.config import Config
-        from pyslam.slam.slam import Slam, SlamState
-        from pyslam.slam.camera import PinholeCamera
-        from pyslam.local_features.feature_tracker_configs import FeatureTrackerConfigs, FeatureTrackerTypes
-        from pyslam.local_features.feature_types import FeatureDetectorTypes
-        PYSLAM_AVAILABLE = True
-    except ImportError as e:
-        print(f"pySLAM not available in current environment: {e}")
-        PYSLAM_AVAILABLE = False
-else:
-    print("Not running in pySLAM environment - pySLAM not available")
+try:
+    from pyslam.config import Config
+    from pyslam.slam.slam import Slam, SlamState
+    from pyslam.slam.camera import PinholeCamera
+    from pyslam.local_features.feature_tracker_configs import FeatureTrackerConfigs, FeatureTrackerTypes
+    from pyslam.local_features.feature_types import FeatureDetectorTypes
+    PYSLAM_AVAILABLE = True
+    print("✅ pySLAM modules imported successfully!")
+except ImportError as e:
     PYSLAM_AVAILABLE = False
+    print(f"pySLAM not available: {e}")
+    print("Make sure pySLAM virtual environment is activated")
+    print("Run: cd third_party/pyslam && source pyenv-activate.sh")
 
 class PySLAMServer:
     """pySLAM server that runs in its own environment"""
