@@ -230,6 +230,14 @@ class OrbyGlasses:
                 self.logger.info("✓ Deep learning-based feature extraction")
                 self.logger.info("✓ Excellent accuracy and robustness")
                 self.logger.info("✓ Works with Apple Silicon (PyTorch MPS)")
+            elif use_pyslam and PYSLAM_AVAILABLE:
+                self.logger.info("🚀 Initializing pySLAM (Advanced Python SLAM Framework)...")
+                self.slam = PySLAMSystem(self.config)
+                feature_type = self.config.get('slam.feature_type', 'ORB')
+                self.logger.info(f"✓ Using pySLAM with {feature_type} features")
+                self.logger.info("✓ Loop closure, bundle adjustment, map persistence")
+                self.logger.info("✓ Multiple feature detector support (ORB, SIFT, SuperPoint)")
+                self.logger.info("✓ 3D map viewer and feature tracking display")
             elif use_rtabmap and RTABMAP_AVAILABLE:
                 self.logger.info("🗺️ Initializing RTAB-Map (Real-Time Appearance-Based Mapping)...")
                 self.slam = RTABMapSystem(self.config)
@@ -245,13 +253,6 @@ class OrbyGlasses:
                 self.logger.info("✓ Better pose estimation with RANSAC")
                 self.logger.info("✓ Real-time performance optimizations")
                 self.logger.info("✓ 2-3x faster than previous implementations")
-            elif use_pyslam and PYSLAM_AVAILABLE:
-                self.logger.info("🚀 Initializing pySLAM (Advanced Python SLAM Framework)...")
-                self.slam = PySLAMSystem(self.config)
-                feature_type = self.config.get('slam.feature_type', 'ORB')
-                self.logger.info(f"✓ Using pySLAM with {feature_type} features")
-                self.logger.info("✓ Loop closure, bundle adjustment, map persistence")
-                self.logger.info("✓ Multiple feature detector support (ORB, SIFT, SuperPoint)")
             elif use_opencv and OPENCV_SLAM_AVAILABLE:
                 self.logger.info("⚡ Initializing OpenCV Monocular SLAM (Lightweight)...")
                 self.slam = OpenCVMonocularSLAM(self.config)
