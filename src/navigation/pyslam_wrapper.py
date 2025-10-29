@@ -25,16 +25,16 @@ if os.path.exists(PYSLAM_PATH):
     sys.path.insert(0, PYSLAM_PATH)
 
 try:
-    # Activate pySLAM virtual environment first
-    pyslam_venv = os.path.expanduser('~/.python/venvs/pyslam/bin/activate_this.py')
-    if os.path.exists(pyslam_venv):
-        exec(open(pyslam_venv).read(), dict(__file__=pyslam_venv))
-        logging.info("✅ pySLAM virtual environment activated")
-    
-    # Add pySLAM path to sys.path
+    # Add pySLAM path to sys.path first
     pyslam_path = os.path.join(os.path.dirname(__file__), '..', '..', 'third_party', 'pyslam')
     if pyslam_path not in sys.path:
         sys.path.insert(0, pyslam_path)
+    
+    # Add pySLAM virtual environment site-packages to sys.path
+    pyslam_venv_site_packages = os.path.expanduser('~/.python/venvs/pyslam/lib/python3.11/site-packages')
+    if os.path.exists(pyslam_venv_site_packages) and pyslam_venv_site_packages not in sys.path:
+        sys.path.insert(0, pyslam_venv_site_packages)
+        logging.info("✅ pySLAM virtual environment site-packages added to path")
     
     # Import pyslam components
     from pyslam.config import Config
