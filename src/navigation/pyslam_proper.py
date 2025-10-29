@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-pySLAM Wrapper for OrbyGlasses
-Handles pySLAM integration without environment conflicts
+Proper pySLAM Integration for OrbyGlasses
+Uses pySLAM's core SLAM functionality with proper live visual odometry
 """
 
 import os
@@ -10,7 +10,7 @@ import cv2
 import numpy as np
 import logging
 import time
-import subprocess
+import threading
 from typing import Dict, Optional, List, Tuple
 from collections import deque
 
@@ -19,7 +19,7 @@ pyslam_path = os.path.join(os.path.dirname(__file__), '..', '..', 'third_party',
 if os.path.exists(pyslam_path) and pyslam_path not in sys.path:
     sys.path.insert(0, pyslam_path)
 
-# Try to import pySLAM core modules
+# Try to import pySLAM core modules (avoiding problematic semantic modules)
 PYSLAM_AVAILABLE = False
 try:
     from pyslam.config import Config
@@ -27,6 +27,9 @@ try:
     from pyslam.slam.camera import PinholeCamera
     from pyslam.local_features.feature_tracker_configs import FeatureTrackerConfigs, FeatureTrackerTypes
     from pyslam.local_features.feature_types import FeatureDetectorTypes
+    from pyslam.viz.slam_plot_drawer import SlamPlotDrawer
+    from pyslam.io.dataset_factory import dataset_factory
+    from pyslam.io.dataset_types import DatasetType, SensorType
     PYSLAM_AVAILABLE = True
     print("✅ pySLAM core modules imported successfully!")
 except ImportError as e:
@@ -34,13 +37,14 @@ except ImportError as e:
     print(f"pySLAM not available: {e}")
 
 
-class PySLAMWrapper:
+class ProperPySLAMSystem:
     """
-    pySLAM wrapper that handles environment conflicts and provides clean interface.
+    Proper pySLAM integration with live visual odometry and native viewers.
+    Uses pySLAM's core functionality without custom viewers.
     """
 
     def __init__(self, config: Dict):
-        """Initialize pySLAM wrapper."""
+        """Initialize proper pySLAM system."""
         self.config = config
         self.logger = logging.getLogger(__name__)
         
@@ -58,15 +62,21 @@ class PySLAMWrapper:
         self.current_pose = np.eye(4)
         self.trajectory = []
         self.map_points = []
+        self.keyframes = []
         
         # Visualization settings
         self.enable_visualization = config.get('slam.visualize', True)
+        self.slam_plot_drawer = None
         
         # Initialize SLAM system
         if PYSLAM_AVAILABLE:
             self._initialize_pyslam()
         else:
             raise RuntimeError("pySLAM is not available. Please install pySLAM properly.")
+        
+        # Initialize visualization
+        if self.enable_visualization:
+            self._initialize_visualization()
 
     def _initialize_pyslam(self):
         """Initialize pySLAM system with proper configuration."""
@@ -124,6 +134,18 @@ class PySLAMWrapper:
             self.logger.error(error_msg)
             raise RuntimeError(error_msg)
 
+    def _initialize_visualization(self):
+        """Initialize pySLAM's native visualization."""
+        try:
+            # Create pySLAM's native plot drawer
+            self.slam_plot_drawer = SlamPlotDrawer()
+            print("✅ pySLAM native visualization initialized!")
+            self.logger.info("✅ pySLAM native visualization initialized!")
+            
+        except Exception as e:
+            print(f"⚠️ Could not initialize pySLAM visualization: {e}")
+            self.logger.warning(f"Could not initialize pySLAM visualization: {e}")
+
     def process_frame(self, frame: np.ndarray, depth_map: Optional[np.ndarray] = None) -> Dict:
         """
         Process a single frame through pySLAM.
@@ -174,6 +196,10 @@ class PySLAMWrapper:
             # Get map points
             self.map_points = self.get_map_points()
             
+            # Update visualization
+            if self.enable_visualization and self.slam_plot_drawer:
+                self._update_visualization(img_bgr)
+            
             # Create result
             result = {
                 'pose': self.current_pose.copy(),
@@ -202,6 +228,15 @@ class PySLAMWrapper:
                 'num_map_points': 0,
                 'performance': {}
             }
+
+    def _update_visualization(self, frame: np.ndarray):
+        """Update pySLAM's native visualization."""
+        try:
+            if self.slam_plot_drawer:
+                # Use pySLAM's native plot drawer
+                self.slam_plot_drawer.draw(self.slam, frame)
+        except Exception as e:
+            self.logger.error(f"Visualization update error: {e}")
 
     def get_map_points(self) -> np.ndarray:
         """Get all map points for visualization."""
@@ -240,16 +275,21 @@ class PySLAMWrapper:
             self.current_pose = np.eye(4)
             self.trajectory = []
             self.map_points = []
+            self.keyframes = []
             self.logger.info("SLAM system reset")
         except Exception as e:
             self.logger.error(f"Reset error: {e}")
 
     def shutdown(self):
-        """Shutdown SLAM system."""
+        """Shutdown SLAM system and visualizations."""
         try:
             # Shutdown SLAM
             if hasattr(self.slam, 'shutdown'):
                 self.slam.shutdown()
+            
+            # Close pySLAM visualization
+            if self.slam_plot_drawer:
+                self.slam_plot_drawer.close()
             
             self.logger.info("SLAM system shutdown")
         except Exception as e:
@@ -257,6 +297,6 @@ class PySLAMWrapper:
 
 
 # For backward compatibility
-def create_pyslam_system(config: Dict) -> PySLAMWrapper:
-    """Create a pySLAM wrapper instance."""
-    return PySLAMWrapper(config)
+def create_pyslam_system(config: Dict) -> ProperPySLAMSystem:
+    """Create a proper pySLAM system instance."""
+    return ProperPySLAMSystem(config)

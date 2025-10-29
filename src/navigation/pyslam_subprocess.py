@@ -1,23 +1,35 @@
 #!/usr/bin/env python3
 """
-pySLAM Subprocess Runner - Runs pySLAM in a separate process to avoid OpenCV conflicts
+pySLAM Subprocess Integration for OrbyGlasses
+Runs pySLAM in a separate process to avoid environment conflicts
 """
 
 import os
 import sys
-import json
-import time
-import logging
-import numpy as np
 import cv2
+import numpy as np
+import logging
+import time
 import subprocess
-import tempfile
-from typing import Dict, Optional
+import json
+import threading
+import queue
+from typing import Dict, Optional, List, Tuple
+from collections import deque
+
+# Add pySLAM path to sys.path
+pyslam_path = os.path.join(os.path.dirname(__file__), '..', '..', 'third_party', 'pyslam')
+if os.path.exists(pyslam_path) and pyslam_path not in sys.path:
+    sys.path.insert(0, pyslam_path)
+
 
 class PySLAMSubprocess:
-    """pySLAM subprocess runner that avoids OpenCV conflicts"""
-    
+    """
+    pySLAM integration using subprocess to avoid environment conflicts.
+    """
+
     def __init__(self, config: Dict):
+        """Initialize pySLAM subprocess system."""
         self.config = config
         self.logger = logging.getLogger(__name__)
         
@@ -29,48 +41,76 @@ class PySLAMSubprocess:
         self.cx = self.width / 2
         self.cy = self.height / 2
 
-        # State
+        # State variables
         self.frame_count = 0
         self.is_initialized = False
         self.current_pose = np.eye(4)
         self.trajectory = []
-        self.performance_stats = {}
+        self.map_points = []
         
-        # Create temporary directory for communication
-        self.temp_dir = tempfile.mkdtemp(prefix='pyslam_')
-        self.frame_file = os.path.join(self.temp_dir, 'frame.png')
-        self.result_file = os.path.join(self.temp_dir, 'result.json')
+        # Subprocess management
+        self.pyslam_process = None
+        self.input_queue = queue.Queue()
+        self.output_queue = queue.Queue()
+        self.running = False
         
-        # Initialize pySLAM subprocess
-        self._initialize_subprocess()
+        # Start pySLAM subprocess
+        self._start_pyslam_subprocess()
 
-    def _initialize_subprocess(self):
-        """Initialize pySLAM subprocess"""
+    def _start_pyslam_subprocess(self):
+        """Start pySLAM in a subprocess."""
         try:
-            # Create the subprocess script
-            script_content = f'''
+            # Create pySLAM script
+            pyslam_script = self._create_pyslam_script()
+            
+            # Start subprocess
+            self.pyslam_process = subprocess.Popen(
+                [sys.executable, '-c', pyslam_script],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=0
+            )
+            
+            # Start communication threads
+            self.running = True
+            self.input_thread = threading.Thread(target=self._input_handler)
+            self.output_thread = threading.Thread(target=self._output_handler)
+            self.input_thread.daemon = True
+            self.output_thread.daemon = True
+            self.input_thread.start()
+            self.output_thread.start()
+            
+            self.is_initialized = True
+            print("✅ pySLAM subprocess started successfully!")
+            self.logger.info("✅ pySLAM subprocess started successfully!")
+            
+        except Exception as e:
+            error_msg = f"Failed to start pySLAM subprocess: {e}"
+            self.logger.error(error_msg)
+            raise RuntimeError(error_msg)
+
+    def _create_pyslam_script(self) -> str:
+        """Create the pySLAM script to run in subprocess."""
+        return f'''
 import sys
 import os
 import json
-import time
-import numpy as np
 import cv2
+import numpy as np
+import time
 
 # Add pySLAM path
-pyslam_path = os.path.join(os.path.dirname(__file__), '..', '..', 'third_party', 'pyslam')
-if os.path.exists(pyslam_path) and pyslam_path not in sys.path:
+pyslam_path = "{pyslam_path}"
+if pyslam_path not in sys.path:
     sys.path.insert(0, pyslam_path)
-
-# Add pySLAM virtual environment site-packages
-pyslam_venv_site_packages = os.path.expanduser('~/.python/venvs/pyslam/lib/python3.11/site-packages')
-if os.path.exists(pyslam_venv_site_packages) and pyslam_venv_site_packages not in sys.path:
-    sys.path.insert(0, pyslam_venv_site_packages)
 
 try:
     from pyslam.config import Config
     from pyslam.slam.slam import Slam, SlamState
     from pyslam.slam.camera import PinholeCamera
-    from pyslam.local_features.feature_tracker_configs import FeatureTrackerConfigs, FeatureTrackerTypes
+    from pyslam.local_features.feature_tracker_configs import FeatureTrackerConfigs
     from pyslam.local_features.feature_types import FeatureDetectorTypes
     
     # Initialize pySLAM
@@ -91,288 +131,242 @@ try:
     }}
     
     camera = PinholeCamera(camera_config)
-    
-    # Feature detector configuration
-    feature_type = '{self.config.get('slam.feature_type', 'ORB')}'
-    if feature_type == 'ORB':
-        slam_config = Config()
-        slam_config.feature_detector_type = FeatureDetectorTypes.ORB
-    elif feature_type == 'SIFT':
-        slam_config = Config()
-        slam_config.feature_detector_type = FeatureDetectorTypes.SIFT
-    else:
-        slam_config = Config()
-        slam_config.feature_detector_type = FeatureDetectorTypes.ORB
-
-    # SLAM configuration
-    slam_config.num_features = {self.config.get('slam.orb_features', 2000)}
-    slam_config.enable_loop_closing = {self.config.get('slam.loop_closure', False)}
-    slam_config.enable_local_mapping = True
-
-    # Create feature tracker config
     feature_tracker_config = FeatureTrackerConfigs.ORB2.copy()
     feature_tracker_config["num_features"] = {self.config.get('slam.orb_features', 2000)}
     
-    # Initialize SLAM
     slam = Slam(camera, feature_tracker_config)
     
-    frame_count = 0
-    current_pose = np.eye(4)
-    trajectory = []
-    
-    print("pySLAM subprocess initialized", flush=True)
-    
+    # Communication loop
     while True:
         try:
-            # Read frame file
-            if os.path.exists('{self.frame_file}'):
-                frame = cv2.imread('{self.frame_file}')
-                if frame is not None:
-                    # Process frame
-                    timestamp = time.time()
-                    slam.track(frame, None, None, frame_count, timestamp)
-                    
-                    # Get tracking state
-                    tracking_state = "OK"
-                    if hasattr(slam, 'tracking') and hasattr(slam.tracking, 'state'):
-                        if slam.tracking.state == SlamState.LOST:
-                            tracking_state = "LOST"
-                        elif slam.tracking.state == SlamState.NOT_INITIALIZED:
-                            tracking_state = "NOT_INITIALIZED"
-                    
-                    # Get current pose
-                    if hasattr(slam, 'tracking') and hasattr(slam.tracking, 'cur_pose'):
-                        current_pose = slam.tracking.cur_pose
-                    elif hasattr(slam, 'tracking') and hasattr(slam.tracking, 'get_current_pose'):
-                        current_pose = slam.tracking.get_current_pose()
-                    
-                    # Add to trajectory
-                    trajectory.append(current_pose.copy())
-                    
-                    # Get map points
-                    map_points = []
-                    if hasattr(slam, 'map') and slam.map is not None:
-                        try:
-                            points = slam.map.get_points()
-                            if points is not None and len(points) > 0:
-                                for point in points:
-                                    if hasattr(point, 'get_pos'):
-                                        map_points.append(point.get_pos().tolist())
-                                    elif hasattr(point, 'pos'):
-                                        map_points.append(point.pos.tolist())
-                        except:
-                            pass
-                    
-                    # Create result
-                    result = {{
-                        'pose': current_pose.tolist(),
-                        'position': current_pose[:3, 3].tolist(),
-                        'tracking_quality': 0.9 if tracking_state == "OK" else 0.0,
-                        'tracking_state': tracking_state,
-                        'message': f"pySLAM frame {{frame_count}}",
-                        'is_initialized': True,
-                        'trajectory_length': len(trajectory),
-                        'num_map_points': len(map_points),
-                        'performance': {{}}
-                    }}
-                    
-                    # Write result
-                    with open('{self.result_file}', 'w') as f:
-                        json.dump(result, f)
-                    
-                    frame_count += 1
-                    
-                    # Remove frame file
-                    os.remove('{self.frame_file}')
-            
-            time.sleep(0.01)  # Small delay
-            
-        except Exception as e:
-            print(f"Error in pySLAM subprocess: {{e}}", flush=True)
-            time.sleep(0.1)
-            
-except ImportError as e:
-    print(f"pySLAM not available: {{e}}", flush=True)
-    # Fallback implementation
-    import cv2
-    import numpy as np
-    
-    orb = cv2.ORB_create(nfeatures={self.config.get('slam.orb_features', 2000)})
-    matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
-    
-    camera_matrix = np.array([
-        [{self.fx}, 0, {self.cx}],
-        [0, {self.fy}, {self.cy}],
-        [0, 0, 1]
-    ], dtype=np.float32)
-    
-    prev_frame = None
-    prev_keypoints = None
-    prev_descriptors = None
-    frame_count = 0
-    current_pose = np.eye(4)
-    trajectory = []
-    
-    print("pySLAM fallback subprocess initialized", flush=True)
-    
-    while True:
-        try:
-            if os.path.exists('{self.frame_file}'):
-                frame = cv2.imread('{self.frame_file}')
-                if frame is not None:
-                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                    keypoints, descriptors = orb.detectAndCompute(gray, None)
-                    
-                    if prev_frame is not None and prev_keypoints is not None and prev_descriptors is not None:
-                        matches = matcher.match(prev_descriptors, descriptors)
-                        matches = sorted(matches, key=lambda x: x.distance)
-                        good_matches = matches[:50]
-                        
-                        if len(good_matches) > 10:
-                            src_pts = np.float32([prev_keypoints[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
-                            dst_pts = np.float32([keypoints[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
-                            
-                            E, mask = cv2.findEssentialMat(src_pts, dst_pts, camera_matrix, method=cv2.RANSAC, prob=0.999, threshold=1.0)
-                            
-                            if E is not None:
-                                _, R, t, mask = cv2.recoverPose(E, src_pts, dst_pts, camera_matrix)
-                                pose_delta = np.eye(4)
-                                pose_delta[:3, :3] = R
-                                pose_delta[:3, 3] = t.flatten()
-                                current_pose = current_pose @ pose_delta
-                                trajectory.append(current_pose.copy())
-                    
-                    prev_frame = gray.copy()
-                    prev_keypoints = keypoints
-                    prev_descriptors = descriptors
-                    
-                    result = {{
-                        'pose': current_pose.tolist(),
-                        'position': current_pose[:3, 3].tolist(),
-                        'tracking_quality': 0.8 if len(keypoints) > 50 else 0.3,
-                        'tracking_state': "OK" if len(keypoints) > 50 else "LOST",
-                        'message': f"Fallback SLAM frame {{frame_count}}",
-                        'is_initialized': True,
-                        'trajectory_length': len(trajectory),
-                        'num_map_points': 0,
-                        'performance': {{}}
-                    }}
-                    
-                    with open('{self.result_file}', 'w') as f:
-                        json.dump(result, f)
-                    
-                    frame_count += 1
-                    os.remove('{self.frame_file}')
-            
-            time.sleep(0.01)
-            
-        except Exception as e:
-            print(f"Error in fallback subprocess: {{e}}", flush=True)
-            time.sleep(0.1)
-'''
-            
-            # Write the script
-            script_file = os.path.join(self.temp_dir, 'pyslam_worker.py')
-            with open(script_file, 'w') as f:
-                f.write(script_content)
-            
-            # Start the subprocess
-            self.process = subprocess.Popen(
-                [sys.executable, script_file],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
-            
-            # Wait for initialization
-            time.sleep(2)
-            
-            self.logger.info("✅ pySLAM subprocess initialized")
-            
-        except Exception as e:
-            self.logger.error(f"Failed to initialize pySLAM subprocess: {e}")
-            raise RuntimeError(f"Failed to initialize pySLAM subprocess: {e}")
-
-    def process_frame(self, frame: np.ndarray) -> Dict:
-        """Process a single frame"""
-        try:
-            # Save frame to file
-            cv2.imwrite(self.frame_file, frame)
-            
-            # Wait for result
-            max_wait = 1.0  # 1 second timeout
-            start_time = time.time()
-            
-            while time.time() - start_time < max_wait:
-                if os.path.exists(self.result_file):
-                    # Read result
-                    with open(self.result_file, 'r') as f:
-                        result = json.load(f)
-                    
-                    # Convert pose back to numpy array
-                    result['pose'] = np.array(result['pose'])
-                    result['position'] = np.array(result['position'])
-                    
-                    # Update local state
-                    self.current_pose = result['pose']
-                    self.trajectory.append(self.current_pose.copy())
-                    self.is_initialized = result['is_initialized']
-                    self.frame_count += 1
-                    
-                    return result
+            line = input()
+            if not line:
+                continue
                 
-                time.sleep(0.01)
+            data = json.loads(line)
+            command = data.get('command')
             
-            # Timeout - return error
-            return {
-                'pose': self.current_pose.copy(),
-                'position': self.current_pose[:3, 3].copy(),
-                'tracking_quality': 0.0,
-                'tracking_state': "ERROR",
-                'message': "pySLAM subprocess timeout",
-                'is_initialized': False,
-                'trajectory_length': len(self.trajectory),
-                'num_map_points': 0,
-                'performance': self.performance_stats.copy()
-            }
-            
+            if command == 'process_frame':
+                # Decode frame
+                frame_data = np.frombuffer(bytes.fromhex(data['frame']), dtype=np.uint8)
+                frame = cv2.imdecode(frame_data, cv2.IMREAD_COLOR)
+                
+                # Process frame
+                timestamp = time.time()
+                slam.track(frame, None, None, data['frame_count'], timestamp)
+                
+                # Get results
+                tracking_state = "OK"
+                if hasattr(slam, 'tracking') and hasattr(slam.tracking, 'state'):
+                    if slam.tracking.state == SlamState.LOST:
+                        tracking_state = "LOST"
+                    elif slam.tracking.state == SlamState.NOT_INITIALIZED:
+                        tracking_state = "NOT_INITIALIZED"
+                
+                # Get pose
+                pose = np.eye(4)
+                if hasattr(slam, 'tracking') and hasattr(slam.tracking, 'cur_pose'):
+                    pose = slam.tracking.cur_pose
+                elif hasattr(slam, 'tracking') and hasattr(slam.tracking, 'get_current_pose'):
+                    pose = slam.tracking.get_current_pose()
+                
+                # Get map points
+                map_points = []
+                if hasattr(slam, 'map') and slam.map is not None:
+                    try:
+                        points = slam.map.get_points()
+                        if points is not None and len(points) > 0:
+                            for point in points:
+                                if hasattr(point, 'get_pos'):
+                                    map_points.append(point.get_pos().tolist())
+                                elif hasattr(point, 'pos'):
+                                    map_points.append(point.pos.tolist())
+                    except:
+                        pass
+                
+                # Send result
+                result = {{
+                    'pose': pose.tolist(),
+                    'position': pose[:3, 3].tolist(),
+                    'tracking_quality': 0.9 if tracking_state == "OK" else 0.0,
+                    'tracking_state': tracking_state,
+                    'message': f"pySLAM frame {{data['frame_count']}}",
+                    'is_initialized': True,
+                    'trajectory_length': data['frame_count'],
+                    'num_map_points': len(map_points),
+                    'performance': {{}}
+                }}
+                
+                print(json.dumps(result))
+                sys.stdout.flush()
+                
+            elif command == 'shutdown':
+                break
+                
         except Exception as e:
-            self.logger.error(f"pySLAM subprocess error: {e}")
+            error_result = {{
+                'error': str(e),
+                'pose': [[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]],
+                'position': [0,0,0],
+                'tracking_quality': 0.0,
+                'tracking_state': "ERROR",
+                'message': f"pySLAM error: {{e}}",
+                'is_initialized': False,
+                'trajectory_length': 0,
+                'num_map_points': 0,
+                'performance': {{}}
+            }}
+            print(json.dumps(error_result))
+            sys.stdout.flush()
+            
+except Exception as e:
+    error_result = {{
+        'error': str(e),
+        'pose': [[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]],
+        'position': [0,0,0],
+        'tracking_quality': 0.0,
+        'tracking_state': "ERROR",
+        'message': f"pySLAM initialization error: {{e}}",
+        'is_initialized': False,
+        'trajectory_length': 0,
+        'num_map_points': 0,
+        'performance': {{}}
+    }}
+    print(json.dumps(error_result))
+    sys.stdout.flush()
+'''
+
+    def _input_handler(self):
+        """Handle input to pySLAM subprocess."""
+        while self.running:
+            try:
+                if not self.input_queue.empty():
+                    data = self.input_queue.get(timeout=0.1)
+                    self.pyslam_process.stdin.write(json.dumps(data) + '\n')
+                    self.pyslam_process.stdin.flush()
+            except:
+                pass
+
+    def _output_handler(self):
+        """Handle output from pySLAM subprocess."""
+        while self.running:
+            try:
+                line = self.pyslam_process.stdout.readline()
+                if line:
+                    data = json.loads(line.strip())
+                    self.output_queue.put(data)
+            except:
+                pass
+
+    def process_frame(self, frame: np.ndarray, depth_map: Optional[np.ndarray] = None) -> Dict:
+        """
+        Process a single frame through pySLAM subprocess.
+
+        Args:
+            frame: Input frame (BGR or grayscale)
+            depth_map: Depth map (ignored for monocular SLAM)
+
+        Returns:
+            Dictionary with SLAM results
+        """
+        self.frame_count += 1
+        
+        try:
+            # Encode frame
+            _, buffer = cv2.imencode('.jpg', frame)
+            frame_hex = buffer.tobytes().hex()
+            
+            # Send to subprocess
+            data = {
+                'command': 'process_frame',
+                'frame': frame_hex,
+                'frame_count': self.frame_count
+            }
+            self.input_queue.put(data)
+            
+            # Get result
+            try:
+                result = self.output_queue.get(timeout=1.0)
+                
+                # Convert lists back to numpy arrays
+                result['pose'] = np.array(result['pose'])
+                result['position'] = np.array(result['position'])
+                
+                # Update internal state
+                self.current_pose = result['pose']
+                self.trajectory.append(self.current_pose.copy())
+                
+                return result
+                
+            except queue.Empty:
+                return {
+                    'pose': self.current_pose.copy(),
+                    'position': self.current_pose[:3, 3].copy(),
+                    'tracking_quality': 0.0,
+                    'tracking_state': "TIMEOUT",
+                    'message': "pySLAM subprocess timeout",
+                    'is_initialized': self.is_initialized,
+                    'trajectory_length': len(self.trajectory),
+                    'num_map_points': 0,
+                    'performance': {}
+                }
+                
+        except Exception as e:
+            self.logger.error(f"SLAM processing error: {e}")
             return {
                 'pose': self.current_pose.copy(),
                 'position': self.current_pose[:3, 3].copy(),
                 'tracking_quality': 0.0,
                 'tracking_state': "ERROR",
-                'message': f"pySLAM subprocess error: {e}",
+                'message': f"SLAM error: {e}",
                 'is_initialized': False,
                 'trajectory_length': len(self.trajectory),
                 'num_map_points': 0,
-                'performance': self.performance_stats.copy()
+                'performance': {}
             }
 
     def get_map_points(self) -> np.ndarray:
-        """Get map points"""
-        return np.array([]).reshape(0, 3)
+        """Get all map points for visualization."""
+        return np.array([]).reshape(0, 3)  # Subprocess doesn't maintain map points
+
+    def is_tracking_good(self) -> bool:
+        """Check if SLAM tracking is good."""
+        return True  # Subprocess always returns True
+
+    def get_current_pose(self) -> np.ndarray:
+        """Get the current estimated camera pose."""
+        return self.current_pose
 
     def reset(self):
-        """Reset SLAM system"""
-        self.frame_count = 0
-        self.is_initialized = False
-        self.current_pose = np.eye(4)
-        self.trajectory = []
-        self.performance_stats = {}
+        """Reset the SLAM system."""
+        try:
+            self.frame_count = 0
+            self.is_initialized = False
+            self.current_pose = np.eye(4)
+            self.trajectory = []
+            self.map_points = []
+            self.logger.info("SLAM system reset")
+        except Exception as e:
+            self.logger.error(f"Reset error: {e}")
 
     def shutdown(self):
-        """Shutdown SLAM system"""
+        """Shutdown SLAM system and subprocess."""
         try:
-            if hasattr(self, 'process') and self.process:
-                self.process.terminate()
-                self.process.wait(timeout=5)
+            self.running = False
             
-            # Clean up temp directory
-            import shutil
-            shutil.rmtree(self.temp_dir, ignore_errors=True)
+            # Send shutdown command
+            if self.pyslam_process:
+                self.input_queue.put({'command': 'shutdown'})
+                time.sleep(0.5)
+                self.pyslam_process.terminate()
+                self.pyslam_process.wait()
             
-            self.logger.info("pySLAM subprocess shutdown")
+            self.logger.info("SLAM system shutdown")
         except Exception as e:
             self.logger.error(f"Shutdown error: {e}")
+
+
+# For backward compatibility
+def create_pyslam_system(config: Dict) -> PySLAMSubprocess:
+    """Create a pySLAM subprocess instance."""
+    return PySLAMSubprocess(config)

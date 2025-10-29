@@ -96,13 +96,13 @@ try:
         sys.path.insert(0, project_root)
         print("✅ Project root added to Python path")
     
-    # Try to import pySLAM wrapper (it will handle its own environment)
-    from navigation.pyslam_wrapper import PySLAMSystem, PYSLAM_AVAILABLE
+    # Try to import simple pySLAM implementation
+    from navigation.pyslam_simple import SimplePySLAM, PYSLAM_AVAILABLE
     print("✅ pySLAM available")
 except ImportError as e:
     PYSLAM_AVAILABLE = False
     print(f"Note: pySLAM not available: {e}")
-    print("Run: cd third_party/pyslam && source pyenv-activate.sh")
+    print("Run: cd third_party/pyslam && source ~/.python/venvs/pyslam/bin/activate")
 
 try:
     from navigation.opencv_mono_slam import OpenCVMonocularSLAM
@@ -231,12 +231,13 @@ class OrbyGlasses:
                 self.logger.info("✓ Works with Apple Silicon (PyTorch MPS)")
             elif use_pyslam and PYSLAM_AVAILABLE:
                 self.logger.info("🚀 Initializing pySLAM (Advanced Python SLAM Framework)...")
-                self.slam = PySLAMSystem(self.config)
+                self.logger.info(f"DEBUG: use_pyslam={use_pyslam}, PYSLAM_AVAILABLE={PYSLAM_AVAILABLE}")
+                self.slam = SimplePySLAM(self.config)
                 feature_type = self.config.get('slam.feature_type', 'ORB')
                 self.logger.info(f"✓ Using pySLAM with {feature_type} features")
                 self.logger.info("✓ Loop closure, bundle adjustment, map persistence")
                 self.logger.info("✓ Multiple feature detector support (ORB, SIFT, SuperPoint)")
-                self.logger.info("✓ 3D map viewer and feature tracking display")
+                self.logger.info("✓ Native pySLAM visualization and feature tracking")
             elif use_rtabmap and RTABMAP_AVAILABLE:
                 self.logger.info("🗺️ Initializing RTAB-Map (Real-Time Appearance-Based Mapping)...")
                 self.slam = RTABMapSystem(self.config)
@@ -286,11 +287,11 @@ class OrbyGlasses:
                 # Fallback to pySLAM if available, otherwise RGBD SLAM
                 if PYSLAM_AVAILABLE:
                     self.logger.info("🚀 Initializing pySLAM (Fallback SLAM System)...")
-                    self.slam = PySLAMSystem(self.config)
+                    self.slam = SimplePySLAM(self.config)
                     feature_type = self.config.get('slam.feature_type', 'ORB')
                     self.logger.info(f"✓ Using pySLAM with {feature_type} features")
                     self.logger.info("✓ Professional-grade monocular SLAM")
-                    self.logger.info("✓ Real-time 3D visualization")
+                    self.logger.info("✓ Native pySLAM visualization")
                 else:
                     self.logger.info("Initializing RGBD SLAM system...")
                     self.slam = SLAMSystem(self.config)
