@@ -96,8 +96,7 @@ try:
     if os.path.exists(pyslam_venv):
         exec(open(pyslam_venv).read(), dict(__file__=pyslam_venv))
     
-    from navigation.pyslam_wrapper import PySLAMSystem
-    PYSLAM_AVAILABLE = True
+    from navigation.pyslam_wrapper import PySLAMSystem, PYSLAM_AVAILABLE
     print("✅ pySLAM available with virtual environment activated")
 except ImportError as e:
     PYSLAM_AVAILABLE = False

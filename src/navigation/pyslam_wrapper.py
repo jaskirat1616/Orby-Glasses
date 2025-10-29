@@ -45,6 +45,7 @@ try:
     # Import visualization components
     from pyslam.viz.viewer3D import Viewer3D
     from pyslam.viz.slam_plot_drawer import SlamPlotDrawer
+    from pyslam.viz.display2D import Display2D
     
     PYSLAM_AVAILABLE = True
     logging.info("✅ pySLAM modules imported successfully!")
@@ -77,19 +78,19 @@ class PySLAMSystem:
         self.logger = logging.getLogger(self.__class__.__name__)
 
         # Camera parameters
-        width = config.get('camera.width', 320)
-        height = config.get('camera.height', 240)
+        self.width = config.get('camera.width', 320)
+        self.height = config.get('camera.height', 240)
         fps = config.get('camera.fps', 30)
         self.fx = config.get('mapping3d.fx', 500)
         self.fy = config.get('mapping3d.fy', 500)
-        self.cx = width / 2
-        self.cy = height / 2
+        self.cx = self.width / 2
+        self.cy = self.height / 2
 
         # Create a proper Config object for the camera
         camera_config = Config()
         camera_config.cam_settings = {
-            'Camera.width': width,
-            'Camera.height': height,
+            'Camera.width': self.width,
+            'Camera.height': self.height,
             'Camera.fx': self.fx,
             'Camera.fy': self.fy,
             'Camera.cx': self.cx,
@@ -144,11 +145,11 @@ class PySLAMSystem:
             try:
                 # Initialize 3D viewer (map visualization)
                 self.viewer3d = Viewer3D()
-                self.viewer3d.start()
+                # Don't call start() to avoid OpenCV conflicts
                 self.logger.info("✅ pySLAM 3D Viewer enabled - Real-time 3D map!")
                 
                 # Initialize 2D display (feature tracking visualization)
-                self.display2d = Display2D()
+                self.display2d = Display2D(self.width, self.height)
                 self.logger.info("✅ pySLAM 2D Display enabled - Feature tracking!")
             except Exception as e:
                 self.logger.warning(f"Could not initialize pySLAM visualizations: {e}")
@@ -196,14 +197,14 @@ class PySLAMSystem:
             self.slam.track(gray, timestamp)
             
             # Update visualizations if enabled
-            if self.enable_visualization:
+            if self.enable_visualization and self.slam is not None:
                 try:
                     # Update 3D viewer with current map state
-                    if self.viewer3d is not None and self.slam.map is not None:
+                    if self.viewer3d is not None and hasattr(self.slam, 'map') and self.slam.map is not None:
                         self.viewer3d.draw_map(self.slam.map, self.slam.tracking)
                     
                     # Update 2D display with feature tracking
-                    if self.display2d is not None:
+                    if self.display2d is not None and hasattr(self.slam, 'tracking'):
                         self.display2d.draw(self.slam.tracking, gray)
                 except Exception as e:
                     # Don't crash if visualization fails
