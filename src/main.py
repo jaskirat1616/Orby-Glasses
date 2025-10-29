@@ -88,34 +88,21 @@ except ImportError:
     print("Note: ORB-SLAM3 not available (using advanced monocular SLAM - superior performance)")
 
 try:
-    # Add pySLAM virtual environment site-packages to sys.path
+    # Add project root to Python path for navigation module
     import os
     import sys
-    
-    # Add project root to Python path for navigation module
     project_root = os.path.dirname(os.path.abspath(__file__))
     if project_root not in sys.path:
         sys.path.insert(0, project_root)
         print("✅ Project root added to Python path")
     
-    pyslam_venv_site_packages = os.path.expanduser('~/.python/venvs/pyslam/lib/python3.11/site-packages')
-    if os.path.exists(pyslam_venv_site_packages) and pyslam_venv_site_packages not in sys.path:
-        sys.path.insert(0, pyslam_venv_site_packages)
-        print("✅ pySLAM virtual environment site-packages added to path")
-        
-        # Test if ujson is available after adding to path
-        try:
-            import ujson
-            print("✅ ujson available after adding to path")
-        except ImportError:
-            print("❌ ujson not available after adding to path")
-    
+    # Try to import pySLAM wrapper (it will handle its own environment)
     from navigation.pyslam_wrapper import PySLAMSystem, PYSLAM_AVAILABLE
-    print("✅ pySLAM available with virtual environment activated")
+    print("✅ pySLAM available")
 except ImportError as e:
     PYSLAM_AVAILABLE = False
     print(f"Note: pySLAM not available: {e}")
-    print("Run: cd third_party/pyslam && ./scripts/install_all_venv.sh")
+    print("Run: cd third_party/pyslam && source pyenv-activate.sh")
 
 try:
     from navigation.opencv_mono_slam import OpenCVMonocularSLAM
