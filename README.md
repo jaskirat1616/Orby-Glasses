@@ -40,6 +40,14 @@ OrbyGlasses includes multiple SLAM options optimized for different needs:
 - **Optimized for real-time** navigation assistance
 - **Already enabled** in your config
 
+### 🗺️ RTAB-Map (Optional - Appearance-Based Mapping)
+- **Real-time appearance-based mapping** with loop closure detection
+- **Graph-based SLAM optimization** for robust mapping
+- **Multi-session mapping** support for long-term operation
+- **Memory management** for large-scale environments
+- **Excellent for long-term localization** and re-localization
+- **Documentation**: [https://introlab.github.io/rtabmap/](https://introlab.github.io/rtabmap/)
+
 ### 🤖 DROID-SLAM (Optional - Deep Learning)
 - **State-of-the-art** deep learning SLAM
 - **Excellent accuracy** and robustness
@@ -57,6 +65,9 @@ OrbyGlasses includes multiple SLAM options optimized for different needs:
 # Improved SLAM is already ready to use!
 ./run.sh
 
+# To install RTAB-Map (optional):
+./install_rtabmap.sh
+
 # To install DROID-SLAM (optional):
 ./install_slam.sh
 ```
@@ -66,6 +77,7 @@ Edit `config/config.yaml` to choose your SLAM system:
 ```yaml
 slam:
   use_improved: true    # Fast & accurate (recommended)
+  use_rtabmap: false    # Appearance-based mapping
   use_droid: false      # Deep learning SLAM
   use_orbslam3: false   # Industry standard
 ```

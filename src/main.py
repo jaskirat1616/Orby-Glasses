@@ -117,6 +117,13 @@ except ImportError:
     DROID_SLAM_AVAILABLE = False
     print("Note: DROID-SLAM not available (install from: https://github.com/princeton-vl/DROID-SLAM)")
 
+try:
+    from navigation.rtabmap_wrapper import RTABMapSystem
+    RTABMAP_AVAILABLE = True
+except ImportError:
+    RTABMAP_AVAILABLE = False
+    print("Note: RTAB-Map not available (install with: ./install_rtabmap.sh)")
+
 from navigation.indoor_navigation import IndoorNavigator
 
 # Visualization
@@ -215,6 +222,7 @@ class OrbyGlasses:
             use_working = self.config.get('slam.use_working', False)
             use_improved = self.config.get('slam.use_improved', False)  # NEW: Improved SLAM
             use_droid = self.config.get('slam.use_droid', False)  # NEW: DROID-SLAM
+            use_rtabmap = self.config.get('slam.use_rtabmap', False)  # NEW: RTAB-Map
 
             if use_droid and DROID_SLAM_AVAILABLE:
                 self.logger.info("🤖 Initializing DROID-SLAM (Deep Learning SLAM)...")
@@ -222,6 +230,14 @@ class OrbyGlasses:
                 self.logger.info("✓ Deep learning-based feature extraction")
                 self.logger.info("✓ Excellent accuracy and robustness")
                 self.logger.info("✓ Works with Apple Silicon (PyTorch MPS)")
+            elif use_rtabmap and RTABMAP_AVAILABLE:
+                self.logger.info("🗺️ Initializing RTAB-Map (Real-Time Appearance-Based Mapping)...")
+                self.slam = RTABMapSystem(self.config)
+                self.logger.info("✓ Appearance-based loop closure detection")
+                self.logger.info("✓ Graph-based SLAM optimization")
+                self.logger.info("✓ Multi-session mapping support")
+                self.logger.info("✓ Memory management for large-scale environments")
+                self.logger.info("✓ Excellent for long-term localization")
             elif use_improved:
                 self.logger.info("⚡ Initializing Improved SLAM (Fast & Accurate)...")
                 self.slam = ImprovedSLAM(self.config)
