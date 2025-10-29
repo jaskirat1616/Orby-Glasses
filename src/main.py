@@ -95,6 +95,13 @@ try:
     if os.path.exists(pyslam_venv):
         exec(open(pyslam_venv).read(), dict(__file__=pyslam_venv))
         print("✅ pySLAM virtual environment activated")
+        
+        # Test if ujson is available after activation
+        try:
+            import ujson
+            print("✅ ujson available after activation")
+        except ImportError:
+            print("❌ ujson not available after activation")
     
     from navigation.pyslam_wrapper import PySLAMSystem, PYSLAM_AVAILABLE
     print("✅ pySLAM available with virtual environment activated")
