@@ -122,14 +122,14 @@ mapping3d:
   fy: 500
   skip_bbox: true
 
-        # Visual SLAM - Choose your SLAM system
-        slam:
-          enabled: true
-          use_pyslam: true     # pySLAM with 3D Viewer (✅ WORKING - virtual env activated!)
-          use_rtabmap: false    # RTAB-Map (appearance-based loop closure, requires installation)
-          use_droid: false      # DROID-SLAM (deep learning, requires installation)
-          use_orbslam3: false   # ORB-SLAM3 (requires building from source - best if available)
-          use_improved: false   # Fast & accurate SLAM (fallback)
+# Visual SLAM - Choose your SLAM system
+slam:
+  enabled: true
+  use_pyslam: true     # pySLAM with 3D Viewer (✅ WORKING - virtual env activated!)
+  use_rtabmap: true    # RTAB-Map (appearance-based loop closure, requires installation)
+  use_droid: false      # DROID-SLAM (deep learning, requires installation)
+  use_orbslam3: false   # ORB-SLAM3 (requires building from source - best if available)
+  use_improved: false   # Fast & accurate SLAM (fallback)
   use_accurate: false   # Production-quality accurate SLAM (proper BA, covisibility)
   use_advanced: false   # Hybrid tracking + depth scale (experimental)
   use_monocular: false  # Basic monocular SLAM
