@@ -96,9 +96,9 @@ try:
         sys.path.insert(0, project_root)
         print("✅ Project root added to Python path")
     
-    # Try to import simple pySLAM implementation
-    from navigation.pyslam_simple import SimplePySLAM, PYSLAM_AVAILABLE
-    print("✅ pySLAM available")
+    # Try to import live pySLAM implementation
+    from navigation.pyslam_live import LivePySLAM, PYSLAM_AVAILABLE
+    print("✅ Live pySLAM available")
 except ImportError as e:
     PYSLAM_AVAILABLE = False
     print(f"Note: pySLAM not available: {e}")
@@ -232,7 +232,7 @@ class OrbyGlasses:
             elif use_pyslam and PYSLAM_AVAILABLE:
                 self.logger.info("🚀 Initializing pySLAM (Advanced Python SLAM Framework)...")
                 self.logger.info(f"DEBUG: use_pyslam={use_pyslam}, PYSLAM_AVAILABLE={PYSLAM_AVAILABLE}")
-                self.slam = SimplePySLAM(self.config)
+                self.slam = LivePySLAM(self.config)
                 feature_type = self.config.get('slam.feature_type', 'ORB')
                 self.logger.info(f"✓ Using pySLAM with {feature_type} features")
                 self.logger.info("✓ Loop closure, bundle adjustment, map persistence")
@@ -287,7 +287,7 @@ class OrbyGlasses:
                 # Fallback to pySLAM if available, otherwise RGBD SLAM
                 if PYSLAM_AVAILABLE:
                     self.logger.info("🚀 Initializing pySLAM (Fallback SLAM System)...")
-                    self.slam = SimplePySLAM(self.config)
+                    self.slam = LivePySLAM(self.config)
                     feature_type = self.config.get('slam.feature_type', 'ORB')
                     self.logger.info(f"✓ Using pySLAM with {feature_type} features")
                     self.logger.info("✓ Professional-grade monocular SLAM")
