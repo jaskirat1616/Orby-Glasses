@@ -89,11 +89,20 @@ except ImportError:
     print("Note: ORB-SLAM3 not available (using advanced monocular SLAM - superior performance)")
 
 try:
+    # Activate pySLAM virtual environment before importing
+    import os
+    import sys
+    pyslam_venv = os.path.expanduser('~/.python/venvs/pyslam/bin/activate_this.py')
+    if os.path.exists(pyslam_venv):
+        exec(open(pyslam_venv).read(), dict(__file__=pyslam_venv))
+    
     from navigation.pyslam_wrapper import PySLAMSystem
     PYSLAM_AVAILABLE = True
-except ImportError:
+    print("✅ pySLAM available with virtual environment activated")
+except ImportError as e:
     PYSLAM_AVAILABLE = False
-    print("Note: pySLAM not available (run: cd third_party/pyslam && ./scripts/install_all_venv.sh)")
+    print(f"Note: pySLAM not available: {e}")
+    print("Run: cd third_party/pyslam && ./scripts/install_all_venv.sh")
 
 try:
     from navigation.opencv_mono_slam import OpenCVMonocularSLAM

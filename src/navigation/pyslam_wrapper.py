@@ -25,19 +25,33 @@ if os.path.exists(PYSLAM_PATH):
     sys.path.insert(0, PYSLAM_PATH)
 
 try:
+    # Add pySLAM path to sys.path
+    import sys
+    import os
+    pyslam_path = os.path.join(os.path.dirname(__file__), '..', '..', 'third_party', 'pyslam')
+    if pyslam_path not in sys.path:
+        sys.path.insert(0, pyslam_path)
+    
+    # Virtual environment should already be activated by main.py
+    # No need to activate again here
+    
     # Import pyslam components
-    from slam import Slam, SlamConfig
-    from camera import Camera, PinholeCamera
-    from feature_tracker import FeatureTrackerTypes
+    from pyslam.config import Config
+    from pyslam.slam.slam import Slam, SlamState
+    from pyslam.slam.camera import PinholeCamera
+    from pyslam.local_features.feature_tracker_configs import FeatureTrackerConfigs, FeatureTrackerTypes
+    from pyslam.local_features.feature_types import FeatureDetectorTypes
     
     # Import visualization components
-    from viewer3D import Viewer3D
-    from display2D import Display2D
+    from pyslam.viz.viewer3D import Viewer3D
+    from pyslam.viz.slam_plot_drawer import SlamPlotDrawer
     
     PYSLAM_AVAILABLE = True
+    logging.info("✅ pySLAM modules imported successfully!")
 except ImportError as e:
     PYSLAM_AVAILABLE = False
     logging.warning(f"pyslam not available: {e}")
+    logging.warning("Make sure pySLAM virtual environment is activated")
 
 
 class PySLAMSystem:
@@ -71,40 +85,48 @@ class PySLAMSystem:
         self.cx = width / 2
         self.cy = height / 2
 
+        # Create a proper Config object for the camera
+        camera_config = Config()
+        camera_config.cam_settings = {
+            'Camera.width': width,
+            'Camera.height': height,
+            'Camera.fx': self.fx,
+            'Camera.fy': self.fy,
+            'Camera.cx': self.cx,
+            'Camera.cy': self.cy,
+            'Camera.fps': fps
+        }
+        
         # Create pyslam camera model
-        self.camera = PinholeCamera(
-            width=width,
-            height=height,
-            fx=self.fx,
-            fy=self.fy,
-            cx=self.cx,
-            cy=self.cy,
-            fps=fps
-        )
+        self.camera = PinholeCamera(camera_config)
 
         # Configure SLAM system
-        slam_config = SlamConfig()
-        slam_config.set_camera(self.camera)
+        slam_config = Config()
+        slam_config.cam_settings = camera_config.cam_settings
 
         # Feature detector configuration
         feature_type = config.get('slam.feature_type', 'ORB')
         if feature_type == 'ORB':
-            slam_config.feature_tracker_type = FeatureTrackerTypes.ORB
+            slam_config.feature_detector_type = FeatureDetectorTypes.ORB
         elif feature_type == 'SIFT':
-            slam_config.feature_tracker_type = FeatureTrackerTypes.SIFT
+            slam_config.feature_detector_type = FeatureDetectorTypes.SIFT
         elif feature_type == 'SUPERPOINT':
-            slam_config.feature_tracker_type = FeatureTrackerTypes.SUPERPOINT
+            slam_config.feature_detector_type = FeatureDetectorTypes.SUPERPOINT
         else:
-            slam_config.feature_tracker_type = FeatureTrackerTypes.ORB
+            slam_config.feature_detector_type = FeatureDetectorTypes.ORB
 
         # SLAM configuration
         slam_config.num_features = config.get('slam.orb_features', 2000)
         slam_config.enable_loop_closing = config.get('slam.loop_closure', False)
         slam_config.enable_local_mapping = True
 
+        # Create feature tracker config
+        feature_tracker_config = FeatureTrackerConfigs.ORB2.copy()
+        feature_tracker_config["num_features"] = config.get('slam.orb_features', 2000)
+        
         # Initialize SLAM system
         try:
-            self.slam = Slam(slam_config)
+            self.slam = Slam(slam_config, feature_tracker_config)
             self.logger.info("✅ pySLAM initialized successfully")
             self.logger.info(f"Camera: fx={self.fx}, fy={self.fy}, cx={self.cx}, cy={self.cy}")
             self.logger.info(f"Feature detector: {feature_type}")
