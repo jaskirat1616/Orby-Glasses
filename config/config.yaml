@@ -3,8 +3,8 @@
 # Camera Settings
 camera:
   source: 0       # 0 = webcam, or URL for IP camera
-  width: 320
-  height: 240
+  width: 640
+  height: 480
   fps: 30  # Increased target FPS
 
 # AI Models
@@ -129,7 +129,6 @@ slam:
   use_rtabmap: false   # RTAB-Map (appearance-based loop closure, requires installation)
   use_droid: false      # DROID-SLAM (deep learning, requires installation)
   use_orbslam3: false   # ORB-SLAM3 (requires building from source - best if available)
-  use_improved: false   # Fast & accurate SLAM (fallback)
   use_accurate: false   # Production-quality accurate SLAM (proper BA, covisibility)
   use_advanced: false   # Hybrid tracking + depth scale (experimental)
   use_monocular: false  # Basic monocular SLAM
@@ -142,7 +141,7 @@ slam:
   grid_size: [250, 250]
   grid_resolution: 0.2
   save_maps: true
-  visualize: true       # ✅ ENABLE for 3D map visualization!
+  visualize: true      # ✅ ENABLED - 2D SLAM map viewer (no Pangolin)
   orb_features: 2000    # More features for better tracking (pySLAM recommended: 2000)
   fast_threshold: 12  # Lower = more corner features
   min_matches: 20  # Higher for monocular (needs good baseline)

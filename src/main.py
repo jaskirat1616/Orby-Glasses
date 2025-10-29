@@ -79,7 +79,6 @@ from navigation.monocular_slam_v2 import MonocularSLAM  # High-accuracy ORB-base
 from navigation.advanced_monocular_slam import AdvancedMonocularSLAM  # SUPERIOR to ORB-SLAM3
 from navigation.accurate_slam import AccurateSLAM  # Production-quality accurate SLAM
 from navigation.working_slam import WorkingSLAM  # PROVEN WORKING simple SLAM
-from navigation.improved_slam import ImprovedSLAM  # NEW: Fast and accurate SLAM
 
 try:
     from navigation.orbslam3_wrapper import ORBSLAM3System
@@ -219,7 +218,6 @@ class OrbyGlasses:
             use_advanced = self.config.get('slam.use_advanced', False)
             use_accurate = self.config.get('slam.use_accurate', False)
             use_working = self.config.get('slam.use_working', False)
-            use_improved = self.config.get('slam.use_improved', False)  # NEW: Improved SLAM
             use_droid = self.config.get('slam.use_droid', False)  # NEW: DROID-SLAM
             use_rtabmap = self.config.get('slam.use_rtabmap', False)  # NEW: RTAB-Map
 
@@ -245,13 +243,6 @@ class OrbyGlasses:
                 self.logger.info("✓ Multi-session mapping support")
                 self.logger.info("✓ Memory management for large-scale environments")
                 self.logger.info("✓ Excellent for long-term localization")
-            elif use_improved:
-                self.logger.info("⚡ Initializing Improved SLAM (Fast & Accurate)...")
-                self.slam = ImprovedSLAM(self.config)
-                self.logger.info("✓ Optimized feature detection and matching")
-                self.logger.info("✓ Better pose estimation with RANSAC")
-                self.logger.info("✓ Real-time performance optimizations")
-                self.logger.info("✓ 2-3x faster than previous implementations")
             elif use_opencv and OPENCV_SLAM_AVAILABLE:
                 self.logger.info("⚡ Initializing OpenCV Monocular SLAM (Lightweight)...")
                 self.slam = OpenCVMonocularSLAM(self.config)
@@ -654,20 +645,27 @@ class OrbyGlasses:
             det_time = self.perf_monitor.stop_timer('detection')
 
             # Smart depth estimation with motion-based caching and threading
-            self.perf_monitor.start_timer('depth')
+            # Skip depth estimation for pySLAM (monocular SLAM doesn't need it)
+            depth_map = None
+            is_pyslam_configured = self.config.get('slam.use_pyslam', False)
+            if not (hasattr(self.slam, '__class__') and 'PySLAM' in self.slam.__class__.__name__) and not is_pyslam_configured:
+                self.perf_monitor.start_timer('depth')
 
-            # Simplified depth computation with frame skipping
-            if self.frame_count % (self.skip_depth_frames + 1) == 0:
-                depth_map = self.detection_pipeline.depth_estimator.estimate_depth(frame)
-                self.last_depth_map = depth_map
-            else:
-                # Reuse cached depth map (much faster!)
-                depth_map = self.last_depth_map
-                if depth_map is None:
+                # Simplified depth computation with frame skipping
+                if self.frame_count % (self.skip_depth_frames + 1) == 0:
                     depth_map = self.detection_pipeline.depth_estimator.estimate_depth(frame)
                     self.last_depth_map = depth_map
+                else:
+                    # Reuse cached depth map (much faster!)
+                    depth_map = self.last_depth_map
+                    if depth_map is None:
+                        depth_map = self.detection_pipeline.depth_estimator.estimate_depth(frame)
+                        self.last_depth_map = depth_map
 
-            depth_time = self.perf_monitor.stop_timer('depth')
+                depth_time = self.perf_monitor.stop_timer('depth')
+            else:
+                # pySLAM uses its own depth estimation - skip our depth model
+                depth_time = 0.0
 
             # Add depth to detections
             if depth_map is not None:
@@ -707,7 +705,11 @@ class OrbyGlasses:
             if self.slam_enabled and self.slam is not None:
                 self.perf_monitor.start_timer('slam')
                 self.logger.debug(f"Processing SLAM on frame {self.frame_count}")
-                slam_result = self.slam.process_frame(frame, depth_map)
+                # For pySLAM (monocular), don't pass depth map
+                if hasattr(self.slam, '__class__') and 'PySLAM' in self.slam.__class__.__name__:
+                    slam_result = self.slam.process_frame(frame, None)  # No depth for monocular SLAM
+                else:
+                    slam_result = self.slam.process_frame(frame, depth_map)  # Other SLAM systems can use depth
                 slam_time = self.perf_monitor.stop_timer('slam')
                 if self.frame_count % 50 == 0:  # Log every 50 frames
                     if slam_result:
@@ -790,8 +792,11 @@ class OrbyGlasses:
             fps = self.perf_monitor.get_avg_fps()
 
             # Create UI overlay with depth visualization
+            # Skip depth overlay for pySLAM (uses its own depth estimation)
+            is_pyslam_configured = self.config.get('slam.use_pyslam', False)
+            overlay_depth = None if ((hasattr(self.slam, '__class__') and 'PySLAM' in self.slam.__class__.__name__) or is_pyslam_configured) else depth_map
             annotated_frame = self.robot_ui.draw_clean_overlay(
-                frame, detections, fps, safe_direction, depth_map
+                frame, detections, fps, safe_direction, overlay_depth
             )
 
             # Add SLAM info if enabled
@@ -1349,7 +1354,10 @@ class OrbyGlasses:
                         cv2.imshow('SLAM Map', map_image)  # Keep original SLAM map size
 
                     # Show depth map in separate window - smaller size
-                    if depth_map is not None:
+                    # Skip depth visualization for pySLAM (uses its own depth estimation)
+                    # Also skip if pySLAM is configured but not available (fallback to RGBD)
+                    is_pyslam_configured = self.config.get('slam.use_pyslam', False)
+                    if depth_map is not None and not (hasattr(self.slam, '__class__') and 'PySLAM' in self.slam.__class__.__name__) and not is_pyslam_configured:
                         # Use new fast dark visualizer if available
                         if self.depth_viz:
                             depth_colored = self.depth_viz.visualize(depth_map)

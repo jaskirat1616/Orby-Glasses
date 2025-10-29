@@ -33,11 +33,11 @@ Press `q` to stop.
 
 OrbyGlasses includes multiple SLAM options optimized for different needs:
 
-### ✅ Improved SLAM (RECOMMENDED - Default)
-- **Fast and accurate** monocular SLAM
-- **No external dependencies** - works immediately
-- **2-3x faster** than previous implementations
-- **Optimized for real-time** navigation assistance
+### ✅ pySLAM (RECOMMENDED - Default)
+- **Professional-grade** monocular SLAM
+- **Real-time 3D visualization** with map viewer
+- **Advanced feature tracking** with ORB/SIFT/SuperPoint
+- **Loop closure detection** and bundle adjustment
 - **Already enabled** in your config
 
 ### 🗺️ RTAB-Map (Optional - Appearance-Based Mapping)
@@ -62,7 +62,7 @@ OrbyGlasses includes multiple SLAM options optimized for different needs:
 
 ### Quick Setup
 ```bash
-# Improved SLAM is already ready to use!
+# pySLAM is already ready to use!
 ./run.sh
 
 # To install RTAB-Map (optional):
@@ -76,7 +76,7 @@ OrbyGlasses includes multiple SLAM options optimized for different needs:
 Edit `config/config.yaml` to choose your SLAM system:
 ```yaml
 slam:
-  use_improved: true    # Fast & accurate (recommended)
+  use_pyslam: true     # pySLAM with 3D visualization (recommended)
   use_rtabmap: false    # Appearance-based mapping
   use_droid: false      # Deep learning SLAM
   use_orbslam3: false   # Industry standard

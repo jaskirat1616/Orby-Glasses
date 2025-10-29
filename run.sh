@@ -55,15 +55,8 @@ fi
 echo -e "${GREEN}✓ Loading environment${NC}"
 source venv/bin/activate
 
-# Activate pySLAM virtual environment if it exists
-# Note: This will work whether you're in a venv or not
-if [ -d "$HOME/.python/venvs/pyslam" ]; then
-    echo -e "${GREEN}✓ Activating pySLAM environment${NC}"
-    # Use the pySLAM environment's Python directly
-    export PYTHONPATH="$HOME/.python/venvs/pyslam/lib/python3.11/site-packages:$PYTHONPATH"
-    # Add pySLAM to the path
-    export PATH="$HOME/.python/venvs/pyslam/bin:$PATH"
-fi
+# Note: pySLAM environment will be activated within the Python code when needed
+# This avoids OpenCV conflicts with the main application
 
 # Check Ollama
 if ! pgrep -x "ollama" > /dev/null; then

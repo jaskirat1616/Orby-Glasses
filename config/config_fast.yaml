@@ -4,8 +4,8 @@
 # Camera Settings
 camera:
   source: 0
-  width: 320
-  height: 240
+  width: 640
+  height: 480
   fps: 30
 
 # AI Models
@@ -98,7 +98,6 @@ slam:
   use_rtabmap: false    # RTAB-Map (appearance-based loop closure, requires installation)
   use_droid: false      # DROID-SLAM (deep learning, requires installation)
   use_orbslam3: false   # ORB-SLAM3 (requires building from source - best if available)
-  use_improved: true    # ✅ Fast & accurate SLAM (WORKING - use this for now!)
   use_accurate: false   # Production-quality accurate SLAM (proper BA, covisibility)
   use_advanced: false   # Hybrid tracking + depth scale (experimental)
   use_monocular: false  # Basic monocular SLAM
@@ -111,7 +110,7 @@ slam:
   grid_size: [200, 200]
   grid_resolution: 0.2
   save_maps: false
-  visualize: true       # ✅ ENABLE for 3D map visualization!
+  visualize: true     # Disabled - 3D viewer has Pangolin conflicts
   orb_features: 1500    # Fast mode: slightly fewer features for speed
   fast_threshold: 20
   min_matches: 10

@@ -413,12 +413,17 @@ class DetectionPipeline:
             device=config.get('models.yolo.device', 'mps')
         )
 
-        # Initialize Depth Anything V2 estimator
-        self.depth_estimator = DepthEstimator(
-            model_path=config.get('models.depth.path', 'depth-anything/Depth-Anything-V2-Small-hf'),
-            device=config.get('models.depth.device', 'mps'),
-            max_resolution=config.get('models.depth.max_resolution', 384)
-        )
+        # Initialize Depth Anything V2 estimator only if not using pySLAM
+        # pySLAM uses its own depth estimation and doesn't need our depth model
+        is_pyslam_configured = config.get('slam.use_pyslam', False)
+        if not is_pyslam_configured:
+            self.depth_estimator = DepthEstimator(
+                model_path=config.get('models.depth.path', 'depth-anything/Depth-Anything-V2-Small-hf'),
+                device=config.get('models.depth.device', 'mps'),
+                max_resolution=config.get('models.depth.max_resolution', 384)
+            )
+        else:
+            self.depth_estimator = None
 
         self.min_safe_distance = config.get('safety.min_safe_distance', 1.5)
 
@@ -455,11 +460,13 @@ class DetectionPipeline:
         # Object detection
         detections = self.detector.detect(frame)
 
-        # Depth estimation
-        depth_map = self.depth_estimator.estimate_depth(frame)
+        # Depth estimation (skip if depth_estimator is None for pySLAM)
+        depth_map = None
+        if self.depth_estimator is not None:
+            depth_map = self.depth_estimator.estimate_depth(frame)
 
         # Add depth to detections
-        if depth_map is not None:
+        if depth_map is not None and self.depth_estimator is not None:
             frame_size = (frame.shape[1], frame.shape[0])  # (width, height)
             for detection in detections:
                 bbox = detection['bbox']
