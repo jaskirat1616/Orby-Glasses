@@ -94,13 +94,13 @@ mapping3d:
 # Visual SLAM
 slam:
   enabled: true
-  use_pyslam: false     # pySLAM with 3D Viewer (installation failed - troubleshooting needed)
+  use_pyslam: true      # pySLAM with 3D Viewer (✅ ONLY SLAM SYSTEM ENABLED!)
   use_rtabmap: false    # RTAB-Map (appearance-based loop closure, requires installation)
   use_droid: false      # DROID-SLAM (deep learning, requires installation)
   use_orbslam3: false   # ORB-SLAM3 (requires building from source - best if available)
   use_accurate: false   # Production-quality accurate SLAM (proper BA, covisibility)
   use_advanced: false   # Hybrid tracking + depth scale (experimental)
-  use_monocular: false  # Basic monocular SLAM
+  use_monocular: true  # Basic monocular SLAM
   use_simple: false     # Legacy simple SLAM
   
   # pySLAM configuration (when use_pyslam: true)

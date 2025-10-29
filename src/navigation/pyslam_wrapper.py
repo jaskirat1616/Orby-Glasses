@@ -25,15 +25,16 @@ if os.path.exists(PYSLAM_PATH):
     sys.path.insert(0, PYSLAM_PATH)
 
 try:
+    # Activate pySLAM virtual environment first
+    pyslam_venv = os.path.expanduser('~/.python/venvs/pyslam/bin/activate_this.py')
+    if os.path.exists(pyslam_venv):
+        exec(open(pyslam_venv).read(), dict(__file__=pyslam_venv))
+        logging.info("✅ pySLAM virtual environment activated")
+    
     # Add pySLAM path to sys.path
-    import sys
-    import os
     pyslam_path = os.path.join(os.path.dirname(__file__), '..', '..', 'third_party', 'pyslam')
     if pyslam_path not in sys.path:
         sys.path.insert(0, pyslam_path)
-    
-    # Virtual environment should already be activated by main.py
-    # No need to activate again here
     
     # Import pyslam components
     from pyslam.config import Config
@@ -42,10 +43,10 @@ try:
     from pyslam.local_features.feature_tracker_configs import FeatureTrackerConfigs, FeatureTrackerTypes
     from pyslam.local_features.feature_types import FeatureDetectorTypes
     
-    # Import visualization components
-    from pyslam.viz.viewer3D import Viewer3D
-    from pyslam.viz.slam_plot_drawer import SlamPlotDrawer
-    from pyslam.viz.display2D import Display2D
+    # Skip Pangolin-based visualization components to avoid conflicts
+    # from pyslam.viz.viewer3D import Viewer3D
+    # from pyslam.viz.slam_plot_drawer import SlamPlotDrawer
+    # from pyslam.viz.display2D import Display2D
     
     PYSLAM_AVAILABLE = True
     logging.info("✅ pySLAM modules imported successfully!")

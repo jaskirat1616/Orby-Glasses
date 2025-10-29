@@ -94,6 +94,7 @@ try:
     pyslam_venv = os.path.expanduser('~/.python/venvs/pyslam/bin/activate_this.py')
     if os.path.exists(pyslam_venv):
         exec(open(pyslam_venv).read(), dict(__file__=pyslam_venv))
+        print("✅ pySLAM virtual environment activated")
     
     from navigation.pyslam_wrapper import PySLAMSystem, PYSLAM_AVAILABLE
     print("✅ pySLAM available with virtual environment activated")
@@ -281,14 +282,27 @@ class OrbyGlasses:
                 self.logger.info("✓ Using ORB features + essential matrix + bundle adjustment")
                 self.logger.info("✓ 2000 ORB features, RANSAC outlier rejection, keyframe management")
             else:
-                self.logger.info("Initializing RGBD SLAM system...")
-                self.slam = SLAMSystem(self.config)
-                self.logger.info("✓ Using RGBD SLAM (depth-assisted)")
+                # Fallback to pySLAM if available, otherwise RGBD SLAM
+                if PYSLAM_AVAILABLE:
+                    self.logger.info("🚀 Initializing pySLAM (Fallback SLAM System)...")
+                    self.slam = PySLAMSystem(self.config)
+                    feature_type = self.config.get('slam.feature_type', 'ORB')
+                    self.logger.info(f"✓ Using pySLAM with {feature_type} features")
+                    self.logger.info("✓ Professional-grade monocular SLAM")
+                    self.logger.info("✓ Real-time 3D visualization")
+                else:
+                    self.logger.info("Initializing RGBD SLAM system...")
+                    self.slam = SLAMSystem(self.config)
+                    self.logger.info("✓ Using RGBD SLAM (depth-assisted)")
 
-            # Initialize SLAM map viewer (always-visible 2D map like robots)
-            from navigation.slam_map_viewer import SLAMMapViewer
-            self.slam_map_viewer = SLAMMapViewer(map_size=600, meters_per_pixel=0.02)
-            self.slam_map_viewer.draw_grid(grid_spacing=1.0)
+            # Initialize SLAM map viewer only if not using pySLAM (pySLAM has its own viewer)
+            is_pyslam_configured = self.config.get('slam.use_pyslam', False)
+            if not is_pyslam_configured:
+                from navigation.slam_map_viewer import SLAMMapViewer
+                self.slam_map_viewer = SLAMMapViewer(map_size=600, meters_per_pixel=0.02)
+                self.slam_map_viewer.draw_grid(grid_spacing=1.0)
+            else:
+                self.slam_map_viewer = None
             self.logger.info("✓ SLAM map viewer initialized")
 
             self.indoor_nav_enabled = self.config.get('indoor_navigation.enabled', False)
@@ -1345,8 +1359,9 @@ class OrbyGlasses:
                                                interpolation=cv2.INTER_LINEAR)
                     cv2.imshow('OrbyGlasses', camera_display)
 
-                    # Show SLAM map in a separate window if requested
-                    if separate_slam and self.slam_enabled and self.slam_map_viewer and slam_result:
+                    # Show SLAM map in a separate window if requested (skip for pySLAM - it has its own viewer)
+                    is_pyslam_configured = self.config.get('slam.use_pyslam', False)
+                    if separate_slam and self.slam_enabled and self.slam_map_viewer and slam_result and not is_pyslam_configured:
                         # Get map points using method (some SLAM systems have attribute, some have method)
                         map_pts = self.slam.map_points if hasattr(self.slam, 'map_points') else self.slam.get_map_points() if hasattr(self.slam, 'get_map_points') else []
                         self.slam_map_viewer.update(slam_result, map_pts)
@@ -1356,7 +1371,6 @@ class OrbyGlasses:
                     # Show depth map in separate window - smaller size
                     # Skip depth visualization for pySLAM (uses its own depth estimation)
                     # Also skip if pySLAM is configured but not available (fallback to RGBD)
-                    is_pyslam_configured = self.config.get('slam.use_pyslam', False)
                     if depth_map is not None and not (hasattr(self.slam, '__class__') and 'PySLAM' in self.slam.__class__.__name__) and not is_pyslam_configured:
                         # Use new fast dark visualizer if available
                         if self.depth_viz:
