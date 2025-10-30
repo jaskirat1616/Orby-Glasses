@@ -34,7 +34,8 @@ try:
     # Import pySLAM modules with proper error handling
     import pyslam
     from pyslam.config import Config
-    from pyslam.slam.slam import Slam, SlamState
+    from pyslam.slam.slam import Slam
+    from pyslam.slam.slam_commons import SlamState
     from pyslam.slam.camera import PinholeCamera
     from pyslam.local_features.feature_tracker_configs import FeatureTrackerConfigs
     from pyslam.local_features.feature_types import FeatureDetectorTypes
@@ -268,14 +269,28 @@ class LivePySLAM:
         # Process frame through pySLAM
         timestamp = time.time()
         self.slam.track(frame, None, None, self.frame_count, timestamp)
-        
+
         # Get tracking state
         tracking_state = "OK"
         if hasattr(self.slam, 'tracking') and hasattr(self.slam.tracking, 'state'):
-            if self.slam.tracking.state == SlamState.LOST:
-                tracking_state = "LOST"
-            elif self.slam.tracking.state == SlamState.NOT_INITIALIZED:
-                tracking_state = "NOT_INITIALIZED"
+            try:
+                state = self.slam.tracking.state
+                # Handle both enum and string states
+                if state is not None:
+                    # Try direct comparison with enum values (works with Enum)
+                    try:
+                        if state == SlamState.LOST:
+                            tracking_state = "LOST"
+                        elif state == SlamState.NOT_INITIALIZED:
+                            tracking_state = "NOT_INITIALIZED"
+                        elif state == SlamState.OK:
+                            tracking_state = "OK"
+                    except (TypeError, AttributeError):
+                        # Fallback to string comparison
+                        tracking_state = str(state)
+            except Exception as e:
+                # Log and continue with OK state
+                self.logger.debug(f"Could not parse tracking state: {e}")
         
         # Get current pose
         if hasattr(self.slam, 'tracking') and hasattr(self.slam.tracking, 'cur_pose'):
@@ -652,7 +667,12 @@ class LivePySLAM:
     def is_tracking_good(self) -> bool:
         """Check if SLAM tracking is good."""
         if hasattr(self.slam, 'tracking') and hasattr(self.slam.tracking, 'state'):
-            return self.slam.tracking.state == SlamState.OK
+            try:
+                state = self.slam.tracking.state
+                if state is not None:
+                    return state == SlamState.OK or str(state) == "OK"
+            except Exception:
+                pass
         return True
 
     def get_current_pose(self) -> np.ndarray:

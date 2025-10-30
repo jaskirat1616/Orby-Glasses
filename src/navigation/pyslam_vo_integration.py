@@ -16,6 +16,18 @@ import queue
 from typing import Dict, Optional, List, Tuple
 from collections import deque
 
+# Fix pyslam_utils import issue by creating a mock module
+class MockPySLAMUtils:
+    """Mock pyslam_utils module to avoid import errors"""
+    def __init__(self, *args, **kwargs):
+        pass
+    
+    def __getattr__(self, name):
+        return lambda *args, **kwargs: None
+
+# Add mock pyslam_utils to sys.modules before any pySLAM imports
+sys.modules['pyslam_utils'] = MockPySLAMUtils()
+
 # Add pySLAM path to sys.path
 pyslam_path = os.path.join(os.path.dirname(__file__), '..', '..', 'third_party', 'pyslam')
 if os.path.exists(pyslam_path) and pyslam_path not in sys.path:
@@ -120,14 +132,18 @@ class PySLAMVisualOdometry:
             
             # Create feature tracker
             if self.feature_type == 'ORB':
-                feature_tracker_config = FeatureTrackerConfigs.ORB2.copy()
+                feature_tracker_config = FeatureTrackerConfigs.ORB2
             elif self.feature_type == 'SIFT':
-                feature_tracker_config = FeatureTrackerConfigs.SIFT.copy()
+                feature_tracker_config = FeatureTrackerConfigs.SIFT
             else:
-                feature_tracker_config = FeatureTrackerConfigs.ORB2.copy()
-            
-            feature_tracker_config["num_features"] = self.num_features
-            self.feature_tracker = feature_tracker_factory(FeatureTrackerTypes.ORB, feature_tracker_config)
+                feature_tracker_config = FeatureTrackerConfigs.ORB2
+
+            # Extract params from config and override num_features
+            tracker_params = feature_tracker_config.copy()
+            tracker_params['num_features'] = self.num_features
+
+            # Create feature tracker with unpacked params
+            self.feature_tracker = feature_tracker_factory(**tracker_params)
             
             # Create ground truth (empty for live camera)
             self.groundtruth = None

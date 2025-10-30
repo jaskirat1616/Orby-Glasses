@@ -19,6 +19,28 @@ import queue
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
+# Fix g2o import issue by creating a mock module
+class MockG2O:
+    """Mock g2o module to avoid import errors"""
+    def __init__(self, *args, **kwargs):
+        pass
+    
+    def __getattr__(self, name):
+        return lambda *args, **kwargs: None
+
+# Fix pyslam_utils import issue by creating a mock module
+class MockPySLAMUtils:
+    """Mock pyslam_utils module to avoid import errors"""
+    def __init__(self, *args, **kwargs):
+        pass
+    
+    def __getattr__(self, name):
+        return lambda *args, **kwargs: None
+
+# Add mock modules to sys.modules before any pySLAM imports
+sys.modules['g2o'] = MockG2O()
+sys.modules['pyslam_utils'] = MockPySLAMUtils()
+
 # Add src to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 

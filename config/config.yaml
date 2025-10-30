@@ -1,232 +1,230 @@
-# OrbyGlasses Configuration - Standard Mode
-
-# Camera Settings
-camera:
-  source: 0       # 0 = webcam, or URL for IP camera
-  width: 640
-  height: 480
-  fps: 30  # Increased target FPS
-
-# AI Models
-models:
-  # Object Detection - YOLOv11n
-  yolo:
-    path: "models/yolo/yolo11n.pt"
-    confidence: 0.55
-    iou_threshold: 0.50
-    device: "mps"
-    half_precision: true
-
-  # Depth Estimation - Depth Anything V2 Small
-  depth:
-    path: "depth-anything/Depth-Anything-V2-Small-hf"
-    device: "mps"
-    half_precision: true
-    max_resolution: 256  # Increased for better depth accuracy (was 224)
-
-  # Vision-Language Model - Moondream2
-  llm:
-    primary: "moondream:latest"
-    vision: "moondream:latest"
-    temperature: 0.4
-    max_tokens: 150
-    vlm_enabled: true
-    scene_analysis_interval: 15  # Increased from 6 to 15 seconds
-
-# Voice Commands
-conversation:
-  enabled: false  # DISABLED for performance - enable when needed
-  model: "gemma3:4b"
-  temperature: 0.6
-  max_tokens: 100
-  voice_input: true
-  activation_phrase: "hey orby"
-  check_interval: 0.5
-  simple_commands: true
-  command_phrases:
-    - "what's around me"
-    - "is the path clear"
-    - "where am I"
-    - "save location"
-    - "take me to"
-    - "help"
-
-# Social Navigation
-social_navigation:
-  enabled: true
-  region: "us"
-  voice_announce: true
-
-# Audio
+adaptive_system:
+  battery_monitoring: true
+  battery_saver_threshold: 20
+  emergency_mode_enabled: true
+  time_based_adjustments: true
 audio:
-  tts_engine: "pyttsx3"
-  tts_rate: 190
-  tts_volume: 1.0
+  adaptive_beaconing_enabled: false
+  beacon_obstacle_frequency: 880
+  beacon_safe_frequency: 440
+  clear_path_beacon: 330
+  door_beacon: 660
   echolocation_enabled: false
   spatial_audio: true
-  adaptive_beaconing_enabled: false
-  beacon_safe_frequency: 440
-  beacon_obstacle_frequency: 880
-  warning_pulse_rate: 0.12
-  door_beacon: 660
   stairs_beacon: 1320
-  clear_path_beacon: 330
-
-# Echolocation
+  tts_engine: pyttsx3
+  tts_rate: 190
+  tts_volume: 1.0
+  warning_pulse_rate: 0.12
+camera:
+  fps: 30
+  height: 480
+  source: 0
+  width: 640
+conversation:
+  activation_phrase: hey orby
+  check_interval: 0.5
+  command_phrases:
+  - what's around me
+  - is the path clear
+  - where am I
+  - save location
+  - take me to
+  - help
+  enabled: false
+  max_tokens: 100
+  model: gemma3:4b
+  simple_commands: true
+  temperature: 0.6
+  voice_input: true
 echolocation:
-  room_dimensions: [10, 10, 3]
-  sample_rate: 16000
   duration: 0.1
-
-# RL Prediction
-prediction:
+  room_dimensions:
+  - 10
+  - 10
+  - 3
+  sample_rate: 16000
+haptic:
+  device_type: generic
   enabled: false
-  model_path: "models/rl/ppo_navigation.zip"
-  training_steps: 10000
-  save_interval: 1000
-
-# Safety
-safety:
-  min_safe_distance: 1.5  # meters
-  danger_distance: 1.0
-  caution_distance: 2.5
-  emergency_stop_key: "q"
-  max_obstacle_alerts: 3
-
-# Logging
-logging:
-  level: "DEBUG"
-  log_file: "data/logs/orbyglass.log"
-  save_detections: false
-  save_frames: false
-
-# Performance
-performance:
-  audio_update_interval: 1.5
-  danger_audio_interval: 0.4
-  stats_interval: 200
-  max_detections: 5  # Reduced from 10
-  depth_skip_frames: 1  # Increased from 2 (process every 4th frame)
-  frame_skip: 0  # Skip every other frame
-  enable_multithreading: true
-  cache_depth_maps: true
-
-# 3D Mapping
-mapping3d:
-  enabled: false
-  max_depth: 6.0
-  voxel_size: 0.15
-  subsample_step: 8
-  update_interval: 0.3
-  fx: 500
-  fy: 500
-  skip_bbox: true
-
-# Visual SLAM - Choose your SLAM system
-slam:
-  enabled: true
-  use_pyslam: true     # pySLAM with 3D Viewer (✅ ONLY SLAM SYSTEM ENABLED!)
-  use_rtabmap: false   # RTAB-Map (appearance-based loop closure, requires installation)
-  use_droid: false      # DROID-SLAM (deep learning, requires installation)
-  use_orbslam3: false   # ORB-SLAM3 (requires building from source - best if available)
-  use_accurate: false   # Production-quality accurate SLAM (proper BA, covisibility)
-  use_advanced: false   # Hybrid tracking + depth scale (experimental)
-  use_monocular: false  # Basic monocular SLAM
-  # pySLAM is the ONLY enabled SLAM system - all others disabled
-  
-  # pySLAM configuration (when use_pyslam: true)
-  feature_type: ORB     # ORB, SIFT, or SUPERPOINT (ORB recommended for speed)
-  loop_closure: false   # Enable loop closure detection (slower but more accurate)
-  
-  grid_size: [250, 250]
-  grid_resolution: 0.2
-
-# Visual Odometry - Real-time motion tracking
-visual_odometry:
-  enabled: true         # Enable Visual Odometry alongside SLAM
-  use_pyslam_vo: true   # Use pySLAM Visual Odometry (recommended)
-  feature_type: ORB     # ORB, SIFT, or SUPERPOINT
-  num_features: 2000    # Number of features to track
-  use_rerun: true       # Use Rerun.io for visualization (like original main_vo.py)
-  trajectory_length: 1000  # Maximum trajectory points to keep
-  visualization_scale: 50  # Scale for trajectory visualization
-  save_maps: true
-  visualize: true      # ✅ ENABLED - 2D SLAM map viewer (no Pangolin)
-  orb_features: 2000    # More features for better tracking (pySLAM recommended: 2000)
-  fast_threshold: 12  # Lower = more corner features
-  min_matches: 20  # Higher for monocular (needs good baseline)
-  motion_model: true
-  pose_smoothing: 0.7
-  temporal_consistency_check: true
-  max_position_jump: 0.5
-  max_rotation_jump: 0.5
-  min_tracked_features: 15
-  keyframe_threshold: 30  # Create keyframes when enough parallax
-  reprojection_threshold: 2.0  # Stricter for monocular
-  min_depth: 0.1
-  max_depth: 10.0
-  min_parallax: 1.0  # Minimum parallax angle in degrees
-  loop_closure: false  # Disable for performance
-  bundle_adjustment: false  # Disable for performance
-
-# Indoor Navigation
+  intensity: 0.7
+  num_motors: 10
+  patterns:
+    all_clear:
+    - 0
+    - 0
+    - 0
+    - 0
+    - 0
+    - 0
+    - 0
+    - 0
+    - 0
+    - 0
+    danger_ahead:
+    - 0
+    - 0
+    - 0
+    - 0
+    - 1
+    - 1
+    - 0
+    - 0
+    - 0
+    - 0
+    danger_left:
+    - 1
+    - 0
+    - 0
+    - 0
+    - 0
+    - 0
+    - 0
+    - 0
+    - 0
+    - 0
+    danger_right:
+    - 0
+    - 0
+    - 0
+    - 0
+    - 0
+    - 0
+    - 0
+    - 0
+    - 0
+    - 1
 indoor_navigation:
   enabled: true
   path_planning: true
   save_locations: true
-
-# Trajectory Prediction
+logging:
+  level: DEBUG
+  log_file: data/logs/orbyglass.log
+  save_detections: false
+  save_frames: false
+mapping3d:
+  enabled: false
+  fx: 500
+  fy: 500
+  max_depth: 6.0
+  skip_bbox: true
+  subsample_step: 8
+  update_interval: 0.3
+  voxel_size: 0.15
+models:
+  depth:
+    device: mps
+    half_precision: true
+    max_resolution: 256
+    path: depth-anything/Depth-Anything-V2-Small-hf
+  llm:
+    max_tokens: 150
+    primary: moondream:latest
+    scene_analysis_interval: 15
+    temperature: 0.4
+    vision: moondream:latest
+    vlm_enabled: true
+  yolo:
+    confidence: 0.55
+    device: mps
+    half_precision: true
+    iou_threshold: 0.5
+    path: models/yolo/yolo11n.pt
+movement_visualizer:
+  canvas_size:
+  - 700
+  - 700
+  enabled: false
+  show_stats: true
+  trail_length: 200
+occupancy_grid_3d:
+  enabled: false
+  grid_size:
+  - 10.0
+  - 10.0
+  - 3.0
+  max_range: 5.0
+  resolution: 0.1
+  visualize: false
+performance:
+  audio_update_interval: 1.5
+  cache_depth_maps: true
+  danger_audio_interval: 0.4
+  depth_skip_frames: 1
+  enable_multithreading: true
+  frame_skip: 0
+  max_detections: 5
+  stats_interval: 200
+point_cloud_viewer:
+  enabled: false
+  max_depth: 5.0
+  max_points: 100000
+  min_depth: 0.1
+  subsample: 3
+prediction:
+  enabled: false
+  model_path: models/rl/ppo_navigation.zip
+  save_interval: 1000
+  training_steps: 10000
+safety:
+  caution_distance: 2.5
+  danger_distance: 1.0
+  emergency_stop_key: q
+  max_obstacle_alerts: 3
+  min_safe_distance: 1.5
+slam:
+  enabled: true
+  feature_type: ORB
+  grid_resolution: 0.2
+  grid_size:
+  - 250
+  - 250
+  loop_closure: true
+  use_accurate: false
+  use_advanced: false
+  use_droid: false
+  use_monocular: false
+  use_orbslam3: false
+  use_pyslam: true
+  use_rtabmap: false
+social_navigation:
+  enabled: true
+  region: us
+  voice_announce: true
 trajectory_prediction:
+  collision_warning: true
   enabled: false
   max_history: 10
   prediction_horizon: 3
   time_step: 0.5
   visualize: false
-  collision_warning: true
-
-# 3D Occupancy Grid
-occupancy_grid_3d:
-  enabled: false
-  grid_size: [10.0, 10.0, 3.0]
-  resolution: 0.1
-  max_range: 5.0
-  visualize: false
-
-# Point Cloud
-point_cloud_viewer:
-  enabled: false
-  max_points: 100000
-  subsample: 3
+visual_odometry:
+  bundle_adjustment: true
+  enabled: true
+  fast_threshold: 12
+  feature_type: ORB
+  keyframe_threshold: 30
+  loop_closure: true
+  max_depth: 10.0
+  max_position_jump: 0.5
+  max_rotation_jump: 0.5
   min_depth: 0.1
-  max_depth: 5.0
-
-# Movement Visualizer
-movement_visualizer:
-  enabled: false
-  canvas_size: [700, 700]
-  trail_length: 200
-  show_stats: true
-
-# Haptic Feedback
-haptic:
-  enabled: false  # Enable if haptic device connected
-  device_type: "generic"  # generic, vuzix, xreal
-  num_motors: 10
-  intensity: 0.7
-  patterns:
-    danger_left: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    danger_right: [0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
-    danger_ahead: [0, 0, 0, 0, 1, 1, 0, 0, 0, 0]
-    all_clear: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-
-# Adaptive System Features
-adaptive_system:
-  time_based_adjustments: true  # Auto-adjust for night/day
-  emergency_mode_enabled: true  # Enable emergency alert (press 'e')
-  battery_monitoring: true  # Auto battery saver
-  battery_saver_threshold: 20  # Activate below 20%
-
-# Visualization
+  min_matches: 20
+  min_parallax: 1.0
+  min_tracked_features: 15
+  motion_model: true
+  num_features: 2000
+  orb_features: 2000
+  pose_smoothing: 0.7
+  reprojection_threshold: 2.0
+  save_maps: true
+  temporal_consistency_check: true
+  trajectory_length: 1000
+  use_pyslam_vo: true
+  use_rerun: true
+  visualization_scale: 50
+  visualize: true
 visualization:
   advanced_nav_panel: true
   use_fast_depth: true
