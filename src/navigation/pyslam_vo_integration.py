@@ -50,10 +50,14 @@ try:
     print("✅ pySLAM Visual Odometry modules imported successfully!")
 except ImportError as e:
     PYSLAM_VO_AVAILABLE = False
+    import traceback
     print(f"pySLAM VO not available: {e}")
+    print(f"Traceback: {traceback.format_exc()}")
 except Exception as e:
     PYSLAM_VO_AVAILABLE = False
+    import traceback
     print(f"pySLAM VO error: {e}")
+    print(f"Traceback: {traceback.format_exc()}")
 
 
 class PySLAMVisualOdometry:
@@ -101,7 +105,9 @@ class PySLAMVisualOdometry:
             try:
                 self._initialize_pyslam_vo()
             except Exception as e:
+                import traceback
                 self.logger.error(f"Failed to initialize pySLAM VO: {e}")
+                self.logger.error(f"Traceback: {traceback.format_exc()}")
                 self.is_initialized = False
         else:
             self.logger.warning("pySLAM VO not available, using fallback")
