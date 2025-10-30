@@ -337,7 +337,8 @@ class PySLAMVisualOdometry:
         except Exception as e:
             import traceback
             self.logger.error(f"pySLAM VO processing error: {e}")
-            self.logger.debug(f"Traceback: {traceback.format_exc()}")
+            self.logger.error(f"Full traceback:\n{traceback.format_exc()}")
+            # Return safe default result
             return {
                 'pose': self.current_pose.copy(),
                 'position': self.current_pose[:3, 3].copy(),
