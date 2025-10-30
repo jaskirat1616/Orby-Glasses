@@ -269,13 +269,15 @@ class PySLAMVisualOdometry:
             self.vo.track(gray_frame, None, None, self.frame_count, timestamp)
             
             # Get pose
-            if hasattr(self.vo, 'poses') and len(self.vo.poses) > 0:
+            if hasattr(self.vo, 'poses') and self.vo.poses is not None and len(self.vo.poses) > 0:
                 self.current_pose = self.vo.poses[-1]
-            
-            # Get trajectory
-            if hasattr(self.vo, 'traj3d_est') and len(self.vo.traj3d_est) > 0:
-                x, y, z = self.vo.traj3d_est[-1]
-                self.trajectory.append([x, y, z])
+
+            # Get trajectory (check if initialized and not None)
+            if hasattr(self.vo, 'traj3d_est') and self.vo.traj3d_est is not None and len(self.vo.traj3d_est) > 0:
+                traj_point = self.vo.traj3d_est[-1]
+                if traj_point is not None and len(traj_point) >= 3:
+                    x, y, z = traj_point[0], traj_point[1], traj_point[2]
+                    self.trajectory.append([x, y, z])
             
             # Update visualization
             self._update_trajectory_visualization()
@@ -295,7 +297,7 @@ class PySLAMVisualOdometry:
                 try:
                     img_to_log = self.vo.draw_img if hasattr(self.vo, 'draw_img') else None
                     Rerun.log_3d_camera_img_seq(self.frame_count, img_to_log, None, self.camera, self.current_pose)
-                    if len(self.vo.traj3d_est) > 0:
+                    if hasattr(self.vo, 'traj3d_est') and self.vo.traj3d_est is not None and len(self.vo.traj3d_est) > 0:
                         Rerun.log_3d_trajectory(self.frame_count, self.vo.traj3d_est, "estimated", color=[0, 0, 255])
                 except Exception as e:
                     self.logger.warning(f"Rerun logging error: {e}")
