@@ -6,7 +6,7 @@ LIVE_DATASET:
   sensor_type: mono  # Required field for pySLAM
   base_path: ""  # Empty string for live camera
   name: 0  # Use camera 0
-  settings: settings/WEBCAM.yaml 
+  settings: settings/WEBCAM_HD.yaml 
   groundtruth_file: auto
 
 # Global parameters required by pySLAM
@@ -23,12 +23,8 @@ SYSTEM_STATE:
 SAVE_TRAJECTORY:
   save_trajectory: True
   format_type: tum
-
-# Trajectory saving settings
-TRAJECTORY_SAVING_SETTINGS:
-  save_trajectory: True
-  format_type: tum
   output_folder: results/trajectories/
+  basename: trajectory
 
 # Viewer settings
 Viewer.on: 1
