@@ -42,6 +42,7 @@ from pyslam.io.dataset_types import DatasetType, SensorType
 
 from pyslam.viz.mplot_thread import Mplot2d, Mplot3d
 from pyslam.viz.qplot_thread import Qplot2d
+from pyslam.viz.rerun_interface import Rerun
 
 from pyslam.local_features.feature_tracker import (
     feature_tracker_factory,
