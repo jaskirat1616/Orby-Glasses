@@ -4,7 +4,7 @@ DATASET:
 LIVE_DATASET: 
   type: live 
   sensor_type: mono  # Required field for pySLAM
-  base_path: 
+  base_path: ""  # Empty string for live camera
   name: 0  # Use camera 0
   settings: settings/WEBCAM.yaml 
   groundtruth_file: auto
