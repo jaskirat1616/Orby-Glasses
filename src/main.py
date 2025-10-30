@@ -20,12 +20,24 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 
 # Fix g2o import issue by creating a mock module
+class MockG2OType:
+    """Mock g2o type that can be used with isinstance"""
+    pass
+
 class MockG2O:
     """Mock g2o module to avoid import errors"""
     def __init__(self, *args, **kwargs):
         pass
-    
+
+    # Create mock types that can be used with isinstance
+    SE3Quat = MockG2OType
+    Isometry3d = MockG2OType
+    Flag = MockG2OType
+
     def __getattr__(self, name):
+        # Return MockG2OType for any other class-like attributes
+        if name[0].isupper():  # Class names typically start with uppercase
+            return MockG2OType
         return lambda *args, **kwargs: None
 
 # Fix pyslam_utils import issue by creating a mock module
