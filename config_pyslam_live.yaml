@@ -24,6 +24,12 @@ SAVE_TRAJECTORY:
   save_trajectory: True
   format_type: tum
 
+# Trajectory saving settings
+TRAJECTORY_SAVING_SETTINGS:
+  save_trajectory: True
+  format_type: tum
+  output_folder: results/trajectories/
+
 # Viewer settings
 Viewer.on: 1
 Viewer.KeyFrameSize: 0.05
