@@ -13,6 +13,11 @@ import time
 import threading
 from typing import Dict, Optional, List, Tuple
 from collections import deque
+# Disable 3D visualization for now due to tkinter issues
+# import matplotlib
+# import matplotlib.pyplot as plt
+# from mpl_toolkits.mplot3d import Axes3D
+# import matplotlib.animation as animation
 
 # Add pySLAM path to sys.path
 pyslam_path = os.path.join(os.path.dirname(__file__), '..', '..', 'third_party', 'pyslam')
@@ -22,6 +27,10 @@ if os.path.exists(pyslam_path) and pyslam_path not in sys.path:
 # Try to import pySLAM modules
 PYSLAM_AVAILABLE = False
 try:
+    # Check for evo dependency first
+    import evo
+    print("✅ evo dependency found")
+    
     # Import pySLAM modules with proper error handling
     import pyslam
     from pyslam.config import Config
@@ -30,12 +39,31 @@ try:
     from pyslam.local_features.feature_tracker_configs import FeatureTrackerConfigs
     from pyslam.local_features.feature_types import FeatureDetectorTypes
     from pyslam.viz.slam_plot_drawer import SlamPlotDrawer
+    from pyslam.viz.viewer3D import Viewer3D
     PYSLAM_AVAILABLE = True
     print("✅ Real pySLAM modules imported successfully!")
 except ImportError as e:
     PYSLAM_AVAILABLE = False
     print(f"pySLAM not available: {e}")
-    print("Falling back to OpenCV-based SLAM...")
+    print("Using optimized OpenCV-based SLAM...")
+except NameError as e:
+    PYSLAM_AVAILABLE = False
+    print(f"pySLAM module error: {e}")
+    print("Using optimized OpenCV-based SLAM...")
+except AttributeError as e:
+    PYSLAM_AVAILABLE = False
+    print(f"pySLAM attribute error: {e}")
+    print("Using optimized OpenCV-based SLAM...")
+except Exception as e:
+    PYSLAM_AVAILABLE = False
+    print(f"pySLAM general error: {e}")
+    print("Using optimized OpenCV-based SLAM...")
+
+
+# Disabled due to tkinter issues - 3D visualization temporarily unavailable
+# class PointCloud3DViewer:
+#     """3D Point Cloud and Trajectory Viewer for SLAM"""
+#     pass
 
 
 class LivePySLAM:
@@ -86,6 +114,11 @@ class LivePySLAM:
     def _initialize_pyslam(self):
         """Initialize pySLAM with live camera support."""
         try:
+            # Check if pySLAM modules are available
+            if not PYSLAM_AVAILABLE:
+                raise ImportError("pySLAM modules not available")
+            
+            
             # Create camera configuration
             camera_config = Config()
             camera_config.cam_settings = {
@@ -103,7 +136,7 @@ class LivePySLAM:
                 'Camera.k3': 0.0
             }
             
-            # Create camera
+            # Create camera - PinholeCamera should be available from imports
             self.camera = PinholeCamera(camera_config)
 
             # Create feature tracker config
@@ -113,8 +146,11 @@ class LivePySLAM:
             # Initialize SLAM
             self.slam = Slam(self.camera, feature_tracker_config)
             
-            # Initialize visualization
-            self.plot_drawer = SlamPlotDrawer()
+            # Initialize visualization (after SLAM is created)
+            self.plot_drawer = SlamPlotDrawer(self.slam)
+            
+            # Initialize 3D viewer
+            self.viewer3d = Viewer3D(scale=1.0)
             
             # Initialize camera capture
             self.cap = cv2.VideoCapture(0)
@@ -166,18 +202,28 @@ class LivePySLAM:
             self.keyframe_poses = []
             self.keyframe_descriptors = []
             
-            # Initialize camera capture
+            # Initialize camera capture with optimized settings
             self.cap = cv2.VideoCapture(0)
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
             self.cap.set(cv2.CAP_PROP_FPS, 30)
+            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Reduce buffer size for lower latency
             
             if not self.cap.isOpened():
                 raise RuntimeError("Could not open camera")
             
+            # Initialize visualization windows
+            cv2.namedWindow("OrbyGlasses - Camera Feed", cv2.WINDOW_AUTOSIZE)
+            cv2.namedWindow("OrbyGlasses - Feature Tracking", cv2.WINDOW_AUTOSIZE)
+            cv2.namedWindow("OrbyGlasses - 2D Map", cv2.WINDOW_AUTOSIZE)
+            
+            # Initialize 3D point cloud viewer (disabled due to tkinter issues)
+            # self.viewer_3d = PointCloud3DViewer("OrbyGlasses - 3D SLAM Map & Trajectory")
+            self.viewer_3d = None
+            
             self.is_initialized = True
-            print("✅ Fallback SLAM with real-time mapping initialized!")
-            self.logger.info("✅ Fallback SLAM with real-time mapping initialized!")
+            print("✅ Fallback SLAM with real-time mapping and visualization windows initialized!")
+            self.logger.info("✅ Fallback SLAM with real-time mapping and visualization windows initialized!")
             
         except Exception as e:
             error_msg = f"Failed to initialize fallback SLAM: {e}"
@@ -248,7 +294,26 @@ class LivePySLAM:
             try:
                 self.plot_drawer.draw(self.slam, frame)
             except Exception as e:
-                self.logger.warning(f"Visualization error: {e}")
+                self.logger.warning(f"Plot visualization error: {e}")
+        
+        # Update 3D viewer
+        if hasattr(self, 'viewer3d') and self.viewer3d:
+            try:
+                self.viewer3d.draw_slam_map(self.slam)
+            except Exception as e:
+                self.logger.warning(f"3D visualization error: {e}")
+        
+        # Show pySLAM camera window with feature trails
+        try:
+            if hasattr(self.slam, 'map') and hasattr(self.slam.map, 'draw_feature_trails'):
+                img_draw = self.slam.map.draw_feature_trails(frame)
+                cv2.imshow("pySLAM - Camera", img_draw)
+            else:
+                # Fallback to basic camera view
+                cv2.imshow("pySLAM - Camera", frame)
+        except Exception as e:
+            self.logger.warning(f"Camera window error: {e}")
+            cv2.imshow("pySLAM - Camera", frame)
         
         # Create result
         result = {
@@ -366,43 +431,185 @@ class LivePySLAM:
             self.logger.error(f"Map point update error: {e}")
 
     def _update_visualization(self, frame: np.ndarray, keypoints: List, matches: List):
-        """Update visualization windows."""
+        """Update visualization windows - multiple windows for better visualization."""
         try:
-            # Create visualization image
+            # Window 1: Camera Feed
+            cv2.imshow("OrbyGlasses - Camera Feed", frame)
+            
+            # Window 2: Feature Tracking
             vis_img = frame.copy()
+            keypoints_limited = keypoints[:100] if len(keypoints) > 100 else keypoints
+            cv2.drawKeypoints(vis_img, keypoints_limited, vis_img, color=(0, 255, 0), flags=0)
             
-            # Draw keypoints
-            cv2.drawKeypoints(vis_img, keypoints, vis_img, color=(0, 255, 0), flags=0)
+            # Draw matches if available
+            if len(matches) > 0 and self.prev_frame is not None and len(self.prev_keypoints) > 0:
+                try:
+                    # Get corresponding keypoints for matches
+                    prev_kp = []
+                    curr_kp = []
+                    valid_matches = []
+                    
+                    for i, match in enumerate(matches[:20]):  # Top 20 matches
+                        if (match.queryIdx < len(self.prev_keypoints) and 
+                            match.trainIdx < len(keypoints_limited)):
+                            prev_kp.append(self.prev_keypoints[match.queryIdx])
+                            curr_kp.append(keypoints_limited[match.trainIdx])
+                            valid_matches.append(match)
+                    
+                    # Only draw if we have valid matches
+                    if len(valid_matches) > 0:
+                        # Create side-by-side match visualization
+                        h, w = frame.shape[:2]
+                        prev_small = cv2.resize(self.prev_frame, (w//4, h//6))
+                        curr_small = cv2.resize(vis_img, (w//4, h//6))
+                        
+                        match_img = cv2.drawMatches(
+                            prev_small, prev_kp,
+                            curr_small, curr_kp,
+                            valid_matches, None,
+                            flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS
+                        )
+                        
+                        # Place match visualization in top-right corner
+                        if match_img.shape[0] <= h-10 and match_img.shape[1] <= w-10:
+                            vis_img[10:10+match_img.shape[0], w-match_img.shape[1]:w] = match_img
+                except Exception as e:
+                    # Skip match visualization if there's an error
+                    pass
             
-            # Draw matches
-            if len(matches) > 0:
-                match_img = cv2.drawMatches(
-                    self.prev_frame, self.prev_keypoints,
-                    vis_img, keypoints,
-                    matches[:20], None,  # Show top 20 matches
-                    flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS
-                )
-                cv2.imshow("pySLAM - Feature Matching", match_img)
-            
-            # Add text info
-            info_text = f"Live pySLAM | Frame: {self.frame_count} | Features: {len(keypoints)} | Matches: {len(matches)}"
-            cv2.putText(vis_img, info_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            # Add comprehensive info overlay
+            info_text = f"SLAM | F:{self.frame_count} | Feat:{len(keypoints)} | Match:{len(matches)}"
+            cv2.putText(vis_img, info_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
             
             # Add pose info
             pos = self.current_pose[:3, 3]
-            pose_text = f"Position: ({pos[0]:.2f}, {pos[1]:.2f}, {pos[2]:.2f})"
-            cv2.putText(vis_img, pose_text, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+            pose_text = f"Pos: ({pos[0]:.1f}, {pos[1]:.1f}, {pos[2]:.1f})"
+            cv2.putText(vis_img, pose_text, (10, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)
             
             # Add map info
-            map_text = f"Map Points: {len(self.map_points_3d)} | Trajectory: {len(self.trajectory)}"
-            cv2.putText(vis_img, map_text, (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 255), 2)
+            map_text = f"Map: {len(self.map_points_3d)} | Path: {len(self.trajectory)}"
+            cv2.putText(vis_img, map_text, (10, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 2)
             
-            # Show the image
-            cv2.imshow("pySLAM - Live Tracking", vis_img)
+            # Add tracking quality
+            quality = min(len(matches) / 50.0, 1.0) if matches else 0.0
+            quality_text = f"Quality: {quality:.2f}"
+            cv2.putText(vis_img, quality_text, (10, 105), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
+            
+            # Show feature tracking window
+            cv2.imshow("OrbyGlasses - Feature Tracking", vis_img)
+            
+            # Window 3: 2D Map
+            self._draw_2d_map()
+            
             cv2.waitKey(1)
+            
+            # Update 3D visualization
+            self._update_3d_visualization()
             
         except Exception as e:
             self.logger.error(f"Visualization update error: {e}")
+    
+    def _draw_2d_map(self):
+        """Draw 2D top-down map view."""
+        try:
+            # Create 2D map image
+            map_size = 400
+            map_img = np.zeros((map_size, map_size, 3), dtype=np.uint8)
+            
+            # Draw grid
+            grid_spacing = 20
+            for i in range(0, map_size, grid_spacing):
+                cv2.line(map_img, (i, 0), (i, map_size), (50, 50, 50), 1)
+                cv2.line(map_img, (0, i), (map_size, i), (50, 50, 50), 1)
+            
+            # Draw trajectory
+            if len(self.trajectory) > 1:
+                center_x, center_y = map_size // 2, map_size // 2
+                scale = 50  # pixels per meter
+                
+                for i in range(1, len(self.trajectory)):
+                    prev_pos = self.trajectory[i-1][:3, 3]
+                    curr_pos = self.trajectory[i][:3, 3]
+                    
+                    # Convert to map coordinates
+                    x1 = int(center_x + prev_pos[0] * scale)
+                    y1 = int(center_y - prev_pos[2] * scale)  # Flip Z for top-down view
+                    x2 = int(center_x + curr_pos[0] * scale)
+                    y2 = int(center_y - curr_pos[2] * scale)
+                    
+                    # Draw line
+                    if 0 <= x1 < map_size and 0 <= y1 < map_size and 0 <= x2 < map_size and 0 <= y2 < map_size:
+                        cv2.line(map_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                
+                # Draw current position
+                if len(self.trajectory) > 0:
+                    curr_pos = self.trajectory[-1][:3, 3]
+                    x = int(center_x + curr_pos[0] * scale)
+                    y = int(center_y - curr_pos[2] * scale)
+                    if 0 <= x < map_size and 0 <= y < map_size:
+                        cv2.circle(map_img, (x, y), 5, (0, 0, 255), -1)
+            
+            # Draw map points
+            if len(self.map_points_3d) > 0:
+                center_x, center_y = map_size // 2, map_size // 2
+                scale = 50
+                
+                for point in self.map_points_3d:
+                    x = int(center_x + point[0] * scale)
+                    y = int(center_y - point[2] * scale)
+                    if 0 <= x < map_size and 0 <= y < map_size:
+                        cv2.circle(map_img, (x, y), 2, (255, 255, 0), -1)
+            
+            # Add title
+            cv2.putText(map_img, "2D Map View", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            
+            # Show 2D map
+            cv2.imshow("OrbyGlasses - 2D Map", map_img)
+            
+        except Exception as e:
+            self.logger.error(f"2D map drawing error: {e}")
+
+    def _draw_trajectory_overlay(self, img):
+        """Draw trajectory overlay on the image."""
+        try:
+            h, w = img.shape[:2]
+            if len(self.trajectory) < 2:
+                return
+                
+            # Scale trajectory to fit in image
+            scale = min(w, h) / 20.0  # Scale factor
+            center_x, center_y = w // 2, h // 2
+            
+            # Draw trajectory path
+            for i in range(1, min(len(self.trajectory), 100)):  # Limit to last 100 points
+                prev_pos = self.trajectory[i-1][:3, 3]
+                curr_pos = self.trajectory[i][:3, 3]
+                
+                # Convert to image coordinates
+                x1 = int(prev_pos[0] * scale + center_x)
+                y1 = int(prev_pos[1] * scale + center_y)
+                x2 = int(curr_pos[0] * scale + center_x)
+                y2 = int(curr_pos[1] * scale + center_y)
+                
+                # Draw line if within bounds
+                if 0 <= x1 < w and 0 <= y1 < h and 0 <= x2 < w and 0 <= y2 < h:
+                    cv2.line(img, (x1, y1), (x2, y2), (0, 0, 255), 2)
+            
+            # Draw current position
+            if len(self.trajectory) > 0:
+                curr_pos = self.trajectory[-1][:3, 3]
+                x = int(curr_pos[0] * scale + center_x)
+                y = int(curr_pos[1] * scale + center_y)
+                if 0 <= x < w and 0 <= y < h:
+                    cv2.circle(img, (x, y), 5, (255, 0, 0), -1)
+                    
+        except Exception as e:
+            self.logger.error(f"Trajectory overlay error: {e}")
+
+    def _update_3d_visualization(self):
+        """Update the 3D point cloud and trajectory visualization (disabled)"""
+        # 3D visualization temporarily disabled due to tkinter issues
+        pass
 
     def get_map_points(self) -> np.ndarray:
         """Get all map points for visualization."""
@@ -423,7 +630,24 @@ class LivePySLAM:
                     return np.array(self.map_points_3d)
         except Exception as e:
             self.logger.error(f"Error getting map points: {e}")
-        return np.array([]).reshape(0, 3)
+            return np.array([])
+    
+    def cleanup(self):
+        """Clean up resources."""
+        try:
+            if hasattr(self, 'cap') and self.cap is not None:
+                self.cap.release()
+            cv2.destroyAllWindows()
+            
+            # Close 3D viewer
+            if hasattr(self, 'viewer_3d') and self.viewer_3d is not None:
+                self.viewer_3d.close()
+            if hasattr(self, 'viewer3d') and self.viewer3d is not None:
+                self.viewer3d.close()
+                
+            self.logger.info("SLAM cleanup completed")
+        except Exception as e:
+            self.logger.error(f"Cleanup error: {e}")
 
     def is_tracking_good(self) -> bool:
         """Check if SLAM tracking is good."""
