@@ -15,6 +15,12 @@ GLOBAL_PARAMETERS:
   #kVolumetricIntegrationUseDepthEstimator: True
   #kLogsFolder: /tmp/pyslam_logs       # to redirect the prints of SLAM to the set folder
 
+# Additional tracking parameters for robustness
+TRACKING_PARAMETERS:
+  min_matches_for_homography: 10
+  ransac_threshold: 3.0
+  min_parallax: 1.0
+
 # Copy other settings from main config
 SYSTEM_STATE: 
   load_state: False
