@@ -263,34 +263,56 @@ class PySLAMVisualOdometry:
                 gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             else:
                 gray_frame = frame
-            
+
             # Process through VO
             timestamp = time.time()
             self.vo.track(gray_frame, None, None, self.frame_count, timestamp)
-            
-            # Get pose
-            if hasattr(self.vo, 'poses') and self.vo.poses is not None and len(self.vo.poses) > 0:
-                self.current_pose = self.vo.poses[-1]
 
-            # Get trajectory (check if initialized and not None)
-            if hasattr(self.vo, 'traj3d_est') and self.vo.traj3d_est is not None and len(self.vo.traj3d_est) > 0:
-                traj_point = self.vo.traj3d_est[-1]
-                if traj_point is not None and len(traj_point) >= 3:
-                    x, y, z = traj_point[0], traj_point[1], traj_point[2]
-                    self.trajectory.append([x, y, z])
-            
+            # Get pose (with extra safety checks)
+            try:
+                if hasattr(self.vo, 'poses') and self.vo.poses is not None and len(self.vo.poses) > 0:
+                    pose = self.vo.poses[-1]
+                    if pose is not None:
+                        self.current_pose = pose
+            except Exception as e:
+                self.logger.debug(f"Could not get pose: {e}")
+
+            # Get trajectory (with full error protection)
+            try:
+                if hasattr(self.vo, 'traj3d_est') and self.vo.traj3d_est is not None:
+                    if len(self.vo.traj3d_est) > 0:
+                        traj_point = self.vo.traj3d_est[-1]
+                        if traj_point is not None:
+                            # Handle both tuple/list and numpy array
+                            if hasattr(traj_point, '__len__') and len(traj_point) >= 3:
+                                x = float(traj_point[0]) if traj_point[0] is not None else 0.0
+                                y = float(traj_point[1]) if traj_point[1] is not None else 0.0
+                                z = float(traj_point[2]) if traj_point[2] is not None else 0.0
+                                self.trajectory.append([x, y, z])
+            except Exception as e:
+                self.logger.debug(f"Could not get trajectory: {e}")
+
             # Update visualization
-            self._update_trajectory_visualization()
+            try:
+                self._update_trajectory_visualization()
+            except Exception as e:
+                self.logger.debug(f"Trajectory viz error: {e}")
 
             # Show pySLAM VO's own visualization window (like main_vo.py)
-            if hasattr(self.vo, 'draw_img') and self.vo.draw_img is not None:
-                cv2.imshow("pySLAM VO - Camera", self.vo.draw_img)
-                cv2.waitKey(1)
+            try:
+                if hasattr(self.vo, 'draw_img') and self.vo.draw_img is not None:
+                    cv2.imshow("pySLAM VO - Camera", self.vo.draw_img)
+                    cv2.waitKey(1)
+            except Exception as e:
+                self.logger.debug(f"VO camera window error: {e}")
 
             # Show trajectory window (like main_vo.py)
-            if self.traj_img is not None and self.traj_img.size > 0:
-                cv2.imshow("pySLAM VO - Trajectory", self.traj_img)
-                cv2.waitKey(1)
+            try:
+                if self.traj_img is not None and self.traj_img.size > 0:
+                    cv2.imshow("pySLAM VO - Trajectory", self.traj_img)
+                    cv2.waitKey(1)
+            except Exception as e:
+                self.logger.debug(f"Trajectory window error: {e}")
 
             # Rerun logging (like main_vo.py)
             if self.use_rerun and hasattr(self, 'vo'):
@@ -300,10 +322,10 @@ class PySLAMVisualOdometry:
                     if hasattr(self.vo, 'traj3d_est') and self.vo.traj3d_est is not None and len(self.vo.traj3d_est) > 0:
                         Rerun.log_3d_trajectory(self.frame_count, self.vo.traj3d_est, "estimated", color=[0, 0, 255])
                 except Exception as e:
-                    self.logger.warning(f"Rerun logging error: {e}")
+                    self.logger.debug(f"Rerun logging error: {e}")
 
             self.frame_count += 1
-            
+
             return {
                 'pose': self.current_pose.copy(),
                 'position': self.current_pose[:3, 3].copy(),
@@ -311,10 +333,18 @@ class PySLAMVisualOdometry:
                 'frame_count': self.frame_count,
                 'message': f"pySLAM VO frame {self.frame_count}"
             }
-            
+
         except Exception as e:
+            import traceback
             self.logger.error(f"pySLAM VO processing error: {e}")
-            return {'error': str(e)}
+            self.logger.debug(f"Traceback: {traceback.format_exc()}")
+            return {
+                'pose': self.current_pose.copy(),
+                'position': self.current_pose[:3, 3].copy(),
+                'trajectory': list(self.trajectory),
+                'frame_count': self.frame_count,
+                'message': f"VO error: {e}"
+            }
     
     def _process_fallback_frame(self, frame: np.ndarray) -> Dict:
         """Process frame using fallback motion tracking."""
