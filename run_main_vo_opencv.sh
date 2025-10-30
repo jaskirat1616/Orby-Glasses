@@ -153,13 +153,20 @@ if __name__ == "__main__":
 
                 cv2.imshow("Trajectory", traj_img)
 
-                if is_draw_matched_points and hasattr(vo, 'num_matches'):
-                    inliers_signal = vo.num_matches
-                    if matched_points_plt:
-                        matched_points_plt.draw(inliers_signal, "# inliers", color="g")
+                if is_draw_3d:  # draw 3d trajectory (like original)
+                    plt3d.draw(vo.traj3d_est, "estimated", color="g", marker=".")
 
-            # draw camera image
-            cv2.imshow("Camera", vo.draw_img)
+                # Note: Error plotting requires ground truth, not available for live camera
+
+                if is_draw_matched_points and hasattr(vo, 'num_matches'):
+                    matched_kps_signal = [img_id, vo.num_matched_kps]
+                    inliers_signal = [img_id, vo.num_inliers]
+                    matched_points_plt.draw(matched_kps_signal, "# matches", color="b")
+                    matched_points_plt.draw(inliers_signal, "# inliers", color="g")
+
+            # draw camera image (always show, like original main_vo.py)
+            if img is not None:
+                cv2.imshow("Camera", vo.draw_img)
             
             # Print trajectory info
             if img_id % 30 == 0 and len(vo.traj3d_est) > 1:  # Print every 30 frames
