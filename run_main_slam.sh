@@ -10,7 +10,7 @@ cd /Users/jaskiratsingh/Desktop/OrbyGlasses/third_party/pyslam
 source ~/.python/venvs/pyslam/bin/activate
 
 # Run main_slam.py (not headless - shows windows)
-echo "Starting pySLAM with windows..."
-python main_slam.py
+echo "Starting pySLAM with live camera and windows..."
+python main_slam.py --config_path=config_live.yaml
 
 echo "pySLAM finished."
