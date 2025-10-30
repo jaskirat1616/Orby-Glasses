@@ -283,7 +283,26 @@ class LivePySLAM:
         """Process frame using real pySLAM."""
         # Process frame through pySLAM
         timestamp = time.time()
-        self.slam.track(frame, None, None, self.frame_count, timestamp)
+
+        try:
+            self.slam.track(frame, None, None, self.frame_count, timestamp)
+        except Exception as e:
+            # Catch any errors from pySLAM's track() method
+            import traceback
+            self.logger.error(f"SLAM track error: {e}")
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
+            # Return error result
+            return {
+                'pose': self.current_pose.copy(),
+                'position': self.current_pose[:3, 3].copy(),
+                'tracking_quality': 0.0,
+                'tracking_state': "ERROR",
+                'message': f"SLAM track failed: {e}",
+                'is_initialized': self.is_initialized,
+                'trajectory_length': len(self.trajectory),
+                'num_map_points': 0,
+                'performance': {}
+            }
 
         # Get tracking state - fixed isinstance issue
         tracking_state = "OK"
