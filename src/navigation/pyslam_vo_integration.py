@@ -260,15 +260,27 @@ class PySLAMVisualOdometry:
             
             # Update visualization
             self._update_trajectory_visualization()
-            
-            # Rerun logging
+
+            # Show pySLAM VO's own visualization window (like main_vo.py)
+            if hasattr(self.vo, 'draw_img') and self.vo.draw_img is not None:
+                cv2.imshow("pySLAM VO - Camera", self.vo.draw_img)
+                cv2.waitKey(1)
+
+            # Show trajectory window (like main_vo.py)
+            if self.traj_img is not None and self.traj_img.size > 0:
+                cv2.imshow("pySLAM VO - Trajectory", self.traj_img)
+                cv2.waitKey(1)
+
+            # Rerun logging (like main_vo.py)
             if self.use_rerun and hasattr(self, 'vo'):
                 try:
-                    Rerun.log_3d_camera_img_seq(self.frame_count, self.vo.draw_img, None, self.camera, self.current_pose)
-                    Rerun.log_3d_trajectory(self.frame_count, self.vo.traj3d_est, "estimated", color=[0, 0, 255])
+                    img_to_log = self.vo.draw_img if hasattr(self.vo, 'draw_img') else None
+                    Rerun.log_3d_camera_img_seq(self.frame_count, img_to_log, None, self.camera, self.current_pose)
+                    if len(self.vo.traj3d_est) > 0:
+                        Rerun.log_3d_trajectory(self.frame_count, self.vo.traj3d_est, "estimated", color=[0, 0, 255])
                 except Exception as e:
                     self.logger.warning(f"Rerun logging error: {e}")
-            
+
             self.frame_count += 1
             
             return {

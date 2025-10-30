@@ -118,8 +118,8 @@ class LivePySLAM:
             # Check if pySLAM modules are available
             if not PYSLAM_AVAILABLE:
                 raise ImportError("pySLAM modules not available")
-            
-            
+
+
             # Create camera configuration
             camera_config = Config()
             camera_config.cam_settings = {
@@ -136,21 +136,36 @@ class LivePySLAM:
                 'Camera.p2': 0.0,
                 'Camera.k3': 0.0
             }
-            
+
             # Create camera - PinholeCamera should be available from imports
             self.camera = PinholeCamera(camera_config)
 
             # Create feature tracker config
             feature_tracker_config = FeatureTrackerConfigs.ORB2.copy()
             feature_tracker_config["num_features"] = self.config.get('slam.orb_features', 2000)
-            
+
             # Initialize SLAM
             self.slam = Slam(self.camera, feature_tracker_config)
-            
+
+            # Initialize Rerun visualization (like main_slam.py)
+            self.use_rerun = self.config.get('slam.use_rerun', True)
+            if self.use_rerun:
+                try:
+                    from pyslam.viz.rerun_interface import Rerun
+                    Rerun.init_slam()
+                    self.rerun = Rerun
+                    self.logger.info("✅ Rerun.io initialized for SLAM")
+                except Exception as e:
+                    self.logger.warning(f"Rerun initialization failed: {e}")
+                    self.use_rerun = False
+                    self.rerun = None
+            else:
+                self.rerun = None
+
             # Initialize visualization (after SLAM is created)
             self.plot_drawer = SlamPlotDrawer(self.slam)
-            
-            # Initialize 3D viewer
+
+            # Initialize 3D viewer (Pangolin-based)
             self.viewer3d = Viewer3D(scale=1.0)
             
             # Initialize camera capture
@@ -270,24 +285,23 @@ class LivePySLAM:
         timestamp = time.time()
         self.slam.track(frame, None, None, self.frame_count, timestamp)
 
-        # Get tracking state
+        # Get tracking state - fixed isinstance issue
         tracking_state = "OK"
         if hasattr(self.slam, 'tracking') and hasattr(self.slam.tracking, 'state'):
             try:
                 state = self.slam.tracking.state
-                # Handle both enum and string states
+                # Handle SerializableEnum from pySLAM
                 if state is not None:
-                    # Try direct comparison with enum values (works with Enum)
-                    try:
-                        if state == SlamState.LOST:
-                            tracking_state = "LOST"
-                        elif state == SlamState.NOT_INITIALIZED:
-                            tracking_state = "NOT_INITIALIZED"
-                        elif state == SlamState.OK:
-                            tracking_state = "OK"
-                    except (TypeError, AttributeError):
-                        # Fallback to string comparison
-                        tracking_state = str(state)
+                    # Convert to string first to avoid isinstance issues with SerializableEnum
+                    state_str = str(state)
+                    if "LOST" in state_str or state_str == "3":
+                        tracking_state = "LOST"
+                    elif "NOT_INITIALIZED" in state_str or state_str == "1":
+                        tracking_state = "NOT_INITIALIZED"
+                    elif "OK" in state_str or state_str == "2":
+                        tracking_state = "OK"
+                    else:
+                        tracking_state = state_str
             except Exception as e:
                 # Log and continue with OK state
                 self.logger.debug(f"Could not parse tracking state: {e}")
@@ -304,23 +318,39 @@ class LivePySLAM:
         # Get map points
         self.map_points = self.get_map_points()
         
-        # Update visualization
+        # Update visualization - CRITICAL: Call draw() for pySLAM plot windows
         if self.plot_drawer:
             try:
+                # This shows pySLAM's native 2D plots (trajectory, errors, etc.)
                 self.plot_drawer.draw(self.slam, frame)
             except Exception as e:
                 self.logger.warning(f"Plot visualization error: {e}")
-        
-        # Update 3D viewer
+
+        # Update 3D viewer - CRITICAL: This shows the 3D point cloud window
         if hasattr(self, 'viewer3d') and self.viewer3d:
             try:
-                self.viewer3d.draw_slam_map(self.slam)
+                # Method changed in newer pySLAM versions
+                if hasattr(self.viewer3d, 'draw_map'):
+                    self.viewer3d.draw_map(self.slam.map)
+                elif hasattr(self.viewer3d, 'draw_slam_map'):
+                    self.viewer3d.draw_slam_map(self.slam)
+                else:
+                    # Fallback for older versions
+                    if hasattr(self.slam, 'map'):
+                        self.viewer3d.update(self.slam.map)
             except Exception as e:
                 self.logger.warning(f"3D visualization error: {e}")
-        
-        # Show pySLAM camera window with feature trails
+
+        # Show pySLAM camera window with feature tracking
         try:
-            if hasattr(self.slam, 'map') and hasattr(self.slam.map, 'draw_feature_trails'):
+            if hasattr(self.slam, 'tracking') and hasattr(self.slam.tracking, 'draw_img'):
+                # Use pySLAM's own tracking visualization
+                img_draw = self.slam.tracking.draw_img
+                if img_draw is not None:
+                    cv2.imshow("pySLAM - Camera", img_draw)
+                else:
+                    cv2.imshow("pySLAM - Camera", frame)
+            elif hasattr(self.slam, 'map') and hasattr(self.slam.map, 'draw_feature_trails'):
                 img_draw = self.slam.map.draw_feature_trails(frame)
                 cv2.imshow("pySLAM - Camera", img_draw)
             else:
@@ -329,7 +359,17 @@ class LivePySLAM:
         except Exception as e:
             self.logger.warning(f"Camera window error: {e}")
             cv2.imshow("pySLAM - Camera", frame)
-        
+
+        # Process OpenCV events to update windows
+        cv2.waitKey(1)
+
+        # Update Rerun visualization (like main_slam.py)
+        if self.use_rerun and self.rerun:
+            try:
+                self.rerun.log_slam_frame(self.frame_count, self.slam)
+            except Exception as e:
+                self.logger.debug(f"Rerun logging error: {e}")
+
         # Create result
         result = {
             'pose': self.current_pose.copy(),
@@ -342,7 +382,7 @@ class LivePySLAM:
             'num_map_points': len(self.map_points),
             'performance': {}
         }
-        
+
         return result
 
     def _process_fallback_frame(self, frame: np.ndarray) -> Dict:

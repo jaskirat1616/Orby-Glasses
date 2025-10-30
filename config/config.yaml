@@ -188,6 +188,7 @@ slam:
   use_orbslam3: false
   use_pyslam: true
   use_rtabmap: false
+  use_rerun: true  # Enable Rerun.io visualization for SLAM
 social_navigation:
   enabled: true
   region: us
@@ -201,7 +202,7 @@ trajectory_prediction:
   visualize: false
 visual_odometry:
   bundle_adjustment: true
-  enabled: true
+  enabled: false
   fast_threshold: 12
   feature_type: ORB
   keyframe_threshold: 30
@@ -221,7 +222,7 @@ visual_odometry:
   save_maps: true
   temporal_consistency_check: true
   trajectory_length: 1000
-  use_pyslam_vo: true
+  use_pyslam_vo: false
   use_rerun: true
   visualization_scale: 50
   visualize: true
