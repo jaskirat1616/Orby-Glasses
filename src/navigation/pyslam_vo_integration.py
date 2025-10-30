@@ -150,10 +150,23 @@ class PySLAMVisualOdometry:
 
             # Create feature tracker with unpacked params
             self.feature_tracker = feature_tracker_factory(**tracker_params)
-            
-            # Create ground truth (empty for live camera)
-            self.groundtruth = None
-            
+
+            # Create mock ground truth for live camera (VO expects this even if unused)
+            class MockGroundtruth:
+                """Mock groundtruth object for live camera (no ground truth available)"""
+                def __init__(self):
+                    self.type = "none"  # Not KITTI, not EUROC, just live camera
+                    self.data = []
+                    self.scale_factor = 1.0
+
+                def getTimestamp(self, idx):
+                    return None
+
+                def getPose(self, idx):
+                    return None
+
+            self.groundtruth = MockGroundtruth()
+
             # Create Visual Odometry
             self.vo = VisualOdometryEducational(self.camera, self.groundtruth, self.feature_tracker)
             
