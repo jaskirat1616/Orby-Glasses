@@ -712,7 +712,9 @@ class OrbyGlasses:
             # Skip depth estimation for pySLAM (monocular SLAM doesn't need it)
             depth_map = None
             is_pyslam_configured = self.config.get('slam.use_pyslam', False)
-            if not (hasattr(self.slam, '__class__') and 'PySLAM' in self.slam.__class__.__name__) and not is_pyslam_configured:
+            skip_depth = is_pyslam_configured or (hasattr(self.slam, '__class__') and 'PySLAM' in self.slam.__class__.__name__)
+
+            if not skip_depth:
                 self.perf_monitor.start_timer('depth')
 
                 # Simplified depth computation with frame skipping
@@ -1436,10 +1438,10 @@ class OrbyGlasses:
                         map_image = self.slam_map_viewer.get_map_image()
                         cv2.imshow('SLAM Map', map_image)  # Keep original SLAM map size
 
-                    # Show depth map in separate window - smaller size
-                    # Skip depth visualization for pySLAM (uses its own depth estimation)
-                    # Also skip if pySLAM is configured but not available (fallback to RGBD)
-                    if depth_map is not None and not (hasattr(self.slam, '__class__') and 'PySLAM' in self.slam.__class__.__name__) and not is_pyslam_configured:
+                    # DISABLED: Depth map window (pySLAM handles its own depth estimation)
+                    # Skip depth visualization when using pySLAM
+                    skip_depth_viz = is_pyslam_configured or (hasattr(self.slam, '__class__') and 'PySLAM' in self.slam.__class__.__name__)
+                    if False and depth_map is not None and not skip_depth_viz:
                         # Use new fast dark visualizer if available
                         if self.depth_viz:
                             depth_colored = self.depth_viz.visualize(depth_map)

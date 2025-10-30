@@ -710,7 +710,9 @@ class LivePySLAM:
             try:
                 state = self.slam.tracking.state
                 if state is not None:
-                    return state == SlamState.OK or str(state) == "OK"
+                    # Use string comparison to avoid isinstance issues with SerializableEnum
+                    state_str = str(state)
+                    return "OK" in state_str or state_str == "2"
             except Exception:
                 pass
         return True
