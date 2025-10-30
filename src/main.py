@@ -253,6 +253,7 @@ class OrbyGlasses:
 
         # SLAM and Indoor Navigation
         self.slam_enabled = self.config.get('slam.enabled', False)
+        self.indoor_nav_enabled = self.config.get('indoor_navigation.enabled', False)
         if self.slam_enabled:
             # Check which SLAM system to use
             use_pyslam = self.config.get('slam.use_pyslam', False)
