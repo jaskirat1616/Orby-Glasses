@@ -105,6 +105,14 @@ except ImportError as e:
     print("Run: cd third_party/pyslam && source ~/.python/venvs/pyslam/bin/activate")
 
 try:
+    # Try to import pySLAM Visual Odometry
+    from navigation.pyslam_vo_integration import PySLAMVisualOdometry, PYSLAM_VO_AVAILABLE
+    print("✅ pySLAM Visual Odometry available")
+except ImportError as e:
+    PYSLAM_VO_AVAILABLE = False
+    print(f"Note: pySLAM Visual Odometry not available: {e}")
+
+try:
     from navigation.opencv_mono_slam import OpenCVMonocularSLAM
     OPENCV_SLAM_AVAILABLE = True
 except ImportError:
@@ -310,6 +318,24 @@ class OrbyGlasses:
             self.indoor_nav_enabled = self.config.get('indoor_navigation.enabled', False)
             if self.indoor_nav_enabled:
                 self.indoor_navigator = IndoorNavigator(self.slam, self.config)
+        
+        # Visual Odometry (alongside SLAM)
+        self.vo_enabled = self.config.get('visual_odometry.enabled', False)
+        if self.vo_enabled:
+            if PYSLAM_VO_AVAILABLE:
+                self.logger.info("🎯 Initializing pySLAM Visual Odometry...")
+                self.visual_odometry = PySLAMVisualOdometry(self.config)
+                self.logger.info("✓ Real-time motion tracking with pySLAM")
+                self.logger.info("✓ Rerun.io visualization (like original main_vo.py)")
+                self.logger.info("✓ Trajectory estimation and pose tracking")
+            else:
+                self.logger.warning("pySLAM Visual Odometry not available")
+                self.vo_enabled = False
+        else:
+            self.visual_odometry = None
+        
+        if self.slam_enabled:
+            if self.indoor_nav_enabled:
                 self.logger.info("✓ SLAM and Indoor Navigation enabled")
             else:
                 self.indoor_navigator = None
@@ -731,6 +757,16 @@ class OrbyGlasses:
                     if slam_result:
                         self.logger.debug(f"SLAM completed in {slam_time:.3f}s, pos:({slam_result['position'][0]:.2f}, {slam_result['position'][1]:.2f}), q:{slam_result['tracking_quality']:.2f}, pts:{slam_result['num_map_points']}")
 
+            # Visual Odometry tracking (if enabled) - alongside SLAM
+            vo_result = None
+            if self.vo_enabled and self.visual_odometry is not None:
+                self.perf_monitor.start_timer('visual_odometry')
+                vo_result = self.visual_odometry.process_frame(frame)
+                vo_time = self.perf_monitor.stop_timer('visual_odometry')
+                if self.frame_count % 50 == 0 and vo_result:  # Log every 50 frames
+                    pos = vo_result.get('position', [0, 0, 0])
+                    self.logger.debug(f"Visual Odometry completed in {vo_time:.3f}s, pos:({pos[0]:.2f}, {pos[1]:.2f}, {pos[2]:.2f})")
+
                 # Update indoor navigator if enabled
                 if self.indoor_nav_enabled and self.indoor_navigator is not None:
                     self.indoor_navigator.update(slam_result, detections)
@@ -1120,6 +1156,14 @@ class OrbyGlasses:
 
         self.running = True
 
+        # Start Visual Odometry if enabled
+        if self.vo_enabled and self.visual_odometry is not None:
+            if self.visual_odometry.start():
+                self.logger.info("✅ Visual Odometry started successfully")
+            else:
+                self.logger.error("Failed to start Visual Odometry")
+                self.vo_enabled = False
+
         # Video writer
         video_writer = None
         if save_video:
@@ -1481,6 +1525,11 @@ class OrbyGlasses:
         # Stop conversation manager (background voice listener)
         if self.conversation_manager:
             self.conversation_manager.stop()
+
+        # Stop Visual Odometry
+        if self.vo_enabled and self.visual_odometry is not None:
+            self.visual_odometry.cleanup()
+            self.logger.info("Visual Odometry stopped")
 
         # Stop 3D mapper
         self.mapper_3d.stop()

@@ -109,7 +109,9 @@ if __name__ == "__main__":
     draw_scale = 1  # Use original scale like main_vo.py
 
     is_draw_3d = True
-    is_draw_with_rerun = False
+    is_draw_with_rerun = True  # Use Rerun by default like original main_vo.py
+    if is_draw_with_rerun:
+        Rerun.init_vo()
 
     is_draw_err = True
     err_plt = factory_plot2d(xlabel="img id", ylabel="m", title="error")
@@ -151,21 +153,29 @@ if __name__ == "__main__":
                     text = "Coordinates: x=%2fm y=%2fm z=%2fm" % (x, y, z)
                     cv2.putText(traj_img, text, (20, 40), cv2.FONT_HERSHEY_PLAIN, 1, (255, 255, 255), 1)
 
-                cv2.imshow("Trajectory", traj_img)
+                if is_draw_with_rerun:
+                    Rerun.log_img_seq("trajectory_img/2d", img_id, traj_img)
+                else:
+                    cv2.imshow("Trajectory", traj_img)
 
-                if is_draw_3d:  # draw 3d trajectory (like original)
-                    plt3d.draw(vo.traj3d_est, "estimated", color="g", marker=".")
+                if is_draw_with_rerun:
+                    # Rerun logging for 3D trajectory and statistics
+                    Rerun.log_3d_camera_img_seq(img_id, vo.draw_img, None, cam, vo.poses[-1])
+                    Rerun.log_3d_trajectory(img_id, vo.traj3d_est, "estimated", color=[0, 0, 255])
+                else:
+                    if is_draw_3d:  # draw 3d trajectory (like original)
+                        plt3d.draw(vo.traj3d_est, "estimated", color="g", marker=".")
 
-                # Note: Error plotting requires ground truth, not available for live camera
+                    # Note: Error plotting requires ground truth, not available for live camera
 
-                if is_draw_matched_points and hasattr(vo, 'num_matches'):
-                    matched_kps_signal = [img_id, vo.num_matched_kps]
-                    inliers_signal = [img_id, vo.num_inliers]
-                    matched_points_plt.draw(matched_kps_signal, "# matches", color="b")
-                    matched_points_plt.draw(inliers_signal, "# inliers", color="g")
+                    if is_draw_matched_points and hasattr(vo, 'num_matches'):
+                        matched_kps_signal = [img_id, vo.num_matched_kps]
+                        inliers_signal = [img_id, vo.num_inliers]
+                        matched_points_plt.draw(matched_kps_signal, "# matches", color="b")
+                        matched_points_plt.draw(inliers_signal, "# inliers", color="g")
 
-            # draw camera image (always show, like original main_vo.py)
-            if img is not None:
+            # draw camera image (like original main_vo.py)
+            if not is_draw_with_rerun and img is not None:
                 cv2.imshow("Camera", vo.draw_img)
             
             # Print trajectory info

@@ -140,6 +140,16 @@ slam:
   
   grid_size: [250, 250]
   grid_resolution: 0.2
+
+# Visual Odometry - Real-time motion tracking
+visual_odometry:
+  enabled: true         # Enable Visual Odometry alongside SLAM
+  use_pyslam_vo: true   # Use pySLAM Visual Odometry (recommended)
+  feature_type: ORB     # ORB, SIFT, or SUPERPOINT
+  num_features: 2000    # Number of features to track
+  use_rerun: true       # Use Rerun.io for visualization (like original main_vo.py)
+  trajectory_length: 1000  # Maximum trajectory points to keep
+  visualization_scale: 50  # Scale for trajectory visualization
   save_maps: true
   visualize: true      # ✅ ENABLED - 2D SLAM map viewer (no Pangolin)
   orb_features: 2000    # More features for better tracking (pySLAM recommended: 2000)
