@@ -1,0 +1,33 @@
+DATASET:
+  type: LIVE_DATASET
+
+LIVE_DATASET: 
+  type: live 
+  sensor_type: mono  # Required field for pySLAM
+  base_path: 
+  name: 0  # Use camera 0
+  settings: settings/WEBCAM.yaml 
+  groundtruth_file: auto
+
+# Copy other settings from main config
+SYSTEM_STATE: 
+  load_state: False
+  folder_path: results/slam_state 
+
+SAVE_TRAJECTORY:
+  save_trajectory: True
+  format_type: tum
+
+# Viewer settings
+Viewer.on: 1
+Viewer.KeyFrameSize: 0.05
+Viewer.KeyFrameLineWidth: 1
+Viewer.GraphLineWidth: 0.9
+Viewer.PointSize: 1
+Viewer.LineSize: 1
+Viewer.CameraSize: 0.08
+Viewer.CameraLineWidth: 3
+Viewer.ViewpointX: 0
+Viewer.ViewpointY: -0.7
+Viewer.ViewpointZ: -1.8
+Viewer.ViewpointF: 500
