@@ -106,7 +106,7 @@ if __name__ == "__main__":
     traj_img_size = 800
     traj_img = np.zeros((traj_img_size, traj_img_size, 3), dtype=np.uint8)
     half_traj_img_size = int(0.5 * traj_img_size)
-    draw_scale = 1
+    draw_scale = 1  # Use original scale like main_vo.py
 
     is_draw_3d = True
     is_draw_with_rerun = False
@@ -137,15 +137,19 @@ if __name__ == "__main__":
         if img is not None:
             vo.track(img, img_right, depth, img_id, timestamp)
 
-            if len(vo.traj3d_est) > 1:
+            if len(vo.traj3d_est) > 2:  # Start drawing from the third image like original
                 x, y, z = vo.traj3d_est[-1]
-                gt_x, gt_y, gt_z = vo.traj3d_gt[-1]
 
-                if is_draw_traj_img:
+                if is_draw_traj_img:  # draw 2D trajectory (on the plane xz) - exactly like main_vo.py
                     draw_x, draw_y = int(draw_scale * x) + half_traj_img_size, half_traj_img_size - int(draw_scale * z)
-                    draw_gt_x, draw_gt_y = int(draw_scale * gt_x) + half_traj_img_size, half_traj_img_size - int(draw_scale * gt_z)
-                    cv2.circle(traj_img, (draw_x, draw_y), 1, (img_id * 255 / 4540, 255 - img_id * 255 / 4540, 0), 1)
-                    cv2.circle(traj_img, (draw_gt_x, draw_gt_y), 1, (0, 0, 255), 1)
+                    
+                    # Draw estimated trajectory point with color gradient (like original)
+                    cv2.circle(traj_img, (draw_x, draw_y), 1, (img_id * 255 // 4540, 255 - img_id * 255 // 4540, 0), 1)
+                    
+                    # Write text on traj_img (like original)
+                    cv2.rectangle(traj_img, (10, 20), (600, 60), (0, 0, 0), -1)
+                    text = "Coordinates: x=%2fm y=%2fm z=%2fm" % (x, y, z)
+                    cv2.putText(traj_img, text, (20, 40), cv2.FONT_HERSHEY_PLAIN, 1, (255, 255, 255), 1)
 
                 cv2.imshow("Trajectory", traj_img)
 
