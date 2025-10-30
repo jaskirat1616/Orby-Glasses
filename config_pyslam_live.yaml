@@ -9,6 +9,12 @@ LIVE_DATASET:
   settings: settings/WEBCAM.yaml 
   groundtruth_file: auto
 
+# Global parameters required by pySLAM
+GLOBAL_PARAMETERS: 
+  #kUseVolumetricIntegration: True
+  #kVolumetricIntegrationUseDepthEstimator: True
+  #kLogsFolder: /tmp/pyslam_logs       # to redirect the prints of SLAM to the set folder
+
 # Copy other settings from main config
 SYSTEM_STATE: 
   load_state: False
