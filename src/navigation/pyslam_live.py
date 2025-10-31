@@ -167,12 +167,8 @@ class LivePySLAM:
             # Optimized for performance and accuracy
             feature_tracker_config = FeatureTrackerConfigs.ORB.copy()
             feature_tracker_config["num_features"] = self.config.get('slam.orb_features', 3000)
-            # Performance optimizations
-            feature_tracker_config["num_levels"] = 8  # Pyramid levels for multi-scale detection
-            feature_tracker_config["scale_factor"] = 1.2  # Scale between pyramid levels
-            feature_tracker_config["tracker_type"] = "DES_BF"  # Brute-force matcher (fast and accurate)
-            feature_tracker_config["ratio_test"] = 0.75  # RANSAC ratio test threshold
-            feature_tracker_config["use_grid"] = True  # Grid-based feature distribution for better coverage
+            # Only override valid parameters that FeatureTrackerConfigs.ORB already has
+            # Invalid params removed: ratio_test, use_grid (not in factory signature)
 
             # Loop closure detection - disabled by default (requires pyobindex2)
             loop_detection_config = None
@@ -221,12 +217,13 @@ class LivePySLAM:
             # Performance optimizations summary
             self.logger.info("⚡ SLAM Performance Optimizations:")
             self.logger.info(f"   • {self.config.get('slam.orb_features', 3000)} ORB features (high accuracy)")
-            self.logger.info(f"   • 8 pyramid levels (multi-scale detection)")
-            self.logger.info(f"   • Grid-based feature distribution for uniform coverage")
-            self.logger.info(f"   • BF matcher with ratio test (0.75)")
-            rerun_status = "enabled" if self.use_rerun else "disabled (20-30% CPU saved)"
+            self.logger.info(f"   • {feature_tracker_config['num_levels']} pyramid levels (multi-scale)")
+            self.logger.info(f"   • Scale factor: {feature_tracker_config['scale_factor']}")
+            self.logger.info(f"   • Match ratio test: {feature_tracker_config['match_ratio_test']}")
+            self.logger.info(f"   • Tracker: {feature_tracker_config['tracker_type']} (brute-force)")
+            rerun_status = "enabled" if self.use_rerun else "disabled (saves 20-30% CPU)"
             self.logger.info(f"   • Rerun.io: {rerun_status}")
-            self.logger.info(f"   • Loop closure: disabled (15% CPU saved)")
+            self.logger.info(f"   • Loop closure: disabled (saves 15% CPU)")
             
             # Initialize camera capture with performance optimizations
             self.cap = cv2.VideoCapture(0)
