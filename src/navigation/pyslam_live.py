@@ -228,12 +228,20 @@ class LivePySLAM:
             self.logger.info(f"   • Rerun.io: {rerun_status}")
             self.logger.info(f"   • Loop closure: disabled (15% CPU saved)")
             
-            # Initialize camera capture
+            # Initialize camera capture with performance optimizations
             self.cap = cv2.VideoCapture(0)
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
             self.cap.set(cv2.CAP_PROP_FPS, 30)
-            
+            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Low latency
+            # Camera performance optimizations
+            try:
+                self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+                self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.25)  # Manual exposure
+                self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)  # Disable autofocus
+            except Exception:
+                pass  # Some cameras don't support these
+
             if not self.cap.isOpened():
                 raise RuntimeError("Could not open camera")
             
