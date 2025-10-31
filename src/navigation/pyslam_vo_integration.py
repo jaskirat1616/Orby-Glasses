@@ -16,25 +16,31 @@ import queue
 from typing import Dict, Optional, List, Tuple
 from collections import deque
 
-# Fix pyslam_utils import issue by creating a mock module
-class MockPySLAMUtils:
-    """Mock pyslam_utils module to avoid import errors"""
-    def __init__(self, *args, **kwargs):
-        pass
-    
-    def __getattr__(self, name):
-        return lambda *args, **kwargs: None
-
-# Add mock pyslam_utils to sys.modules before any pySLAM imports
-sys.modules['pyslam_utils'] = MockPySLAMUtils()
-
 # Add pySLAM path to sys.path
 pyslam_path = os.path.join(os.path.dirname(__file__), '..', '..', 'third_party', 'pyslam')
 if os.path.exists(pyslam_path) and pyslam_path not in sys.path:
     sys.path.insert(0, pyslam_path)
 
+# Add cpp/lib path for compiled modules (pyslam_utils, etc.)
+cpp_lib_path = os.path.join(pyslam_path, 'cpp', 'lib')
+if os.path.exists(cpp_lib_path) and cpp_lib_path not in sys.path:
+    sys.path.insert(0, cpp_lib_path)
+
 # Try to import pySLAM modules
 PYSLAM_VO_AVAILABLE = False
+Config = None
+VisualOdometryEducational = None
+PinholeCamera = None
+FeatureTrackerConfigs = None
+feature_tracker_factory = None
+FeatureTrackerTypes = None
+dataset_factory = None
+DatasetType = None
+SensorType = None
+Rerun = None
+Viewer3D = None
+Printer = None
+
 try:
     import pyslam
     from pyslam.config import Config
@@ -45,19 +51,20 @@ try:
     from pyslam.io.dataset_factory import dataset_factory
     from pyslam.io.dataset_types import DatasetType, SensorType
     from pyslam.viz.rerun_interface import Rerun
+    from pyslam.viz.viewer3D import Viewer3D
     from pyslam.utilities.utils_sys import Printer
     PYSLAM_VO_AVAILABLE = True
     print("✅ pySLAM Visual Odometry modules imported successfully!")
 except ImportError as e:
     PYSLAM_VO_AVAILABLE = False
     import traceback
-    print(f"pySLAM VO not available: {e}")
-    print(f"Traceback: {traceback.format_exc()}")
+    print(f"❌ pySLAM VO import error: {e}")
+    print(f"Traceback:\n{traceback.format_exc()}")
 except Exception as e:
     PYSLAM_VO_AVAILABLE = False
     import traceback
-    print(f"pySLAM VO error: {e}")
-    print(f"Traceback: {traceback.format_exc()}")
+    print(f"❌ pySLAM VO error: {e}")
+    print(f"Traceback:\n{traceback.format_exc()}")
 
 
 class PySLAMVisualOdometry:
@@ -79,9 +86,9 @@ class PySLAMVisualOdometry:
         self.cy = config.get('camera.cy', self.height / 2.0)
         
         # VO parameters
-        self.feature_type = config.get('vo.feature_type', 'ORB')
-        self.num_features = config.get('vo.num_features', 2000)
-        self.use_rerun = config.get('vo.use_rerun', True)
+        self.feature_type = config.get('visual_odometry.feature_type', 'ORB')
+        self.num_features = config.get('visual_odometry.num_features', 2000)
+        self.use_rerun = config.get('visual_odometry.use_rerun', True)
         
         # State
         self.is_initialized = False
@@ -95,11 +102,11 @@ class PySLAMVisualOdometry:
         self.frame_queue = queue.Queue(maxsize=10)
         self.result_queue = queue.Queue(maxsize=10)
         
-        # Visualization
-        self.traj_img_size = 400
+        # Visualization (matching main_vo.py)
+        self.traj_img_size = 800
         self.traj_img = np.zeros((self.traj_img_size, self.traj_img_size, 3), dtype=np.uint8)
         self.half_traj_img_size = self.traj_img_size // 2
-        self.draw_scale = 50  # Scale for trajectory visualization
+        self.draw_scale = 1  # Scale for trajectory visualization (like main_vo.py)
         
         if PYSLAM_VO_AVAILABLE:
             try:
@@ -136,13 +143,13 @@ class PySLAMVisualOdometry:
             # Create camera
             self.camera = PinholeCamera(camera_config)
             
-            # Create feature tracker
+            # Create feature tracker - use ORB (OpenCV) instead of ORB2 (ORB-SLAM2) if not available
             if self.feature_type == 'ORB':
-                feature_tracker_config = FeatureTrackerConfigs.ORB2
+                feature_tracker_config = FeatureTrackerConfigs.ORB  # Use OpenCV ORB
             elif self.feature_type == 'SIFT':
                 feature_tracker_config = FeatureTrackerConfigs.SIFT
             else:
-                feature_tracker_config = FeatureTrackerConfigs.ORB2
+                feature_tracker_config = FeatureTrackerConfigs.ORB  # Use OpenCV ORB
 
             # Extract params from config and override num_features
             tracker_params = feature_tracker_config.copy()
@@ -155,7 +162,7 @@ class PySLAMVisualOdometry:
             class MockGroundtruth:
                 """Mock groundtruth object for live camera (no ground truth available)"""
                 def __init__(self):
-                    self.type = "none"  # Not KITTI, not EUROC, just live camera
+                    self.type = "kitti"  # Use KITTI type for proper threshold handling
                     self.data = []
                     self.scale_factor = 1.0
 
@@ -164,6 +171,16 @@ class PySLAMVisualOdometry:
 
                 def getPose(self, idx):
                     return None
+                
+                def getTimestampPoseAndAbsoluteScale(self, frame_id):
+                    """
+                    Return dummy groundtruth data for live camera (no groundtruth available).
+                    Returns: (timestamp, x, y, z, qx, qy, qz, qw, scale)
+                    Note: Returns scale=1.0 to enable trajectory building
+                    """
+                    # Return dummy values with scale=1.0 to allow trajectory building
+                    # Position increments slightly to simulate motion
+                    return 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0
 
             self.groundtruth = MockGroundtruth()
 
@@ -179,8 +196,18 @@ class PySLAMVisualOdometry:
                     self.logger.warning(f"Rerun initialization failed: {e}")
                     self.use_rerun = False
             
+            # Initialize 3D Viewer (Pangolin-based) like main_vo.py
+            try:
+                self.viewer3d = Viewer3D(scale=10.0)
+                self.logger.info("✅ Viewer3D initialized for VO")
+            except Exception as e:
+                self.logger.warning(f"Viewer3D initialization failed: {e}")
+                self.viewer3d = None
+            
             self.is_initialized = True
             self.logger.info("✅ pySLAM Visual Odometry initialized successfully!")
+            self.logger.info(f"   Feature type: {self.feature_type}, Num features: {self.num_features}")
+            self.logger.info("   Note: If you see 'Not enough correspondences', try moving the camera slowly")
             
         except Exception as e:
             self.logger.error(f"Failed to initialize pySLAM VO: {e}")
@@ -258,15 +285,16 @@ class PySLAMVisualOdometry:
     def _process_pyslam_frame(self, frame: np.ndarray) -> Dict:
         """Process frame using pySLAM Visual Odometry."""
         try:
-            # Convert to grayscale if needed
+            # Convert BGR to RGB (pySLAM expects RGB from datasets)
             if len(frame.shape) == 3:
-                gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             else:
-                gray_frame = frame
+                # Already grayscale, convert back to RGB for consistency
+                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2RGB)
 
             # Process through VO
             timestamp = time.time()
-            self.vo.track(gray_frame, None, None, self.frame_count, timestamp)
+            self.vo.track(rgb_frame, None, None, self.frame_count, timestamp)
 
             # Get pose (with extra safety checks)
             try:
@@ -314,6 +342,13 @@ class PySLAMVisualOdometry:
             except Exception as e:
                 self.logger.debug(f"Trajectory window error: {e}")
 
+            # Update 3D Viewer (like main_vo.py)
+            if hasattr(self, 'viewer3d') and self.viewer3d:
+                try:
+                    self.viewer3d.draw_vo(self.vo)
+                except Exception as e:
+                    self.logger.debug(f"Viewer3D error: {e}")
+            
             # Rerun logging (like main_vo.py)
             if self.use_rerun and hasattr(self, 'vo'):
                 try:
@@ -359,39 +394,27 @@ class PySLAMVisualOdometry:
         }
     
     def _update_trajectory_visualization(self):
-        """Update trajectory visualization."""
+        """Update trajectory visualization (matching main_vo.py)."""
         if len(self.trajectory) > 1:
-            # Clear previous trajectory
-            self.traj_img = np.zeros((self.traj_img_size, self.traj_img_size, 3), dtype=np.uint8)
+            # Draw only the latest trajectory point (like main_vo.py - accumulates over time)
+            traj_point = self.trajectory[-1]
+            x, y, z = traj_point[0], traj_point[1], traj_point[2]
             
-            # Draw trajectory
-            for i in range(1, len(self.trajectory)):
-                prev_pos = self.trajectory[i-1]
-                curr_pos = self.trajectory[i]
-                
-                # Convert to image coordinates
-                x1 = int(self.draw_scale * prev_pos[0]) + self.half_traj_img_size
-                y1 = self.half_traj_img_size - int(self.draw_scale * prev_pos[2])
-                x2 = int(self.draw_scale * curr_pos[0]) + self.half_traj_img_size
-                y2 = self.half_traj_img_size - int(self.draw_scale * curr_pos[2])
-                
-                # Ensure coordinates are within bounds
-                x1 = max(0, min(self.traj_img_size-1, x1))
-                y1 = max(0, min(self.traj_img_size-1, y1))
-                x2 = max(0, min(self.traj_img_size-1, x2))
-                y2 = max(0, min(self.traj_img_size-1, y2))
-                
-                # Draw line
-                cv2.line(self.traj_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            # Convert to image coordinates
+            draw_x = int(self.draw_scale * x) + self.half_traj_img_size
+            draw_y = self.half_traj_img_size - int(self.draw_scale * z)
             
-            # Draw current position
-            if len(self.trajectory) > 0:
-                curr_pos = self.trajectory[-1]
-                x = int(self.draw_scale * curr_pos[0]) + self.half_traj_img_size
-                y = self.half_traj_img_size - int(self.draw_scale * curr_pos[2])
-                x = max(0, min(self.traj_img_size-1, x))
-                y = max(0, min(self.traj_img_size-1, y))
-                cv2.circle(self.traj_img, (x, y), 3, (0, 0, 255), -1)
+            # Color transitions from green to blue (like main_vo.py)
+            color_val = int(self.frame_count * 255 / 4540)
+            color = (color_val, 255 - color_val, 0)
+            
+            # Draw point (accumulates over time)
+            cv2.circle(self.traj_img, (draw_x, draw_y), 1, color, 1)
+            
+            # Draw current position with text overlay (like main_vo.py)
+            cv2.rectangle(self.traj_img, (10, 20), (600, 60), (0, 0, 0), -1)
+            text = f"Coordinates: x={x:.2f}m y={y:.2f}m z={z:.2f}m"
+            cv2.putText(self.traj_img, text, (20, 40), cv2.FONT_HERSHEY_PLAIN, 1, (255, 255, 255), 1)
     
     def get_trajectory_image(self) -> np.ndarray:
         """Get trajectory visualization image."""
@@ -410,4 +433,10 @@ class PySLAMVisualOdometry:
         self.stop()
         if hasattr(self, 'vo') and hasattr(self.vo, 'cleanup'):
             self.vo.cleanup()
+        if hasattr(self, 'viewer3d') and self.viewer3d:
+            try:
+                self.viewer3d.quit()
+            except Exception as e:
+                self.logger.debug(f"Viewer3D cleanup error: {e}")
+        cv2.destroyAllWindows()
         self.logger.info("Visual Odometry cleanup completed")

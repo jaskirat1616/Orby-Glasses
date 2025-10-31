@@ -19,40 +19,6 @@ import queue
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
-# Fix g2o import issue by creating a mock module
-class MockG2OType:
-    """Mock g2o type that can be used with isinstance"""
-    pass
-
-class MockG2O:
-    """Mock g2o module to avoid import errors"""
-    def __init__(self, *args, **kwargs):
-        pass
-
-    # Create mock types that can be used with isinstance
-    SE3Quat = MockG2OType
-    Isometry3d = MockG2OType
-    Flag = MockG2OType
-
-    def __getattr__(self, name):
-        # Return MockG2OType for any other class-like attributes
-        if name[0].isupper():  # Class names typically start with uppercase
-            return MockG2OType
-        return lambda *args, **kwargs: None
-
-# Fix pyslam_utils import issue by creating a mock module
-class MockPySLAMUtils:
-    """Mock pyslam_utils module to avoid import errors"""
-    def __init__(self, *args, **kwargs):
-        pass
-    
-    def __getattr__(self, name):
-        return lambda *args, **kwargs: None
-
-# Add mock modules to sys.modules before any pySLAM imports
-sys.modules['g2o'] = MockG2O()
-sys.modules['pyslam_utils'] = MockPySLAMUtils()
-
 # Add src to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -106,31 +72,8 @@ try:
 except ImportError:
     HAPTIC_AVAILABLE = False
 
-# Navigation modules
-from navigation.slam_system import SLAMSystem
-from navigation.monocular_slam import ProperMonocularSLAM
-from navigation.monocular_slam_v2 import MonocularSLAM  # High-accuracy ORB-based SLAM
-from navigation.advanced_monocular_slam import AdvancedMonocularSLAM  # SUPERIOR to ORB-SLAM3
-from navigation.accurate_slam import AccurateSLAM  # Production-quality accurate SLAM
-from navigation.working_slam import WorkingSLAM  # PROVEN WORKING simple SLAM
-
+# Navigation modules - Simplified to use native pySLAM
 try:
-    from navigation.orbslam3_wrapper import ORBSLAM3System
-    ORBSLAM3_AVAILABLE = True
-except ImportError:
-    ORBSLAM3_AVAILABLE = False
-    print("Note: ORB-SLAM3 not available (using advanced monocular SLAM - superior performance)")
-
-try:
-    # Add project root to Python path for navigation module
-    import os
-    import sys
-    project_root = os.path.dirname(os.path.abspath(__file__))
-    if project_root not in sys.path:
-        sys.path.insert(0, project_root)
-        print("✅ Project root added to Python path")
-    
-    # Try to import live pySLAM implementation
     from navigation.pyslam_live import LivePySLAM, PYSLAM_AVAILABLE
     print("✅ Live pySLAM available")
 except ImportError as e:
@@ -139,32 +82,11 @@ except ImportError as e:
     print("Run: cd third_party/pyslam && source ~/.python/venvs/pyslam/bin/activate")
 
 try:
-    # Try to import pySLAM Visual Odometry
     from navigation.pyslam_vo_integration import PySLAMVisualOdometry, PYSLAM_VO_AVAILABLE
     print("✅ pySLAM Visual Odometry available")
 except ImportError as e:
     PYSLAM_VO_AVAILABLE = False
     print(f"Note: pySLAM Visual Odometry not available: {e}")
-
-try:
-    from navigation.opencv_mono_slam import OpenCVMonocularSLAM
-    OPENCV_SLAM_AVAILABLE = True
-except ImportError:
-    OPENCV_SLAM_AVAILABLE = False
-
-try:
-    from navigation.droid_slam_wrapper import DROIDSLAMWrapper
-    DROID_SLAM_AVAILABLE = True
-except ImportError:
-    DROID_SLAM_AVAILABLE = False
-    print("Note: DROID-SLAM not available (install from: https://github.com/princeton-vl/DROID-SLAM)")
-
-try:
-    from navigation.rtabmap_wrapper import RTABMapSystem
-    RTABMAP_AVAILABLE = True
-except ImportError:
-    RTABMAP_AVAILABLE = False
-    print("Note: RTAB-Map not available (install with: ./install_rtabmap.sh)")
 
 from navigation.indoor_navigation import IndoorNavigator
 
@@ -251,107 +173,26 @@ class OrbyGlasses:
         # 3D Mapping
         self.mapper_3d = Mapper3D(self.config)
 
-        # SLAM and Indoor Navigation
+        # SLAM and Indoor Navigation - Simplified to use native pySLAM
         self.slam_enabled = self.config.get('slam.enabled', False)
         self.indoor_nav_enabled = self.config.get('indoor_navigation.enabled', False)
         if self.slam_enabled:
-            # Check which SLAM system to use
-            use_pyslam = self.config.get('slam.use_pyslam', False)
-            use_opencv = self.config.get('slam.use_opencv', False)
-            use_orbslam3 = self.config.get('slam.use_orbslam3', False)
-            use_monocular = self.config.get('slam.use_monocular', False)
-            use_advanced = self.config.get('slam.use_advanced', False)
-            use_accurate = self.config.get('slam.use_accurate', False)
-            use_working = self.config.get('slam.use_working', False)
-            use_droid = self.config.get('slam.use_droid', False)  # NEW: DROID-SLAM
-            use_rtabmap = self.config.get('slam.use_rtabmap', False)  # NEW: RTAB-Map
-
-            if use_droid and DROID_SLAM_AVAILABLE:
-                self.logger.info("🤖 Initializing DROID-SLAM (Deep Learning SLAM)...")
-                self.slam = DROIDSLAMWrapper(self.config)
-                self.logger.info("✓ Deep learning-based feature extraction")
-                self.logger.info("✓ Excellent accuracy and robustness")
-                self.logger.info("✓ Works with Apple Silicon (PyTorch MPS)")
-            elif use_pyslam and PYSLAM_AVAILABLE:
-                self.logger.info("🚀 Initializing pySLAM (Advanced Python SLAM Framework)...")
-                self.logger.info(f"DEBUG: use_pyslam={use_pyslam}, PYSLAM_AVAILABLE={PYSLAM_AVAILABLE}")
+            if PYSLAM_AVAILABLE:
+                self.logger.info("🚀 Initializing pySLAM (Professional Python SLAM Framework)...")
                 self.slam = LivePySLAM(self.config)
                 feature_type = self.config.get('slam.feature_type', 'ORB')
                 self.logger.info(f"✓ Using pySLAM with {feature_type} features")
                 self.logger.info("✓ Loop closure, bundle adjustment, map persistence")
-                self.logger.info("✓ Multiple feature detector support (ORB, SIFT, SuperPoint)")
-                self.logger.info("✓ Native pySLAM visualization and feature tracking")
-            elif use_rtabmap and RTABMAP_AVAILABLE:
-                self.logger.info("🗺️ Initializing RTAB-Map (Real-Time Appearance-Based Mapping)...")
-                self.slam = RTABMapSystem(self.config)
-                self.logger.info("✓ Appearance-based loop closure detection")
-                self.logger.info("✓ Graph-based SLAM optimization")
-                self.logger.info("✓ Multi-session mapping support")
-                self.logger.info("✓ Memory management for large-scale environments")
-                self.logger.info("✓ Excellent for long-term localization")
-            elif use_opencv and OPENCV_SLAM_AVAILABLE:
-                self.logger.info("⚡ Initializing OpenCV Monocular SLAM (Lightweight)...")
-                self.slam = OpenCVMonocularSLAM(self.config)
-                self.logger.info("✓ Lightweight pure-OpenCV implementation")
-                self.logger.info("✓ No external dependencies, works on any macOS")
-                self.logger.info("✓ Real-time ORB tracking + triangulation")
-            elif use_orbslam3 and ORBSLAM3_AVAILABLE:
-                self.logger.info("🏆 Initializing ORB-SLAM3 (Industry Standard)...")
-                self.slam = ORBSLAM3System(self.config)
-                self.logger.info("✓ Using ORB-SLAM3: Most accurate, loop closure, relocalization")
-                self.logger.info("✓ Expected: 30-60 FPS, 2-5x more accurate than ORB-SLAM2")
-            elif use_advanced:
-                self.logger.info("🚀 Initializing Advanced Monocular SLAM (BEYOND ORB-SLAM3)...")
-                # Depth estimator will be set later after initialization
-                self.slam = AdvancedMonocularSLAM(self.config, depth_estimator=None)
-                self.logger.info("✓ 3000 ORB features + Optical Flow hybrid tracking")
-                self.logger.info("✓ Depth-based scale estimation + Motion model prediction")
-                self.logger.info("✓ 15-20% better accuracy than ORB-SLAM3 (based on 2024 research)")
-                self.logger.info("✓ Expected: 25-35 FPS, superior robustness in dynamic scenes")
-            elif use_working:
-                self.logger.info("🎉 Initializing WORKING Simple SLAM (Proven Implementation)...")
-                self.slam = WorkingSLAM(self.config)
-                self.logger.info("✓ Source: github.com/Fosowl/monocularSlam")
-                self.logger.info("✓ Simple, clean, ACTUALLY WORKS!")
-                self.logger.info("✓ Real-time triangulation and pose estimation")
-            elif use_accurate:
-                self.logger.info("🎯 Initializing Accurate Monocular SLAM (Production Quality)...")
-                self.slam = AccurateSLAM(self.config)
-                self.logger.info("✓ Proper bundle adjustment with scipy")
-                self.logger.info("✓ Covisibility graph tracking")
-                self.logger.info("✓ Map point culling & keyframe selection")
-                self.logger.info("✓ Focus on accuracy over marketing claims")
-            elif use_monocular:
-                self.logger.info("Initializing High-Accuracy Monocular SLAM (ORB-based)...")
-                self.slam = MonocularSLAM(self.config)
-                self.logger.info("✓ Using ORB features + essential matrix + bundle adjustment")
-                self.logger.info("✓ 2000 ORB features, RANSAC outlier rejection, keyframe management")
-            else:
-                # Fallback to pySLAM if available, otherwise RGBD SLAM
-                if PYSLAM_AVAILABLE:
-                    self.logger.info("🚀 Initializing pySLAM (Fallback SLAM System)...")
-                    self.slam = LivePySLAM(self.config)
-                    feature_type = self.config.get('slam.feature_type', 'ORB')
-                    self.logger.info(f"✓ Using pySLAM with {feature_type} features")
-                    self.logger.info("✓ Professional-grade monocular SLAM")
-                    self.logger.info("✓ Native pySLAM visualization")
-                else:
-                    self.logger.info("Initializing RGBD SLAM system...")
-                    self.slam = SLAMSystem(self.config)
-                    self.logger.info("✓ Using RGBD SLAM (depth-assisted)")
-
-            # Initialize SLAM map viewer only if not using pySLAM (pySLAM has its own viewer)
-            is_pyslam_configured = self.config.get('slam.use_pyslam', False)
-            if not is_pyslam_configured:
-                from navigation.slam_map_viewer import SLAMMapViewer
-                self.slam_map_viewer = SLAMMapViewer(map_size=600, meters_per_pixel=0.02)
-                self.slam_map_viewer.draw_grid(grid_spacing=1.0)
-            else:
+                self.logger.info("✓ Native pySLAM visualization and 3D windows")
+                # pySLAM has its own viewer, so we don't need a custom one
                 self.slam_map_viewer = None
-            self.logger.info("✓ SLAM map viewer initialized")
+            else:
+                self.logger.error("❌ SLAM enabled but pySLAM not available!")
+                self.logger.info("Install pySLAM from third_party/pyslam")
+                self.slam = None
+                self.slam_map_viewer = None
 
-            self.indoor_nav_enabled = self.config.get('indoor_navigation.enabled', False)
-            if self.indoor_nav_enabled:
+            if self.slam and self.indoor_nav_enabled:
                 self.indoor_navigator = IndoorNavigator(self.slam, self.config)
         
         # Visual Odometry (alongside SLAM)
@@ -569,137 +410,6 @@ class OrbyGlasses:
             self.logger.error(f"Camera initialization error: {e}")
             return False
 
-    def _create_custom_depth_colormap(self, depth_map: np.ndarray) -> np.ndarray:
-        """
-        Create a custom depth colormap optimized for blind navigation.
-        Uses darker, more visible colors with danger zones in red/orange.
-
-        Args:
-            depth_map: Input depth map (0-1 normalized)
-
-        Returns:
-            Colorized depth map with safety-oriented colormap (darker colors)
-        """
-        # Ensure depth map is in range [0, 1]
-        depth_normalized = np.clip(depth_map, 0, 1)
-
-        # Create custom colormap: dark red (close) -> orange -> dark green -> dark blue (far)
-        h, w = depth_map.shape
-        colored = np.zeros((h, w, 3), dtype=np.uint8)
-
-        # Danger zone (0-0.3): Dark Red to Red
-        mask1 = depth_normalized < 0.3
-        t = depth_normalized[mask1] / 0.3  # 0 to 1
-        colored[mask1] = np.stack([
-            np.zeros_like(t),
-            np.zeros_like(t),
-            (120 + t * 100).astype(np.uint8)  # Dark red to red
-        ], axis=-1)
-
-        # Caution zone (0.3-0.5): Red to Orange
-        mask2 = (depth_normalized >= 0.3) & (depth_normalized < 0.5)
-        t = (depth_normalized[mask2] - 0.3) / 0.2
-        colored[mask2] = np.stack([
-            np.zeros_like(t),
-            (t * 100).astype(np.uint8),  # Add some green for orange
-            (220 - t * 60).astype(np.uint8)  # Red to orange
-        ], axis=-1)
-
-        # Safe zone (0.5-0.7): Orange to Dark Green
-        mask3 = (depth_normalized >= 0.5) & (depth_normalized < 0.7)
-        t = (depth_normalized[mask3] - 0.5) / 0.2
-        colored[mask3] = np.stack([
-            (t * 100).astype(np.uint8),  # Add green
-            (100 + t * 60).astype(np.uint8),  # Dark to medium green
-            (160 - t * 160).astype(np.uint8)  # Reduce red
-        ], axis=-1)
-
-        # Far zone (0.7-1.0): Dark Green to Dark Blue
-        mask4 = depth_normalized >= 0.7
-        t = (depth_normalized[mask4] - 0.7) / 0.3
-        colored[mask4] = np.stack([
-            (100 + t * 100).astype(np.uint8),  # Blue channel
-            (160 - t * 100).astype(np.uint8),  # Green fades
-            (t * 50).astype(np.uint8)  # Dark blue
-        ], axis=-1)
-
-        return colored
-
-    def _create_ultra_clear_depth_colormap(self, depth_map: np.ndarray) -> np.ndarray:
-        """
-        BREAKTHROUGH: Ultra-clear HIGH-CONTRAST depth visualization.
-
-        Uses sharp color transitions and enhanced detail preservation
-        for maximum clarity and obstacle visibility.
-
-        Args:
-            depth_map: Input depth map (0-1 normalized)
-
-        Returns:
-            Ultra-clear depth visualization with maximum detail
-        """
-        # Ensure depth is in range [0, 1]
-        depth_normalized = np.clip(depth_map, 0, 1)
-
-        # Apply histogram equalization for better contrast
-        depth_uint8 = (depth_normalized * 255).astype(np.uint8)
-        depth_eq = cv2.equalizeHist(depth_uint8).astype(np.float32) / 255.0
-
-        h, w = depth_map.shape
-        colored = np.zeros((h, w, 3), dtype=np.uint8)
-
-        # ULTRA-CLEAR color scheme with sharp transitions
-        # Very close (0-0.15): BRIGHT RED (immediate danger)
-        mask1 = depth_eq < 0.15
-        colored[mask1] = [0, 0, 255]
-
-        # Close (0.15-0.3): RED to ORANGE gradient
-        mask2 = (depth_eq >= 0.15) & (depth_eq < 0.3)
-        t = (depth_eq[mask2] - 0.15) / 0.15
-        colored[mask2] = np.stack([
-            np.zeros_like(t),
-            (t * 165).astype(np.uint8),
-            (255 - t * 50).astype(np.uint8)
-        ], axis=-1)
-
-        # Medium (0.3-0.5): ORANGE to YELLOW
-        mask3 = (depth_eq >= 0.3) & (depth_eq < 0.5)
-        t = (depth_eq[mask3] - 0.3) / 0.2
-        colored[mask3] = np.stack([
-            np.zeros_like(t),
-            (165 + t * 90).astype(np.uint8),
-            (205 + t * 50).astype(np.uint8)
-        ], axis=-1)
-
-        # Safe (0.5-0.7): YELLOW to GREEN
-        mask4 = (depth_eq >= 0.5) & (depth_eq < 0.7)
-        t = (depth_eq[mask4] - 0.5) / 0.2
-        colored[mask4] = np.stack([
-            (t * 100).astype(np.uint8),
-            np.full_like(t, 255, dtype=np.uint8),
-            (255 - t * 255).astype(np.uint8)
-        ], axis=-1)
-
-        # Far (0.7-1.0): GREEN to CYAN to BLUE
-        mask5 = depth_eq >= 0.7
-        t = (depth_eq[mask5] - 0.7) / 0.3
-        colored[mask5] = np.stack([
-            (100 + t * 155).astype(np.uint8),
-            (255 - t * 100).astype(np.uint8),
-            (t * 100).astype(np.uint8)
-        ], axis=-1)
-
-        # Apply sharpening filter for ULTRA-CLEAR edges
-        kernel = np.array([[-1, -1, -1],
-                          [-1,  9, -1],
-                          [-1, -1, -1]])
-        colored = cv2.filter2D(colored, -1, kernel)
-
-        # Enhance details with bilateral filter (preserves edges)
-        colored = cv2.bilateralFilter(colored, 5, 50, 50)
-
-        return colored
-
     def process_frame(self, frame: np.ndarray) -> Optional[tuple]:
         """
         Optimized frame processing pipeline for maximum performance.
@@ -721,33 +431,34 @@ class OrbyGlasses:
             detections = detections[:self.max_detections]
             det_time = self.perf_monitor.stop_timer('detection')
 
-            # Smart depth estimation with motion-based caching and threading
-            # Skip depth estimation for pySLAM (monocular SLAM doesn't need it)
+            # Depth estimation - Skip for pySLAM (monocular SLAM doesn't need external depth)
             depth_map = None
-            is_pyslam_configured = self.config.get('slam.use_pyslam', False)
-            skip_depth = is_pyslam_configured or (hasattr(self.slam, '__class__') and 'PySLAM' in self.slam.__class__.__name__)
+            skip_depth = self.slam_enabled and PYSLAM_AVAILABLE
 
-            if not skip_depth:
+            # Check if depth estimator is available
+            has_depth_estimator = (hasattr(self, 'detection_pipeline') and
+                                   hasattr(self.detection_pipeline, 'depth_estimator') and
+                                   self.detection_pipeline.depth_estimator is not None)
+
+            if not skip_depth and has_depth_estimator:
                 self.perf_monitor.start_timer('depth')
-
                 # Simplified depth computation with frame skipping
                 if self.frame_count % (self.skip_depth_frames + 1) == 0:
                     depth_map = self.detection_pipeline.depth_estimator.estimate_depth(frame)
                     self.last_depth_map = depth_map
                 else:
-                    # Reuse cached depth map (much faster!)
+                    # Reuse cached depth map
                     depth_map = self.last_depth_map
                     if depth_map is None:
                         depth_map = self.detection_pipeline.depth_estimator.estimate_depth(frame)
                         self.last_depth_map = depth_map
-
                 depth_time = self.perf_monitor.stop_timer('depth')
             else:
-                # pySLAM uses its own depth estimation - skip our depth model
+                # pySLAM handles depth internally or depth estimator not available
                 depth_time = 0.0
 
             # Add depth to detections
-            if depth_map is not None:
+            if depth_map is not None and has_depth_estimator:
                 frame_size = (frame.shape[1], frame.shape[0])  # (width, height)
                 for detection in detections:
                     bbox = detection['bbox']
@@ -755,9 +466,10 @@ class OrbyGlasses:
                     detection['depth'] = depth
                     detection['is_danger'] = depth < self.detection_pipeline.min_safe_distance
             else:
+                # No depth estimation - use conservative defaults
                 for detection in detections:
-                    detection['depth'] = 0.0
-                    detection['is_danger'] = False
+                    detection['depth'] = 2.0  # Assume 2 meters if no depth
+                    detection['is_danger'] = False  # Can't determine danger without depth
 
             # Predict object motion and collision risks
             detections = self.smart_cache.predict_object_motion(detections)
@@ -779,20 +491,15 @@ class OrbyGlasses:
                 if self.frame_count % 50 == 0:  # Log every 50 frames
                     self.logger.debug(f"Scene understanding completed in {scene_time:.3f}s")
 
-            # SLAM tracking (if enabled) - pass depth map for scale
+            # SLAM tracking (if enabled) - pySLAM handles everything internally
             slam_result = None
             if self.slam_enabled and self.slam is not None:
                 self.perf_monitor.start_timer('slam')
                 self.logger.debug(f"Processing SLAM on frame {self.frame_count}")
-                # For pySLAM (monocular), don't pass depth map
-                if hasattr(self.slam, '__class__') and 'PySLAM' in self.slam.__class__.__name__:
-                    slam_result = self.slam.process_frame(frame, None)  # No depth for monocular SLAM
-                else:
-                    slam_result = self.slam.process_frame(frame, depth_map)  # Other SLAM systems can use depth
+                slam_result = self.slam.process_frame(frame, None)  # pySLAM doesn't need external depth
                 slam_time = self.perf_monitor.stop_timer('slam')
-                if self.frame_count % 50 == 0:  # Log every 50 frames
-                    if slam_result:
-                        self.logger.debug(f"SLAM completed in {slam_time:.3f}s, pos:({slam_result['position'][0]:.2f}, {slam_result['position'][1]:.2f}), q:{slam_result['tracking_quality']:.2f}, pts:{slam_result['num_map_points']}")
+                if self.frame_count % 50 == 0 and slam_result:
+                    self.logger.debug(f"SLAM completed in {slam_time:.3f}s, pos:({slam_result['position'][0]:.2f}, {slam_result['position'][1]:.2f}), q:{slam_result['tracking_quality']:.2f}, pts:{slam_result['num_map_points']}")
 
             # Visual Odometry tracking (if enabled) - alongside SLAM
             vo_result = None
@@ -880,12 +587,9 @@ class OrbyGlasses:
             total_time = self.perf_monitor.stop_timer('total')
             fps = self.perf_monitor.get_avg_fps()
 
-            # Create UI overlay with depth visualization
-            # Skip depth overlay for pySLAM (uses its own depth estimation)
-            is_pyslam_configured = self.config.get('slam.use_pyslam', False)
-            overlay_depth = None if ((hasattr(self.slam, '__class__') and 'PySLAM' in self.slam.__class__.__name__) or is_pyslam_configured) else depth_map
+            # Create UI overlay (no depth visualization - pySLAM handles that)
             annotated_frame = self.robot_ui.draw_clean_overlay(
-                frame, detections, fps, safe_direction, overlay_depth
+                frame, detections, fps, safe_direction, None  # No depth overlay
             )
 
             # Add SLAM info if enabled
@@ -1433,64 +1137,17 @@ class OrbyGlasses:
                         self.last_path_clear_time = current_time
 
                 self.logger.debug("Frame processed. Displaying windows.")
-                # Clean robot-style display
+                # Clean robot-style display - only show main camera view
                 if display:
                     # Main camera view - resize to smaller size for cleaner desktop
-                    display_width = 480  # Reduced from 640
-                    display_height = 360  # Reduced from 480
+                    display_width = 480
+                    display_height = 360
                     camera_display = cv2.resize(annotated_frame, (display_width, display_height),
                                                interpolation=cv2.INTER_LINEAR)
                     cv2.imshow('OrbyGlasses', camera_display)
 
-                    # Show SLAM map in a separate window if requested (skip for pySLAM - it has its own viewer)
-                    is_pyslam_configured = self.config.get('slam.use_pyslam', False)
-                    if separate_slam and self.slam_enabled and self.slam_map_viewer and slam_result and not is_pyslam_configured:
-                        # Get map points using method (some SLAM systems have attribute, some have method)
-                        map_pts = self.slam.map_points if hasattr(self.slam, 'map_points') else self.slam.get_map_points() if hasattr(self.slam, 'get_map_points') else []
-                        self.slam_map_viewer.update(slam_result, map_pts)
-                        map_image = self.slam_map_viewer.get_map_image()
-                        cv2.imshow('SLAM Map', map_image)  # Keep original SLAM map size
-
-                    # DISABLED: Depth map window (pySLAM handles its own depth estimation)
-                    # Skip depth visualization when using pySLAM
-                    skip_depth_viz = is_pyslam_configured or (hasattr(self.slam, '__class__') and 'PySLAM' in self.slam.__class__.__name__)
-                    if False and depth_map is not None and not skip_depth_viz:
-                        # Use new fast dark visualizer if available
-                        if self.depth_viz:
-                            depth_colored = self.depth_viz.visualize(depth_map)
-                        else:
-                            # Fallback to old method
-                            depth_colored = self._create_ultra_clear_depth_colormap(depth_map)
-
-                        # Resize depth map to smaller size
-                        depth_display_width = 480
-                        depth_display_height = 360
-                        depth_display = cv2.resize(depth_colored, (depth_display_width, depth_display_height),
-                                                  interpolation=cv2.INTER_LINEAR)
-                        cv2.imshow('Depth Map', depth_display)
-
-                    # Show SLAM map viewer MERGED with Advanced Navigation Panel
-                    if self.slam_enabled and self.slam_map_viewer and slam_result and not separate_slam:
-                        # Get map points using method (some SLAM systems have attribute, some have method)
-                        map_pts = self.slam.map_points if hasattr(self.slam, 'map_points') else self.slam.get_map_points() if hasattr(self.slam, 'get_map_points') else []
-                        self.slam_map_viewer.update(slam_result, map_pts)
-                        map_image = self.slam_map_viewer.get_map_image()
-
-                        # If advanced nav panel enabled, show merged view
-                        if self.advanced_nav_enabled:
-                            # Update panel with latest data (10Hz update, non-blocking)
-                            goal_pos = None
-                            if self.indoor_navigator and hasattr(self.indoor_navigator, 'current_goal'):
-                                goal_pos = self.indoor_navigator.current_goal
-
-                            self.advanced_nav_panel.update(slam_result, detections, goal_pos)
-
-                            # Render side-by-side: SLAM map (left) + Navigation panel (right)
-                            merged_nav_display = self.advanced_nav_panel.render_side_by_side(map_image)
-                            cv2.imshow('Navigation', merged_nav_display)
-                        else:
-                            # Just show SLAM map
-                            cv2.imshow('Map', map_image)
+                    # pySLAM shows its own windows (3D viewer, trajectory, features)
+                    # No need for custom SLAM or depth windows
 
                     # Show 3D Occupancy Grid if enabled
                     if self.occupancy_grid_enabled and self.occupancy_grid is not None:
