@@ -15,12 +15,23 @@ OrbyGlasses uses a camera to detect objects, estimate distances, and provide aud
 
 ## Quick Start
 
+### Choose Your Mode:
+
+**VO Mode (Trajectory Only):**
 ```bash
-./setup.sh   # First time only
-./run.sh     # Start the system
+./run_vo_mode.sh
 ```
 
+**Full SLAM Mode (With Mapping):**
+```bash
+./run_slam_mode.sh
+```
+
+Or just: `./run_orby.sh` (uses current config)
+
 Press `q` to stop.
+
+See `MODE_GUIDE.md` for details.
 
 ## Requirements
 
