@@ -21,6 +21,10 @@ camera:
   height: 480
   source: 0
   width: 640
+  fx: 525.0
+  fy: 525.0
+  cx: 320.0
+  cy: 240.0
 conversation:
   activation_phrase: hey orby
   check_interval: 0.5
@@ -176,19 +180,10 @@ safety:
 slam:
   enabled: true
   feature_type: ORB
-  grid_resolution: 0.2
-  grid_size:
-  - 250
-  - 250
+  orb_features: 2000
   loop_closure: true
-  use_accurate: false
-  use_advanced: false
-  use_droid: false
-  use_monocular: false
-  use_orbslam3: false
   use_pyslam: true
-  use_rtabmap: false
-  use_rerun: true  # Enable Rerun.io visualization for SLAM
+  use_rerun: true
 social_navigation:
   enabled: true
   region: us
@@ -201,7 +196,7 @@ trajectory_prediction:
   time_step: 0.5
   visualize: false
 visual_odometry:
-  bundle_adjustment: true
+  bundle_adjustment: false
   enabled: false
   fast_threshold: 12
   feature_type: ORB
@@ -211,14 +206,14 @@ visual_odometry:
   max_position_jump: 0.5
   max_rotation_jump: 0.5
   min_depth: 0.1
-  min_matches: 20
-  min_parallax: 1.0
-  min_tracked_features: 15
+  min_matches: 5
+  min_parallax: 0.5
+  min_tracked_features: 10
   motion_model: true
-  num_features: 2000
-  orb_features: 2000
+  num_features: 3000
+  orb_features: 3000
   pose_smoothing: 0.7
-  reprojection_threshold: 2.0
+  reprojection_threshold: 3.0
   save_maps: true
   temporal_consistency_check: true
   trajectory_length: 1000

@@ -47,16 +47,23 @@ fi
 # Set environment variables for MPS fallback (Apple Silicon)
 export PYTORCH_ENABLE_MPS_FALLBACK=1
 
-# Add pySLAM to Python path
-export PYTHONPATH="$PYSLAM_DIR:$PYTHONPATH"
+# Add pySLAM and thirdparty libraries to Python path
+export PYTHONPATH="$PYSLAM_DIR:$PYSLAM_DIR/cpp/lib:$PYSLAM_DIR/thirdparty/g2opy/lib:$PYSLAM_DIR/thirdparty/pydbow3/lib:$PYSLAM_DIR/thirdparty/pangolin:$PYTHONPATH"
+
+# Add current directory to Python path for src imports
+export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
 
 # Check Python and dependencies
 echo -e "${YELLOW}🔍 Checking dependencies...${NC}"
 python3 -c "import cv2; print('  ✓ OpenCV:', cv2.__version__)" || { echo "  ✗ OpenCV not available"; exit 1; }
 python3 -c "import torch; print('  ✓ PyTorch:', torch.__version__)" || { echo "  ✗ PyTorch not available"; exit 1; }
 python3 -c "import pyslam; print('  ✓ pySLAM: OK')" || { echo "  ✗ pySLAM not available"; exit 1; }
+python3 -c "from pyslam.slam.camera import PinholeCamera; print('  ✓ PinholeCamera: OK')" || { echo "  ✗ PinholeCamera not available"; exit 1; }
+python3 -c "import pydbow3; print('  ✓ pydbow3: OK')" || { echo "  ✗ pydbow3 not available"; exit 1; }
+python3 -c "import pypangolin; print('  ✓ pypangolin: OK')" || { echo "  ✗ pypangolin not available"; exit 1; }
 
 echo -e "${GREEN}✅ All dependencies ready${NC}"
+echo -e "${YELLOW}📝 Python path: $PYTHONPATH${NC}"
 echo ""
 echo -e "${BLUE}════════════════════════════════════════════════════════${NC}"
 echo -e "${GREEN}🎯 Launching OrbyGlasses...${NC}"
