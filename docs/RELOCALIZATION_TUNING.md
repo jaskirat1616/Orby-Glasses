@@ -2,6 +2,17 @@
 
 When SLAM loses tracking, relocalization tries to find where the camera is by matching current features against the map. Sometimes relocalization fails even when detecting good candidates.
 
+## ✅ OrbyGlasses Auto-Tuning
+
+**OrbyGlasses now automatically applies aggressive relocalization tuning** for real-world success:
+
+- ✅ **20 inlier threshold** (down from 50) - More realistic for monocular SLAM
+- ✅ **Relaxed PnP solver** - Uses chi-square threshold of 7.815 (98% confidence)
+- ✅ **Larger search windows** - 15px coarse, 5px fine (finds more matches)
+- ✅ **Lenient matching** - Ratio test 0.85-0.95 (more tolerant)
+
+**You don't need to configure anything** - it's already optimized!
+
 ## Understanding Relocalization Failures
 
 From the logs, you'll see:

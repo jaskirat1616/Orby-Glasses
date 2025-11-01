@@ -179,12 +179,20 @@ class LivePySLAM:
             self.logger.info(f"   • Scale factor: {feature_tracker_config['scale_factor']} (fine-grained)")
             self.logger.info(f"   → Should detect 2500-4000 features in normal rooms")
 
-            # Relocalization parameters - More lenient for better success rate
-            Parameters.kRelocalizationMinKpsMatches = 10  # Reduced from 15
-            Parameters.kRelocalizationPoseOpt1MinMatches = 8  # Reduced from 10
-            Parameters.kRelocalizationDoPoseOpt2NumInliers = 30  # Reduced from 50
-            Parameters.kRelocalizationFeatureMatchRatioTest = 0.8  # Relaxed from 0.75
-            Parameters.kRelocalizationMaxReprojectionDistanceMapSearchCoarse = 12  # Increased from 10
+            # Relocalization parameters - AGGRESSIVE tuning for real-world success
+            # Research shows ORB-SLAM uses min 10 inliers, we're being even more lenient
+            Parameters.kRelocalizationMinKpsMatches = 8  # Reduced from 15 (min matches to try)
+            Parameters.kRelocalizationPoseOpt1MinMatches = 6  # Reduced from 10 (first opt threshold)
+            Parameters.kRelocalizationDoPoseOpt2NumInliers = 20  # CRITICAL: Reduced from 50 (final success threshold)
+            Parameters.kRelocalizationFeatureMatchRatioTest = 0.85  # Relaxed from 0.75 (Lowe's ratio)
+            Parameters.kRelocalizationFeatureMatchRatioTestLarge = 0.95  # Relaxed from 0.9 (for search)
+            Parameters.kRelocalizationMaxReprojectionDistanceMapSearchCoarse = 15  # Increased from 10 pixels
+            Parameters.kRelocalizationMaxReprojectionDistanceMapSearchFine = 5  # Increased from 3 pixels
+
+            self.logger.info("🔧 Relocalization tuned for real-world conditions:")
+            self.logger.info(f"   • Min matches to attempt: {Parameters.kRelocalizationMinKpsMatches}")
+            self.logger.info(f"   • Success threshold: {Parameters.kRelocalizationDoPoseOpt2NumInliers} inliers")
+            self.logger.info(f"   • Coarse search window: {Parameters.kRelocalizationMaxReprojectionDistanceMapSearchCoarse}px")
 
             # Loop closure detection - Check if pydbow3 is actually available
             loop_detection_config = None

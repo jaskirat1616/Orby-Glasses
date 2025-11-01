@@ -86,7 +86,23 @@ Enables relocalization when tracking is lost. IBOW was chosen because:
 
 ## Applying Modifications
 
-If you reinstall or update pySLAM, reapply the tracking.py modification:
+If you reinstall or update pySLAM, reapply these modifications:
+
+### Relocalization Tuning
+
+**File:** `third_party/pyslam/pyslam/slam/relocalizer.py` (line ~189)
+
+```python
+# Find this line:
+solver.set_ransac_parameters(0.99, 10, 300, 6, 0.5, 5.991)
+
+# Replace with:
+solver.set_ransac_parameters(0.99, 6, 300, 4, 0.6, 7.815)
+```
+
+### Frame Tracking Fix
+
+**File:** `third_party/pyslam/pyslam/slam/tracking.py` (line ~1342)
 
 ### Manual Edit:
 1. Open `third_party/pyslam/pyslam/slam/tracking.py`
