@@ -188,6 +188,14 @@ slam:
   tracking_quality_threshold: 0.6  # Lower = more tolerant
   min_tracked_points: 10  # Lower minimum
   max_frames_between_keyframes: 20  # More frequent keyframes
+  # Dense reconstruction settings (post-processing only)
+  # To use: Run SLAM, save map (press 's' in Pangolin), then run: ./dense_reconstruction.sh
+  dense_reconstruction:
+    enabled: false  # Only enable for post-processing saved maps
+    type: TSDF  # TSDF or GAUSSIAN_SPLATTING
+    extract_mesh: true  # true = mesh, false = point cloud
+    voxel_length: 0.015  # meters - smaller = more detail
+    depth_trunc: 4.0  # meters - max depth for indoor scenes
 social_navigation:
   enabled: true
   region: us
