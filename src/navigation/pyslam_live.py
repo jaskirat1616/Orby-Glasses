@@ -170,16 +170,18 @@ class LivePySLAM:
             # Only override valid parameters that FeatureTrackerConfigs.ORB already has
             # Invalid params removed: ratio_test, use_grid (not in factory signature)
 
-            # Loop closure detection - disabled by default (requires pyobindex2)
+            # Loop closure detection - use DBOW3 (available, fixes relocalization warning)
             loop_detection_config = None
-            if self.config.get('slam.loop_closure', False):
+            if self.config.get('slam.loop_closure', True):  # Enabled by default
                 try:
                     from pyslam.loop_closing.loop_detector_configs import LoopDetectorConfigs
                     loop_detection_config = LoopDetectorConfigs.DBOW3
-                    self.logger.info("✓ Loop closure enabled with DBOW3")
+                    self.logger.info("✓ Loop closure enabled with DBOW3 (fixes relocalization)")
                 except ImportError as e:
                     self.logger.warning(f"Loop closure disabled: {e}")
                     loop_detection_config = None
+            else:
+                self.logger.info("⚠️  Loop closure disabled (may see relocalization warnings)")
             
             # Initialize SLAM with all required parameters (following main_slam.py)
             # Use INDOOR environment type for OrbyGlasses use case
@@ -226,7 +228,8 @@ class LivePySLAM:
             self.logger.info(f"   • Loop closure: disabled (saves 15% CPU)")
             
             # Initialize camera capture with performance optimizations
-            self.cap = cv2.VideoCapture(0)
+            # Using camera index 1 as requested
+            self.cap = cv2.VideoCapture(1)
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
             self.cap.set(cv2.CAP_PROP_FPS, 30)

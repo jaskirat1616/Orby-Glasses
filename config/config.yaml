@@ -19,7 +19,7 @@ audio:
 camera:
   fps: 30
   height: 480
-  source: 0
+  source: 1  # Using camera 1 as requested
   width: 640
   fx: 525.0
   fy: 525.0
@@ -181,7 +181,7 @@ slam:
   enabled: true
   feature_type: ORB
   orb_features: 3000  # Increased for better accuracy (optimal: 2000-4000)
-  loop_closure: false  # Disabled (requires pyobindex2) - saves ~15% CPU
+  loop_closure: true  # Enabled with DBOW3 (fixes relocalization warning)
   use_pyslam: true
   use_rerun: false  # Disabled for 20-30% performance boost
   # Performance optimizations
