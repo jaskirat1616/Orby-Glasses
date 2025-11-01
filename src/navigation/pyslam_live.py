@@ -51,6 +51,7 @@ try:
     # Import pySLAM modules with proper error handling
     import pyslam
     from pyslam.config import Config
+    from pyslam.config_parameters import Parameters
     from pyslam.slam.slam import Slam
     from pyslam.slam.slam_commons import SlamState
     from pyslam.slam.camera import PinholeCamera
@@ -197,7 +198,28 @@ class LivePySLAM:
                 self.logger.info("⚠️  Loop closure disabled - pydbow3 not built")
                 self.logger.info("   → If tracking lost, cannot recover (restart required)")
                 self.logger.info("   → Keep camera pointed at textured surfaces!")
-            
+
+            # Dense reconstruction configuration
+            dense_config = self.config.get('slam.dense_reconstruction', {})
+            self.use_dense_reconstruction = dense_config.get('enabled', False)
+
+            if self.use_dense_reconstruction:
+                Parameters.kUseVolumetricIntegration = True
+                Parameters.kVolumetricIntegrationType = dense_config.get('type', 'TSDF')
+                Parameters.kVolumetricIntegrationExtractMesh = dense_config.get('extract_mesh', True)
+                Parameters.kVolumetricIntegrationVoxelLength = dense_config.get('voxel_length', 0.015)
+                Parameters.kVolumetricIntegrationDepthTruncIndoor = dense_config.get('depth_trunc', 4.0)
+                Parameters.kVolumetricIntegrationOutputTimeInterval = 2.0  # Update every 2 seconds
+
+                self.logger.info("🗺️  Real-time Dense Reconstruction ENABLED")
+                self.logger.info(f"   • Type: {Parameters.kVolumetricIntegrationType}")
+                self.logger.info(f"   • Voxel size: {Parameters.kVolumetricIntegrationVoxelLength}m")
+                self.logger.info(f"   • Extract mesh: {Parameters.kVolumetricIntegrationExtractMesh}")
+                self.logger.info(f"   • Depth truncation: {Parameters.kVolumetricIntegrationDepthTruncIndoor}m")
+                self.logger.info("   ⚠️  This is CPU/GPU intensive - expect slower performance")
+            else:
+                Parameters.kUseVolumetricIntegration = False
+
             # Initialize SLAM with all required parameters (following main_slam.py)
             # Use INDOOR environment type for OrbyGlasses use case
             self.slam = Slam(
