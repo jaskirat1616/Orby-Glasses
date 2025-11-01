@@ -225,7 +225,8 @@ class LivePySLAM:
             self.logger.info(f"   • Tracker: {feature_tracker_config['tracker_type']} (brute-force)")
             rerun_status = "enabled" if self.use_rerun else "disabled (saves 20-30% CPU)"
             self.logger.info(f"   • Rerun.io: {rerun_status}")
-            self.logger.info(f"   • Loop closure: disabled (saves 15% CPU)")
+            loop_status = "enabled (DBOW3)" if loop_detection_config else "disabled (saves 15% CPU)"
+            self.logger.info(f"   • Loop closure: {loop_status}")
             
             # Initialize camera capture with performance optimizations
             # Using camera index 1 as requested
