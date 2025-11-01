@@ -27,6 +27,7 @@ try:
     from pyslam.slam.camera import PinholeCamera
     from pyslam.local_features.feature_tracker_configs import FeatureTrackerConfigs, FeatureTrackerTypes
     from pyslam.local_features.feature_types import FeatureDetectorTypes
+    from pyslam.loop_closing.loop_detector_configs import LoopDetectorConfigs
     PYSLAM_AVAILABLE = True
     print("✅ pySLAM core modules imported successfully!")
 except ImportError as e:
@@ -111,9 +112,14 @@ class PySLAMWrapper:
             # Create feature tracker config
             feature_tracker_config = FeatureTrackerConfigs.ORB2.copy()
             feature_tracker_config["num_features"] = self.config.get('slam.orb_features', 2000)
-            
-            # Initialize SLAM
-            self.slam = Slam(self.camera, feature_tracker_config)
+
+            # Configure loop closing/relocalization
+            # Using IBOW (Incremental Bag of Words) - it builds vocabulary incrementally
+            # and doesn't require a pre-existing vocabulary file
+            loop_detector_config = LoopDetectorConfigs.IBOW
+
+            # Initialize SLAM with loop closing enabled
+            self.slam = Slam(self.camera, feature_tracker_config, loop_detector_config=loop_detector_config)
             self.is_initialized = True
             
             print("✅ pySLAM initialized successfully!")

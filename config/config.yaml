@@ -180,11 +180,11 @@ safety:
 slam:
   enabled: true
   feature_type: ORB
-  orb_features: 5000  # Increased to prevent tracking loss (pydbow3 not available)
-  loop_closure: false  # Disabled - pydbow3 not built (can't relocalize)
+  orb_features: 5000  # Increased to prevent tracking loss
+  loop_closure: true  # Enabled - required for relocalization when tracking is lost
   use_pyslam: true
   use_rerun: false  # Disabled for 20-30% performance boost
-  # Tracking optimizations to prevent loss (since can't relocalize)
+  # Tracking optimizations for stable performance
   tracking_quality_threshold: 0.6  # Lower = more tolerant
   min_tracked_points: 10  # Lower minimum
   max_frames_between_keyframes: 20  # More frequent keyframes
