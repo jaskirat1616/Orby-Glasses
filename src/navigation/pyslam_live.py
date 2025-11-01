@@ -170,18 +170,25 @@ class LivePySLAM:
             # Only override valid parameters that FeatureTrackerConfigs.ORB already has
             # Invalid params removed: ratio_test, use_grid (not in factory signature)
 
-            # Loop closure detection - use DBOW3 (available, fixes relocalization warning)
+            # Loop closure detection - Check if pydbow3 is actually available
             loop_detection_config = None
-            if self.config.get('slam.loop_closure', True):  # Enabled by default
+            if self.config.get('slam.loop_closure', False):
                 try:
+                    # Verify pydbow3 module exists
+                    import pydbow3
                     from pyslam.loop_closing.loop_detector_configs import LoopDetectorConfigs
                     loop_detection_config = LoopDetectorConfigs.DBOW3
-                    self.logger.info("✓ Loop closure enabled with DBOW3 (fixes relocalization)")
-                except ImportError as e:
-                    self.logger.warning(f"Loop closure disabled: {e}")
+                    self.logger.info("✓ Loop closure enabled with DBOW3")
+                except ImportError:
+                    self.logger.warning("⚠️  Loop closure DISABLED - pydbow3 not available")
+                    self.logger.warning("   → Cannot relocalize if tracking is lost!")
+                    self.logger.warning("   → MUST keep camera on textured surfaces")
+                    self.logger.warning("   → If tracking lost, restart required")
                     loop_detection_config = None
             else:
-                self.logger.info("⚠️  Loop closure disabled (may see relocalization warnings)")
+                self.logger.info("⚠️  Loop closure disabled - pydbow3 not built")
+                self.logger.info("   → If tracking lost, cannot recover (restart required)")
+                self.logger.info("   → Keep camera pointed at textured surfaces!")
             
             # Initialize SLAM with all required parameters (following main_slam.py)
             # Use INDOOR environment type for OrbyGlasses use case
