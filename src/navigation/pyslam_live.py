@@ -179,23 +179,36 @@ class LivePySLAM:
             self.logger.info(f"   • Scale factor: {feature_tracker_config['scale_factor']} (fine-grained)")
             self.logger.info(f"   → Should detect 2500-4000 features in normal rooms")
 
+            # Relocalization parameters - More lenient for better success rate
+            Parameters.kRelocalizationMinKpsMatches = 10  # Reduced from 15
+            Parameters.kRelocalizationPoseOpt1MinMatches = 8  # Reduced from 10
+            Parameters.kRelocalizationDoPoseOpt2NumInliers = 30  # Reduced from 50
+            Parameters.kRelocalizationFeatureMatchRatioTest = 0.8  # Relaxed from 0.75
+            Parameters.kRelocalizationMaxReprojectionDistanceMapSearchCoarse = 12  # Increased from 10
+
             # Loop closure detection - Check if pydbow3 is actually available
             loop_detection_config = None
             if self.config.get('slam.loop_closure', False):
                 try:
-                    # Verify pydbow3 module exists
-                    import pydbow3
+                    # Try IBOW first (no vocabulary needed, more reliable)
                     from pyslam.loop_closing.loop_detector_configs import LoopDetectorConfigs
-                    loop_detection_config = LoopDetectorConfigs.DBOW3
-                    self.logger.info("✓ Loop closure enabled with DBOW3")
+                    try:
+                        # IBOW doesn't need pre-built vocabulary
+                        loop_detection_config = LoopDetectorConfigs.IBOW
+                        self.logger.info("✓ Loop closure enabled with IBOW (incremental vocabulary)")
+                    except:
+                        # Fallback to DBOW3 if available
+                        import pydbow3
+                        loop_detection_config = LoopDetectorConfigs.DBOW3
+                        self.logger.info("✓ Loop closure enabled with DBOW3")
                 except ImportError:
-                    self.logger.warning("⚠️  Loop closure DISABLED - pydbow3 not available")
+                    self.logger.warning("⚠️  Loop closure DISABLED - loop detector not available")
                     self.logger.warning("   → Cannot relocalize if tracking is lost!")
                     self.logger.warning("   → MUST keep camera on textured surfaces")
                     self.logger.warning("   → If tracking lost, restart required")
                     loop_detection_config = None
             else:
-                self.logger.info("⚠️  Loop closure disabled - pydbow3 not built")
+                self.logger.info("⚠️  Loop closure disabled")
                 self.logger.info("   → If tracking lost, cannot recover (restart required)")
                 self.logger.info("   → Keep camera pointed at textured surfaces!")
 
