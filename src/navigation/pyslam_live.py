@@ -164,11 +164,19 @@ class LivePySLAM:
             self.camera = PinholeCamera(camera_config)
 
             # Create feature tracker config - use ORB (OpenCV) instead of ORB2 (ORB-SLAM2)
-            # Optimized for performance and accuracy
+            # Optimized to work in typical environments (not just perfect textured ones)
             feature_tracker_config = FeatureTrackerConfigs.ORB.copy()
-            feature_tracker_config["num_features"] = self.config.get('slam.orb_features', 3000)
-            # Only override valid parameters that FeatureTrackerConfigs.ORB already has
-            # Invalid params removed: ratio_test, use_grid (not in factory signature)
+            feature_tracker_config["num_features"] = self.config.get('slam.orb_features', 5000)
+
+            # Increase pyramid levels for better multi-scale detection
+            feature_tracker_config["num_levels"] = 12  # More levels = more features in varied environments
+            feature_tracker_config["scale_factor"] = 1.1  # Finer scale = more features per level
+
+            self.logger.info(f"📊 ORB configured for typical environments:")
+            self.logger.info(f"   • {feature_tracker_config['num_features']} features target")
+            self.logger.info(f"   • {feature_tracker_config['num_levels']} pyramid levels (high coverage)")
+            self.logger.info(f"   • Scale factor: {feature_tracker_config['scale_factor']} (fine-grained)")
+            self.logger.info(f"   → Should detect 2500-4000 features in normal rooms")
 
             # Loop closure detection - Check if pydbow3 is actually available
             loop_detection_config = None
