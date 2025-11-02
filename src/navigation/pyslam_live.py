@@ -198,7 +198,7 @@ class LivePySLAM:
             self.logger.info(f"   • {feature_tracker_config['num_features']} features target")
             self.logger.info(f"   • {feature_tracker_config['num_levels']} pyramid levels (balanced)")
             self.logger.info(f"   • Scale factor: {feature_tracker_config['scale_factor']} (balanced)")
-            self.logger.info(f"   → Should detect ~1300 features (fast + accurate)")
+            self.logger.info(f"   → Should detect ~{feature_tracker_config['num_features']} features (fast + accurate)")
 
             # Relocalization parameters - AGGRESSIVE tuning for real-world success
             # Research shows ORB-SLAM uses min 10 inliers, we're being even more lenient

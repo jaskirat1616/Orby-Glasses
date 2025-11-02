@@ -183,8 +183,8 @@ safety:
 slam:
   enabled: true
   feature_type: ORB
-  orb_features: 1300  # Optimized for speed + accuracy balance
-  loop_closure: true  # Enabled for drift correction
+  orb_features: 1000  # Reduced for real-time speed
+  loop_closure: false  # Disabled for speed (was causing relocalization overhead)
   use_pyslam: true
   use_rerun: false  # Disabled for 20-30% performance boost
   # Tracking optimizations for stable performance
