@@ -413,17 +413,13 @@ class DetectionPipeline:
             device=config.get('models.yolo.device', 'mps')
         )
 
-        # Initialize Depth Anything V2 estimator only if not using pySLAM
-        # pySLAM uses its own depth estimation and doesn't need our depth model
-        is_pyslam_configured = config.get('slam.use_pyslam', False)
-        if not is_pyslam_configured:
-            self.depth_estimator = DepthEstimator(
-                model_path=config.get('models.depth.path', 'depth-anything/Depth-Anything-V2-Small-hf'),
-                device=config.get('models.depth.device', 'mps'),
-                max_resolution=config.get('models.depth.max_resolution', 384)
-            )
-        else:
-            self.depth_estimator = None
+        # Initialize Depth Anything V2 estimator for object depth (always needed)
+        # pySLAM provides camera pose, but we need depth estimator for object distances
+        self.depth_estimator = DepthEstimator(
+            model_path=config.get('models.depth.path', 'depth-anything/Depth-Anything-V2-Small-hf'),
+            device=config.get('models.depth.device', 'mps'),
+            max_resolution=config.get('models.depth.max_resolution', 384)
+        )
 
         self.min_safe_distance = config.get('safety.min_safe_distance', 1.5)
 
