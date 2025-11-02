@@ -19,6 +19,19 @@ import queue
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
+# Rich terminal UI
+try:
+    from rich.console import Console
+    from rich.layout import Layout
+    from rich.table import Table
+    from rich.text import Text
+    from rich.panel import Panel
+    from rich import box as ROUNDED
+    RICH_AVAILABLE = True
+except ImportError:
+    RICH_AVAILABLE = False
+    print("⚠️ Rich not available - terminal display disabled")
+
 # Add src to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -101,12 +114,13 @@ class OrbyGlasses:
     Combines object detection, depth sensing, and SLAM.
     """
 
-    def __init__(self, config_path: str = "config/config.yaml"):
+    def __init__(self, config_path: str = "config/config.yaml", video_source: Optional[str] = None):
         """
         Initialize optimized OrbyGlasses system.
 
         Args:
             config_path: Path to configuration file
+            video_source: Optional video file path or camera index to override config
         """
         # Ensure directories exist
         ensure_directories()
@@ -302,6 +316,7 @@ class OrbyGlasses:
         self.camera = None
         self.frame_width = self.config.get('camera.width', 640)
         self.frame_height = self.config.get('camera.height', 480)
+        self.video_source = video_source  # Store video source override
 
         self.logger.info(f"Camera resolution: {self.frame_width}x{self.frame_height}")
 
@@ -374,30 +389,57 @@ class OrbyGlasses:
         Returns:
             True if successful, False otherwise
         """
-        camera_source = self.config.get('camera.source', 0)
-
-        self.logger.info(f"Initializing camera: {camera_source}")
+        # Use video_source override if provided, otherwise use config
+        if self.video_source is not None:
+            camera_source = self.video_source
+        else:
+            camera_source = self.config.get('camera.source', 0)
 
         try:
+            # Determine if it's a camera index (int or numeric string) or video file path
+            is_camera_index = False
+            if isinstance(camera_source, int):
+                is_camera_index = True
+                source_type = "camera"
+            elif isinstance(camera_source, str):
+                # Check if it's a numeric string (camera index) or file path
+                try:
+                    camera_source = int(camera_source)
+                    is_camera_index = True
+                    source_type = "camera"
+                except ValueError:
+                    # It's a file path, use as-is
+                    source_type = "video file"
+            
+            self.logger.info(f"Initializing {source_type}: {camera_source}")
+            
             self.camera = cv2.VideoCapture(camera_source)
 
             if not self.camera.isOpened():
-                self.logger.error("Failed to open camera")
+                self.logger.error(f"Failed to open {source_type}: {camera_source}")
                 return False
 
-            # Set resolution
-            self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, self.frame_width)
-            self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self.frame_height)
+            # Set resolution (only for cameras, videos have fixed resolution)
+            if is_camera_index:
+                self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, self.frame_width)
+                self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self.frame_height)
 
-            # Set FPS
-            fps = self.config.get('camera.fps', 30)
-            self.camera.set(cv2.CAP_PROP_FPS, fps)
+            # Set FPS (only for cameras, videos have fixed FPS)
+            if is_camera_index:
+                fps = self.config.get('camera.fps', 30)
+                self.camera.set(cv2.CAP_PROP_FPS, fps)
+            else:
+                # For video files, get the actual FPS and frame dimensions
+                actual_fps = self.camera.get(cv2.CAP_PROP_FPS)
+                actual_width = int(self.camera.get(cv2.CAP_PROP_FRAME_WIDTH))
+                actual_height = int(self.camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                self.logger.info(f"Video properties: {actual_width}x{actual_height} @ {actual_fps} FPS")
 
-            self.logger.info("Camera initialized successfully")
+            self.logger.info(f"{source_type.capitalize()} initialized successfully")
             return True
 
         except Exception as e:
-            self.logger.error(f"Camera initialization error: {e}")
+            self.logger.error(f"{source_type.capitalize()} initialization error: {e}")
             return False
 
     def process_frame(self, frame: np.ndarray) -> Optional[tuple]:
@@ -812,6 +854,9 @@ class OrbyGlasses:
 
     def _display_terminal_info(self, fps, detections, total_time, slam_result, trajectory_result):
         """Display information in the terminal using Rich."""
+        if not RICH_AVAILABLE:
+            return  # Skip if Rich not available
+            
         # Clear the terminal screen
         os.system('clear' if os.name == 'posix' else 'cls')
         
@@ -985,6 +1030,11 @@ class OrbyGlasses:
                     self.logger.warning("Skipping frame due to invalid processing result.")
                     continue
                 annotated_frame, detections, guidance, audio_signal, audio_message, depth_map, slam_result, trajectory_result, stair_result = result
+                
+                # Get FPS and total_time after processing (from perf_monitor stats)
+                stats = self.perf_monitor.get_stats()
+                fps = stats.get('fps', 0)
+                total_time = stats.get('avg_frame_time_ms', 0)
 
                 # Play adaptive audio beaconing (if available and not speaking)
                 # Play beacons with higher priority, separate from voice guidance
@@ -1222,6 +1272,11 @@ class OrbyGlasses:
                         self.last_path_clear_time = current_time
 
                 self.logger.debug("Frame processed. Displaying windows.")
+                
+                # Display terminal info window with TTS text
+                if self.frame_count % 30 == 0:  # Update every 30 frames (~1 second)
+                    self._display_terminal_info(fps, detections, total_time, slam_result, trajectory_result)
+                
                 # Clean robot-style display - only show main camera view
                 if display:
                     # Main camera view - resize to smaller size for cleaner desktop
@@ -1351,11 +1406,13 @@ def main():
                        help='Run in test mode with sample video')
     parser.add_argument('--separate-slam', action='store_true',
                         help='Show SLAM map in a separate window')
+    parser.add_argument('--video', type=str, default=None,
+                       help='Path to video file (overrides camera.source in config)')
 
     args = parser.parse_args()
 
     # Initialize system
-    system = OrbyGlasses(config_path=args.config)
+    system = OrbyGlasses(config_path=args.config, video_source=args.video)
 
     # Train RL if requested
     if args.train_rl:

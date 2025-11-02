@@ -247,7 +247,7 @@ visual_odometry:
   save_maps: true
   temporal_consistency_check: true
   trajectory_length: 1000
-  use_pyslam_vo: false
+  use_pyslam_vo: true
   use_rerun: true
   visualization_scale: 50
   visualize: true
