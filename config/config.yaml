@@ -180,14 +180,14 @@ safety:
 slam:
   enabled: true
   feature_type: ORB
-  orb_features: 3000  # Reduced to prevent crashes
+  orb_features: 5000  # Increased for better relocalization
   loop_closure: true  # Using iBoW (stable, no crashes)
   use_pyslam: true
   use_rerun: false  # Disabled for 20-30% performance boost
   # Tracking optimizations for stable performance
-  tracking_quality_threshold: 0.6  # Lower = more tolerant
-  min_tracked_points: 10  # Lower minimum
-  max_frames_between_keyframes: 20  # More frequent keyframes
+  tracking_quality_threshold: 0.5  # Very tolerant for monocular
+  min_tracked_points: 8  # Lower minimum for difficult tracking
+  max_frames_between_keyframes: 10  # Very frequent keyframes for relocalization
   # Dense reconstruction settings (post-processing only)
   # To use: Run SLAM, save map (press 's' in Pangolin), then run: ./dense_reconstruction.sh
   dense_reconstruction:

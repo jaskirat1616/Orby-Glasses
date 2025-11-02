@@ -102,6 +102,10 @@ class LivePySLAM:
         """Initialize live pySLAM system."""
         self.config = config
         self.logger = logging.getLogger(__name__)
+
+        # Suppress excessive pySLAM INFO logs (loop closing, relocalization)
+        logging.getLogger('loop_closing_logger').setLevel(logging.WARNING)
+        logging.getLogger('relocalization_logger').setLevel(logging.WARNING)
         
         # Camera parameters
         self.width = config.get('camera.width', 640)
