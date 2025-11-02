@@ -1,5 +1,32 @@
 # Quick Fix Guide
 
+## Issue: pySLAM Loop Closure Error
+
+If you see this error:
+```
+AttributeError: module 'pyibow' has no attribute 'LCDetectorParams'
+```
+
+This means the iBoW (Incremental Bag of Words) library is not properly installed or incompatible.
+
+### Fix:
+
+**Option 1: Disable Loop Closure (Recommended)**
+```yaml
+# Edit config/config.yaml
+slam:
+  loop_closure: false  # Disable loop closure
+```
+
+**Option 2: Reinstall pySLAM Dependencies**
+```bash
+cd third_party/pyslam
+./install.sh  # Reinstall all dependencies
+cd ../..
+```
+
+**Note**: Loop closure is not critical for basic navigation. The system will work fine with it disabled, but won't be able to recognize previously visited places.
+
 ## Issue: OpenCV Import Error
 
 If you see this error:
