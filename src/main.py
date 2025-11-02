@@ -408,7 +408,7 @@ class OrbyGlasses:
             frame: Input frame
 
         Returns:
-            Tuple of (annotated_frame, detections, guidance, audio_signal, audio_message, depth_map, slam_result, trajectory_result)
+            Tuple of (annotated_frame, detections, guidance, audio_signal, audio_message, depth_map, slam_result, trajectory_result, stair_result)
         """
         try:
             # Start timer
@@ -635,7 +635,7 @@ class OrbyGlasses:
             # Log frame time
             self.perf_monitor.log_frame_time(total_time)
 
-            return annotated_frame, detections, guidance, audio_signal, audio_message, depth_map, slam_result, trajectory_result
+            return annotated_frame, detections, guidance, audio_signal, audio_message, depth_map, slam_result, trajectory_result, stair_result
         
         except Exception as e:
             self.logger.error(f"Error processing frame: {e}")
@@ -981,10 +981,10 @@ class OrbyGlasses:
 
                 # Process frame
                 result = self.process_frame(frame)
-                if result is None or len(result) != 8:
+                if result is None or len(result) != 9:
                     self.logger.warning("Skipping frame due to invalid processing result.")
                     continue
-                annotated_frame, detections, guidance, audio_signal, audio_message, depth_map, slam_result, trajectory_result = result
+                annotated_frame, detections, guidance, audio_signal, audio_message, depth_map, slam_result, trajectory_result, stair_result = result
 
                 # Play adaptive audio beaconing (if available and not speaking)
                 # Play beacons with higher priority, separate from voice guidance

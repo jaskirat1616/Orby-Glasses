@@ -364,13 +364,18 @@ class LivePySLAM:
 
     def _process_pyslam_frame(self, frame: np.ndarray) -> Dict:
         """Process frame using real pySLAM."""
+        # Resize frame to match camera config if needed
+        if frame.shape[0:2] != (self.height, self.width):
+            self.logger.debug(f"Resizing frame from {frame.shape[0:2]} to ({self.height}, {self.width})")
+            frame = cv2.resize(frame, (self.width, self.height), interpolation=cv2.INTER_LINEAR)
+
         # Convert BGR to RGB (pySLAM expects RGB from datasets)
         if len(frame.shape) == 3:
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         else:
             # Already grayscale, convert back to RGB for consistency
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2RGB)
-        
+
         # Process frame through pySLAM
         timestamp = time.time()
 
