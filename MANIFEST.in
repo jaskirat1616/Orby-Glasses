@@ -1,0 +1,37 @@
+# Include documentation
+include README.md
+include LICENSE
+include CHANGELOG.md
+include SETUP.md
+include TROUBLESHOOTING.md
+include ARCHITECTURE.md
+include CONTRIBUTING.md
+include CODE_OF_CONDUCT.md
+
+# Include requirements
+include requirements.txt
+include pyproject.toml
+
+# Include configuration files
+recursive-include config *.yaml
+
+# Include scripts
+include run.sh
+include run_orby.sh
+include setup.sh
+include install_pyslam.sh
+
+# Exclude unnecessary files
+global-exclude *.pyc
+global-exclude *.pyo
+global-exclude __pycache__
+global-exclude .DS_Store
+global-exclude *.so
+global-exclude .git*
+
+# Exclude build artifacts
+prune build
+prune dist
+prune *.egg-info
+prune data/logs
+prune data/maps
