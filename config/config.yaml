@@ -35,7 +35,10 @@ conversation:
   - save location
   - take me to
   - help
-  enabled: false
+  - stop navigation
+  - start navigation
+  - save this location as
+  enabled: true  # Voice control enabled for hands-free operation
   max_tokens: 100
   model: gemma3:4b
   simple_commands: true

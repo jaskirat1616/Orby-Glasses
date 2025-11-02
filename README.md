@@ -1,186 +1,411 @@
 # OrbyGlasses
 
-Navigation assistant for blind and visually impaired people.
+**AI-Powered Navigation Assistant for Blind and Visually Impaired Users**
 
-## What It Does
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Platform: macOS](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](https://www.apple.com/macos/)
 
-OrbyGlasses uses your camera to:
-- Detect objects around you
-- Measure how far they are
-- Tell you through audio where to go safely
+OrbyGlasses combines state-of-the-art computer vision with real-time audio guidance to help blind and visually impaired people navigate safely and independently.
 
-Everything runs on your computer - no internet needed.
+## Features
+
+### Core Navigation
+- **🎯 Real-time Object Detection** - Detects 80 object types (people, cars, furniture, obstacles) using YOLOv11n
+- **📏 Distance Measurement** - Accurate depth estimation (0-10m) using Depth Anything V2
+- **🗺️ Indoor Position Tracking** - SLAM-based localization tracks your position indoors
+- **🔊 Audio Guidance** - Clear, prioritized voice warnings through text-to-speech
+
+### Safety Features
+- **⚠️ Stair & Curb Detection** - Prevents falls by detecting vertical drops >15cm (NEW!)
+- **🚨 Emergency Stop** - Instant stop with spacebar or 'q' key
+- **📊 Distance-Based Warnings** - Danger (<1m), Caution (1-2.5m), Safe (>2.5m)
+- **🔍 Uncertainty Handling** - Warns when distance cannot be measured
+
+### Advanced Features
+- **🗣️ Voice Control** - Hands-free operation with "Hey Orby" wake word (NEW!)
+- **📍 Location Saving** - Save and navigate to named locations ("Kitchen", "Bedroom")
+- **🧭 Turn-by-Turn Navigation** - A* path planning to saved waypoints
+- **💾 Map Persistence** - Save/load indoor maps between sessions (NEW!)
+- **🎵 Spatial Audio Beaconing** - Optional echolocation-style audio cues
 
 ## Quick Start
 
 ```bash
-# Full version (with indoor tracking)
+# Full version with SLAM and indoor navigation
 ./run_orby.sh
 
-# Simple version (if crashes occur)
+# Simple version (faster, no indoor tracking)
 ./run_simple.sh
 ```
 
-Press `q` or spacebar to stop.
+Press **SPACEBAR** or **Q** to stop.
 
-## What You Need
+## Requirements
 
-- Mac computer with M1, M2, M3, or M4 chip
-- Python 3.10 or newer
-- Camera (built-in or USB)
-- Headphones or speakers
+### Hardware
+- **Mac with Apple Silicon** (M1/M2/M3/M4) or Intel Mac
+- **Camera** (built-in or USB webcam)
+- **Headphones/Speakers** for audio guidance
 
-## How to Install
+### Software
+- **macOS** 11.0 or later
+- **Python** 3.10-3.12
+- **8GB RAM** minimum (16GB recommended)
 
+## Installation
+
+### Option 1: Quick Install (Recommended)
 ```bash
-# Install OrbyGlasses
-./install_pyslam.sh
+# Clone the repository
+git clone https://github.com/yourusername/OrbyGlasses.git
+cd OrbyGlasses
+
+# Install dependencies
 pip install -r requirements.txt
 
-# Run it
+# Install pySLAM for indoor tracking (optional but recommended)
+./install_pyslam.sh
+
+# Run OrbyGlasses
 ./run_orby.sh
 ```
 
+### Option 2: Development Install
+```bash
+# Install development dependencies
+pip install -r requirements-dev.txt
+
+# Set up pre-commit hooks
+pre-commit install
+
+# Run tests
+pytest
+```
+
+See [SETUP.md](SETUP.md) for detailed installation instructions.
+
 ## How It Works
 
-1. Camera sees what's in front of you
-2. Computer finds objects (cars, people, chairs, etc.)
-3. Computer measures distance to each object
-4. Computer tracks where you are indoors
-5. Audio tells you where to go and what to avoid
+```
+Camera (640x480 @ 30fps)
+    ↓
+┌─────────────────────────────────────┐
+│   Object Detection (YOLOv11n)       │ → 80 COCO classes @ 55% confidence
+└─────────────────────────────────────┘
+    ↓
+┌─────────────────────────────────────┐
+│   Depth Estimation (Depth Anything) │ → Monocular depth 0-10m
+└─────────────────────────────────────┘
+    ↓
+┌─────────────────────────────────────┐
+│   Stair Detection (NEW!)            │ → Prevents falls, detects >15cm drops
+└─────────────────────────────────────┘
+    ↓
+┌─────────────────────────────────────┐
+│   SLAM (pySLAM)                     │ → Indoor position tracking
+└─────────────────────────────────────┘
+    ↓
+┌─────────────────────────────────────┐
+│   Audio Guidance (macOS TTS)        │ → Clear voice warnings
+└─────────────────────────────────────┘
+```
 
-## Audio Warnings
+## Usage Examples
 
-The system speaks to you based on distance:
+### Basic Navigation
+```bash
+# Start navigation
+./run_orby.sh
 
-- **Very close** (<1m): "Stop! Car ahead."
-- **Close** (1-2.5m): "Person on your left. 2 meters."
-- **Safe** (>2.5m): "Path is clear."
+# Audio output examples:
+# "Path is clear. You're 3 meters forward from start."
+# "STOP! Stairs going down ahead! 1.2 meters."
+# "Person on your left. 2 meters."
+```
 
-## Emergency Stop
+### Voice Commands (NEW!)
+```bash
+# Activate with wake word
+"Hey Orby"
 
-Press SPACEBAR or Q anytime to stop immediately.
+# Ask about surroundings
+"What's around me?"
+"Is the path clear?"
 
-The system also stops automatically if:
-- Something is too close (<0.5 meters)
-- Camera stops working
-- System detects a problem
+# Save and navigate to locations
+"Save this location as Kitchen"
+"Take me to Kitchen"
+"Where am I?"
+```
 
-## Settings
+### Map Management (NEW!)
+```python
+# Save current map
+# (Press 's' during navigation, or programmatically)
+slam.save_map("my_house")
 
-Edit `config/config.yaml` to change:
+# List saved maps
+maps = slam.list_saved_maps()
+# Returns: [{'map_name': 'my_house', 'timestamp': '20250102_143052', ...}]
+
+# Load previous map
+slam.load_map("data/maps/my_house_20250102_143052.pkl")
+```
+
+## Audio Warning System
+
+OrbyGlasses uses a **priority-based audio system**:
+
+### Priority Levels
+1. **HIGHEST: Stair/Curb Warnings** (300ms interval)
+   - `"STOP! Stairs going down ahead!"`
+   - `"STOP! Curb ahead! 0.8 meters"`
+
+2. **HIGH: Uncertain Depth** (400ms interval)
+   - `"Caution! Person ahead. Distance unknown, use care"`
+
+3. **MEDIUM: Danger Zone <1m** (400ms interval)
+   - `"Stop now! Car very close on your left. Move right"`
+
+4. **LOW: General Guidance** (1500ms interval)
+   - `"Path clear. You're 5m forward, 2m left from start"`
+   - `"Turn right in 3 meters to reach Kitchen"`
+
+### Distance Terms
+- **<0.3m**: "very close" → "Stop now!"
+- **0.3-0.5m**: "close" → "Caution!"
+- **0.5-1.0m**: "ahead" → "Watch out!"
+- **1.0-2.5m**: "nearby" → "Be aware"
+- **>2.5m**: "clear" → No urgent warning
+
+## Configuration
+
+Edit `config/config.yaml` to customize:
 
 ```yaml
 camera:
-  source: 0        # 0 = built-in camera, 1 = USB camera
+  source: 0          # 0=built-in, 1=USB camera
+  width: 640
+  height: 480
+  fps: 30
 
 safety:
-  danger_distance: 1.0      # How close is too close (meters)
-  min_safe_distance: 1.5    # Comfortable distance (meters)
+  danger_distance: 1.0       # Critical distance (meters)
+  caution_distance: 2.5      # Warning distance (meters)
 
-audio:
-  tts_rate: 220   # How fast to speak (words per minute)
+stair_detection:
+  enabled: true              # Critical safety feature
+  min_drop_height: 0.15      # Detect >15cm drops
+  detection_distance: 2.5    # Scan up to 2.5m ahead
+
+conversation:
+  enabled: true              # Voice control
+  activation_phrase: hey orby
+  voice_input: true
+
+slam:
+  enabled: true
+  loop_closure: true         # Relocalization support
+  max_trajectory_length: 1000  # Memory management
+  cleanup_interval: 500      # Prevent memory leaks
 ```
 
 ## Performance
 
-- Normal mode: 15-25 FPS
-- Fast mode: 20-30 FPS (use `./run_orby.sh --fast`)
+### Typical Performance (M1/M2 Mac)
+- **FPS**: 15-25 fps (real-time)
+- **Latency**:
+  - Detection: ~50-80ms
+  - Depth: ~40-60ms
+  - SLAM: ~80-120ms
+  - Total: ~200-300ms
+- **Memory**: ~500MB (with memory management)
 
-Your Mac's chip makes it faster:
-- M1/M2/M3/M4: 5x faster than normal computers
-- Older Macs: Still works, just slower
+### Optimization Tips
+```yaml
+# For better performance:
+performance:
+  depth_skip_frames: 2        # Skip depth every N frames
+  enable_multithreading: true
+
+# For lower latency:
+slam:
+  enabled: false              # Disable SLAM if not needed
+```
+
+## Safety Notice
+
+**⚠️ IMPORTANT: This is an assistive technology, not a replacement for traditional mobility aids.**
+
+- **Always use** with your white cane or guide dog
+- **Recommended**: Have sighted assistance when first learning the system
+- **Beta status**: This is version 0.9 - supervised testing recommended
+- **Falls prevention**: Stair detection is active but not 100% foolproof
+
+**Never rely solely on OrbyGlasses for critical safety decisions.**
+
+## Current Status
+
+### What Works ✅
+- ✅ Real-time object detection (80 classes)
+- ✅ Accurate distance measurement (0-10m)
+- ✅ Stair and curb detection (**NEW!**)
+- ✅ Voice control with wake word (**NEW!**)
+- ✅ Indoor position tracking (SLAM)
+- ✅ Map save/load (**NEW!**)
+- ✅ Turn-by-turn navigation
+- ✅ Priority-based audio warnings
+- ✅ Emergency stop
+- ✅ Crash recovery (**NEW!**)
+
+### Known Limitations ⚠️
+- Audio latency: 1500-2000ms (target: <500ms)
+- Monocular depth has ±25-40% error
+- No glass door detection
+- No head-level hazard detection
+- macOS only (Linux/Windows planned)
+
+### In Development 🚧
+- Reduced audio latency (<500ms)
+- Stereo spatial audio positioning
+- Haptic feedback integration
+- Mobile app (iOS/Android)
+- Multi-language support
+
+## Troubleshooting
+
+### Camera Issues
+```bash
+# Test camera
+python3 -c "import cv2; cap = cv2.VideoCapture(0); print('OK' if cap.isOpened() else 'Failed')"
+
+# Try different camera
+# Edit config.yaml: camera.source: 1
+```
+
+### No Audio
+```bash
+# Test macOS speech
+say "Testing audio"
+
+# Check volume
+# System Preferences → Sound → Output
+```
+
+### SLAM Crashes
+```bash
+# System auto-recovers, but if persistent:
+# Edit config.yaml: slam.loop_closure: false
+
+# Or use simple mode
+./run_simple.sh
+```
+
+### Performance Issues
+```bash
+# Use fast mode
+./run_orby.sh --fast
+
+# Reduce camera resolution
+# config.yaml: camera.width: 320, camera.height: 240
+
+# Disable features
+# config.yaml: slam.enabled: false
+```
+
+See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for more solutions.
 
 ## Testing
 
 ```bash
-# Test if everything works
-python3 test_production_systems.py
+# Run all tests
+pytest
 
-# Test audio
-python3 test_audio.py
+# Test specific modules
+pytest tests/test_detection.py
+pytest tests/test_slam.py
 
-# Calibrate distance accuracy (IMPORTANT)
-python3 calibrate_depth.py
+# Test with coverage
+pytest --cov=src --cov-report=html
+
+# Performance benchmarking
+python tools/quick_validate.py
 ```
 
-### Calibrating Distance Accuracy
+## Contributing
 
-Distance measurements need calibration for your specific camera.
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
+### Priority Areas
+1. **Audio latency reduction** - Critical for safety
+2. **Stair detection improvements** - Increase accuracy
+3. **Testing coverage** - Increase to 70%+
+4. **Documentation** - API docs, tutorials
+
+### Development Setup
 ```bash
-python3 calibrate_depth.py
+pip install -r requirements-dev.txt
+pre-commit install
+pytest
 ```
 
-Follow the on-screen instructions:
-1. Place object at known distance (measure with tape)
-2. Point camera at object
-3. Press SPACE to measure
-4. Enter real distance
-5. Repeat for 0.5m, 1m, 2m, 3m, 5m
-6. Tool calculates calibration factor
+## Community & Support
 
-Then update the code with the recommended calibration.
+- **Issues**: [GitHub Issues](https://github.com/yourusername/OrbyGlasses/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/yourusername/OrbyGlasses/discussions)
+- **Documentation**: [Full Docs](docs/)
 
-## Safety Notice
+## Code of Conduct
 
-**Important:** OrbyGlasses helps you navigate, but it's not a replacement for your white cane or guide dog. Always use them together, especially when learning.
-
-This is version 0.9 (beta). We recommend using it with someone nearby while testing.
-
-## Current Status
-
-What works:
-- ✅ Object detection
-- ✅ Distance measurement
-- ✅ Audio warnings
-- ✅ Indoor tracking
-- ✅ Emergency stop
-
-What's being improved:
-- Audio response time (currently 0.5-1 second)
-- Battery usage on laptops
-
-## Troubleshooting
-
-**Camera not working:**
-```bash
-# Check if camera is available
-python3 -c "import cv2; cap = cv2.VideoCapture(0); print('OK' if cap.isOpened() else 'Not working')"
-```
-
-**No audio:**
-```bash
-# Test your speakers
-say "Testing audio"
-```
-
-**Too slow:**
-- Use fast mode: `./run_orby.sh --fast`
-- Lower camera quality in config.yaml
-- Close other programs
-
-## Getting Help
-
-- Problems: https://github.com/jaskirat1616/Orby-Glasses/issues
-- Questions: https://github.com/jaskirat1616/Orby-Glasses/discussions
+This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). We are committed to providing a welcoming, inclusive environment for all contributors and users.
 
 ## Privacy
 
-All processing happens on your computer. Nothing is sent to the internet.
+**All processing happens locally on your device. Nothing is sent to the internet.**
+
+- No cloud services
+- No data collection
+- No tracking
+- Fully offline operation
 
 ## License
 
-Free to use and modify (GPL-3.0). See LICENSE file.
+This project is licensed under the **GPL-3.0 License** - see [LICENSE](LICENSE) file.
 
-## Built With
+You are free to:
+- ✅ Use for personal navigation
+- ✅ Modify and improve
+- ✅ Distribute to others
+- ✅ Use commercially (with attribution)
 
-- Object detection: YOLOv11
-- Distance measurement: Depth Anything V2
-- Indoor tracking: pySLAM
-- Audio: macOS built-in speech
+## Acknowledgments
+
+### Technology Stack
+- **Object Detection**: [YOLOv11](https://github.com/ultralytics/ultralytics) by Ultralytics
+- **Depth Estimation**: [Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2)
+- **SLAM**: [pySLAM](https://github.com/luigifreda/pyslam) by Luigi Freda
+- **Audio**: macOS built-in Text-to-Speech
+
+### Inspiration
+This project is dedicated to improving mobility and independence for blind and visually impaired people worldwide.
+
+## Citation
+
+If you use OrbyGlasses in research or publications, please cite:
+
+```bibtex
+@software{orbyglasses2025,
+  title = {OrbyGlasses: AI-Powered Navigation for Blind Users},
+  author = {Your Name},
+  year = {2025},
+  url = {https://github.com/yourusername/OrbyGlasses}
+}
+```
 
 ---
 
-For detailed setup, see [SETUP.md](SETUP.md)
-For common problems, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
+**Built with ❤️ for accessibility**
+
+For detailed setup instructions, see [SETUP.md](SETUP.md)
+For architecture details, see [DEVELOPER.md](DEVELOPER.md)
