@@ -1,8 +1,7 @@
 """
-System Integration Layer for OrbyGlasses
+System Integration
 
-Integrates all production systems into a cohesive, safe navigation experience.
-This module ensures all components work together effectively for blind users.
+Makes all the safety and speed features work together.
 """
 
 import time

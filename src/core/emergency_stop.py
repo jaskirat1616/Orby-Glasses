@@ -1,7 +1,7 @@
 """
-Emergency Stop System for OrbyGlasses
+Emergency Stop - Keeps You Safe
 
-Provides multiple layers of emergency stopping and safety controls.
+Stops the system immediately if something goes wrong.
 """
 
 import cv2

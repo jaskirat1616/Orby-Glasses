@@ -1,8 +1,8 @@
 """
-Fast Audio Manager with <500ms Latency
+Fast Audio for Quick Warnings
 
-Optimized for blind navigation with minimal audio latency.
-Uses macOS 'say' command for fastest TTS performance.
+Gets audio warnings to you in less than half a second.
+Uses your Mac's built-in speech.
 """
 
 import subprocess

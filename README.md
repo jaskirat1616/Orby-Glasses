@@ -1,314 +1,158 @@
 # OrbyGlasses
 
-AI-powered navigation assistant for blind and visually impaired users.
+Navigation assistant for blind and visually impaired people.
 
 ## What It Does
 
-OrbyGlasses uses a camera to detect objects, estimate distances, and provide audio guidance for safe navigation. It works entirely on your computer without sending data to the cloud.
+OrbyGlasses uses your camera to:
+- Detect objects around you
+- Measure how far they are
+- Tell you through audio where to go safely
 
-**Key Features:**
-- Real-time object detection
-- Distance estimation
-- Audio directions and warnings
-- Indoor mapping and navigation
-- Works without GPS
+Everything runs on your computer - no internet needed.
 
 ## Quick Start
 
-### Choose Your Mode:
-
-**VO Mode (Trajectory Only):**
 ```bash
-./run_vo_mode.sh
+./run_orby.sh
 ```
 
-**Full SLAM Mode (With Mapping):**
+Press `q` or spacebar to stop.
+
+## What You Need
+
+- Mac computer with M1, M2, M3, or M4 chip
+- Python 3.10 or newer
+- Camera (built-in or USB)
+- Headphones or speakers
+
+## How to Install
+
 ```bash
-./run_slam_mode.sh
-```
+# Install OrbyGlasses
+./install_pyslam.sh
+pip install -r requirements.txt
 
-Or just: `./run_orby.sh` (uses current config)
-
-Press `q` to stop.
-
-See `MODE_GUIDE.md` for details.
-
-## Requirements
-
-- macOS with Apple Silicon (M1/M2/M3/M4/M5)
-- Python 3.10, 3.11, or 3.12
-- Built-in camera or webcam
-- Speakers or headphones
-
-## SLAM Systems
-
-OrbyGlasses includes multiple SLAM options optimized for different needs:
-
-### ✅ pySLAM (RECOMMENDED - Default)
-- **Professional-grade** monocular SLAM
-- **Real-time 3D visualization** with map viewer
-- **Advanced feature tracking** with ORB/SIFT/SuperPoint
-- **Loop closure detection** and bundle adjustment
-- **Already enabled** in your config
-
-### 🗺️ RTAB-Map (Optional - Appearance-Based Mapping)
-- **Real-time appearance-based mapping** with loop closure detection
-- **Graph-based SLAM optimization** for robust mapping
-- **Multi-session mapping** support for long-term operation
-- **Memory management** for large-scale environments
-- **Excellent for long-term localization** and re-localization
-- **Documentation**: [https://introlab.github.io/rtabmap/](https://introlab.github.io/rtabmap/)
-
-### 🤖 DROID-SLAM (Optional - Deep Learning)
-- **State-of-the-art** deep learning SLAM
-- **Excellent accuracy** and robustness
-- **Works with Apple Silicon** (PyTorch MPS)
-- **Requires installation** (see below)
-
-### 🏆 ORB-SLAM3 (Optional - Industry Standard)
-- **Most accurate** traditional SLAM
-- **Requires building from source** on macOS
-- **Best for research** and maximum accuracy
-- **Complex installation** process
-
-### Quick Setup
-```bash
-# pySLAM is already ready to use!
-./run.sh
-
-# To install RTAB-Map (optional):
-./install_rtabmap.sh
-
-# To install DROID-SLAM (optional):
-./install_slam.sh
-```
-
-### Configuration
-Edit `config/config.yaml` to choose your SLAM system:
-```yaml
-slam:
-  use_pyslam: true     # pySLAM with 3D visualization (recommended)
-  use_rtabmap: false    # Appearance-based mapping
-  use_droid: false      # Deep learning SLAM
-  use_orbslam3: false   # Industry standard
+# Run it
+./run_orby.sh
 ```
 
 ## How It Works
 
-1. **Camera** captures video
-2. **Object Detection** identifies objects (YOLOv11)
-3. **Depth Estimation** measures distances (Depth Anything V2)
-4. **SLAM** tracks your position indoors
-5. **Audio Guidance** speaks directions and warnings
+1. Camera sees what's in front of you
+2. Computer finds objects (cars, people, chairs, etc.)
+3. Computer measures distance to each object
+4. Computer tracks where you are indoors
+5. Audio tells you where to go and what to avoid
 
-## Running Modes
+## Audio Warnings
 
-**Standard Mode** (15-25 FPS):
-```bash
-./run.sh
-```
-Full features with detailed navigation.
+The system speaks to you based on distance:
 
-**Fast Mode** (20-30 FPS):
-```bash
-./run.sh --fast
-```
-Optimized for speed with core features only.
-
-**With Navigation Panel** (overhead compass view):
-```bash
-./run.sh --nav              # standard mode with nav panel
-./run.sh --fast --nav       # fast mode with nav panel
-```
-Shows overhead map, compass, and real-time position tracking.
-
-## Audio Feedback
-
-The system provides clear spoken directions:
-- **Danger** (<1m): "Stop. Car ahead. Go left."
-- **Caution** (1-2.5m): "Chair on your right. Two meters away."
+- **Very close** (<1m): "Stop! Car ahead."
+- **Close** (1-2.5m): "Person on your left. 2 meters."
 - **Safe** (>2.5m): "Path is clear."
 
-## Configuration
+## Emergency Stop
 
-Edit `config/config.yaml` or `config/config_fast.yaml`:
+Press SPACEBAR or Q anytime to stop immediately.
+
+The system also stops automatically if:
+- Something is too close (<0.5 meters)
+- Camera stops working
+- System detects a problem
+
+## Settings
+
+Edit `config/config.yaml` to change:
 
 ```yaml
 camera:
-  source: 0        # 0 = built-in camera
-  width: 320
-  height: 240
-
-models:
-  yolo:
-    confidence: 0.55   # Higher = fewer false positives
+  source: 0        # 0 = built-in camera, 1 = USB camera
 
 safety:
-  danger_distance: 1.0      # meters
-  min_safe_distance: 1.5    # meters
+  danger_distance: 1.0      # How close is too close (meters)
+  min_safe_distance: 1.5    # Comfortable distance (meters)
+
+audio:
+  tts_rate: 220   # How fast to speak (words per minute)
 ```
 
-## Project Structure
+## Performance
 
-```
-OrbyGlasses/
-├── src/
-│   ├── main.py                    # Main program
-│   ├── core/                      # Core modules
-│   │   ├── detection.py           # Object detection
-│   │   ├── depth_anything_v2.py   # Depth estimation
-│   │   ├── utils.py               # Configuration and audio
-│   │   └── safety_system.py       # Danger detection
-│   ├── navigation/                # Navigation modules
-│   │   ├── slam_system.py         # Indoor mapping
-│   │   └── indoor_navigation.py   # Path planning
-│   └── visualization/             # Display modules
-├── config/
-│   ├── config.yaml                # Standard settings
-│   └── config_fast.yaml           # Fast mode settings
-├── tests/                         # Test suite
-├── models/                        # AI models
-└── data/                          # Logs and maps
-```
+- Normal mode: 15-25 FPS
+- Fast mode: 20-30 FPS (use `./run_orby.sh --fast`)
+
+Your Mac's chip makes it faster:
+- M1/M2/M3/M4: 5x faster than normal computers
+- Older Macs: Still works, just slower
 
 ## Testing
 
-Run the test suite:
-
 ```bash
-pytest tests/ -v
+# Test if everything works
+python3 test_production_systems.py
 ```
 
-Run a specific test:
+## Safety Notice
 
-```bash
-pytest tests/test_detection.py -v
-```
+**Important:** OrbyGlasses helps you navigate, but it's not a replacement for your white cane or guide dog. Always use them together, especially when learning.
 
-## Features in Detail
+This is version 0.9 (beta). We recommend using it with someone nearby while testing.
 
-### Object Detection
-Uses YOLOv11n to identify objects like cars, people, chairs, and doors.
+## Current Status
 
-### Depth Estimation
-Calculates distances to objects using Depth Anything V2 Small model.
+What works:
+- ✅ Object detection
+- ✅ Distance measurement
+- ✅ Audio warnings
+- ✅ Indoor tracking
+- ✅ Emergency stop
 
-### Visual SLAM
-Tracks your position and builds a map of indoor spaces without GPS.
-
-### Indoor Navigation
-Plans paths to saved locations (e.g., "kitchen", "desk") and provides turn-by-turn directions.
-
-### Safety System
-Monitors your surroundings and issues warnings at three levels:
-- Danger zone (<1m): Immediate audio alert
-- Caution zone (1-2.5m): Regular updates
-- Safe zone (>2.5m): Quiet operation
-
-## Privacy
-
-All processing happens locally on your computer. No data is sent to the internet.
-
-## Safety Note
-
-OrbyGlasses is a navigation aid, not a replacement for traditional tools like white canes or guide dogs. Always use it alongside your existing mobility aids.
-
-## Technical Details
-
-**AI Models:**
-- YOLOv11n for object detection
-- Depth Anything V2 Small for depth estimation
-- Moondream for scene understanding
-- Gemma 3 4B for language processing
-
-**Performance:**
-- Standard mode: 15-25 FPS
-- Fast mode: 20-30 FPS
-- Depth processing: 70-200ms per frame
-- Audio latency: 0.8-2s
-
-**Hardware Acceleration:**
-Uses Apple Metal Performance Shaders (MPS) for fast AI inference on M-series chips.
+What's being improved:
+- Audio response time (currently 0.5-1 second)
+- Battery usage on laptops
 
 ## Troubleshooting
 
 **Camera not working:**
 ```bash
-python3 -c "import cv2; cap = cv2.VideoCapture(0); print('OK' if cap.isOpened() else 'FAIL')"
+# Check if camera is available
+python3 -c "import cv2; cap = cv2.VideoCapture(0); print('OK' if cap.isOpened() else 'Not working')"
 ```
 
-**Ollama not running:**
+**No audio:**
 ```bash
-ollama serve
+# Test your speakers
+say "Testing audio"
 ```
 
-**Poor performance:**
-Use fast mode or reduce camera resolution in the config file.
+**Too slow:**
+- Use fast mode: `./run_orby.sh --fast`
+- Lower camera quality in config.yaml
+- Close other programs
 
-## Contributing
+## Getting Help
 
-Contributions welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Add tests for new features
-4. Submit a pull request
+- Problems: https://github.com/jaskirat1616/Orby-Glasses/issues
+- Questions: https://github.com/jaskirat1616/Orby-Glasses/discussions
 
-## Production Status
+## Privacy
 
-**Current Status:** Beta (v0.9.0)
-
-OrbyGlasses is under active development. While core features are functional, this software is:
-- ✅ Suitable for testing and development
-- ⚠️ **Not yet recommended for independent use by blind users without supervision**
-- 🚧 Requires further real-world validation and safety testing
-
-**Safety Notice:**
-OrbyGlasses is a navigation aid, not a replacement for traditional mobility tools like white canes or guide dogs. Always use it alongside your existing mobility aids and with appropriate caution.
-
-## Installation
-
-See [SETUP.md](SETUP.md) for complete installation instructions.
-
-**Quick Install:**
-```bash
-git clone https://github.com/yourusername/OrbyGlasses.git
-cd OrbyGlasses
-./install_pyslam.sh
-pip install -r requirements.txt
-./run_orby.sh
-```
-
-## Contributing
-
-We welcome contributions! Please read:
-- [CONTRIBUTING.md](CONTRIBUTING.md) - How to contribute
-- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) - Community guidelines
-- [ARCHITECTURE.md](ARCHITECTURE.md) - System design
-
-## Support & Documentation
-
-- **Setup Guide:** [SETUP.md](SETUP.md)
-- **Troubleshooting:** [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
-- **Architecture:** [ARCHITECTURE.md](ARCHITECTURE.md)
-- **Changelog:** [CHANGELOG.md](CHANGELOG.md)
-- **Issues:** [GitHub Issues](https://github.com/yourusername/OrbyGlasses/issues)
-- **Discussions:** [GitHub Discussions](https://github.com/yourusername/OrbyGlasses/discussions)
+All processing happens on your computer. Nothing is sent to the internet.
 
 ## License
 
-GNU General Public License v3.0 or later - see [LICENSE](LICENSE) file for details.
+Free to use and modify (GPL-3.0). See LICENSE file.
 
-This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+## Built With
 
-## Credits
-
-Built with:
-- Ultralytics YOLOv11 for object detection
-- Depth-Anything-V2 for depth estimation
-- Ollama for local AI inference
-- OpenCV for computer vision
-- PyTorch for deep learning
+- Object detection: YOLOv11
+- Distance measurement: Depth Anything V2
+- Indoor tracking: pySLAM
+- Audio: macOS built-in speech
 
 ---
 
-For detailed setup instructions, see the comments in `setup.sh` and `run.sh`.
+For detailed setup, see [SETUP.md](SETUP.md)
+For common problems, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md)

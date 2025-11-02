@@ -1,413 +1,197 @@
-# OrbyGlasses Troubleshooting Guide
+# Fixing Common Problems
 
-Solutions to common issues and problems.
+Quick solutions for OrbyGlasses issues.
 
-## Table of Contents
+## Camera Problems
 
-- [Camera Issues](#camera-issues)
-- [SLAM Tracking Problems](#slam-tracking-problems)
-- [Performance Issues](#performance-issues)
-- [Audio Problems](#audio-problems)
-- [Installation Errors](#installation-errors)
-- [Model Loading Failures](#model-loading-failures)
-- [macOS-Specific Issues](#macos-specific-issues)
+### Camera Not Working
 
----
+**Symptoms:** Error message "Could not open camera" or black screen
 
-## Camera Issues
+**Solutions:**
 
-### Camera Not Detected
-
-**Symptoms**: Error "Could not open camera" or black screen
-
-**Solutions**:
-
-1. **Check camera availability**:
+1. **Check if camera exists:**
    ```bash
-   python3 -c "import cv2; cap = cv2.VideoCapture(0); print('OK' if cap.isOpened() else 'FAIL'); cap.release()"
+   python3 -c "import cv2; cap = cv2.VideoCapture(0); print('Works' if cap.isOpened() else 'Not working'); cap.release()"
    ```
 
-2. **Try different camera indices**:
+2. **Try different camera numbers:**
    ```bash
-   # Test indices 0-4
-   for i in {0..4}; do
-     python3 -c "import cv2; cap = cv2.VideoCapture($i); print('Camera $i:', 'OK' if cap.isOpened() else 'FAIL'); cap.release()"
-   done
+   # Edit config.yaml and try: 0, 1, or 2
+   camera:
+     source: 1  # Change this number
    ```
 
-3. **Update config.yaml** with working camera index:
+3. **Give permission:**
+   - Go to System Settings → Privacy & Security → Camera
+   - Turn on for Terminal
+
+4. **Close other programs using camera** (Zoom, FaceTime, etc.)
+
+### Camera Shows Black Screen
+
+**Solutions:**
+
+1. **Try lower quality:**
    ```yaml
    camera:
-     source: 1  # Change from 0 to 1, 2, etc.
+     width: 320   # Instead of 640
+     height: 240  # Instead of 480
    ```
 
-4. **Grant camera permissions**:
-   - Go to System Settings > Privacy & Security > Camera
-   - Enable access for Terminal or your Python app
+2. **Update macOS** to latest version
 
-5. **Check if camera is in use**:
-   ```bash
-   # Close other apps using the camera (Zoom, FaceTime, etc.)
-   lsof | grep "AppleCamera"
-   ```
-
-### Camera Shows But No Frames
-
-**Symptoms**: Window opens but shows black or frozen image
-
-**Solutions**:
-
-1. **Check camera resolution**:
-   ```yaml
-   camera:
-     width: 640   # Try standard resolutions
-     height: 480
-   ```
-
-2. **Test camera directly**:
-   ```bash
-   python3 -c "
-   import cv2
-   cap = cv2.VideoCapture(0)
-   ret, frame = cap.read()
-   print('Frame captured:', ret)
-   print('Frame shape:', frame.shape if ret else 'None')
-   cap.release()
-   "
-   ```
-
-3. **Update camera drivers**: Ensure macOS is up to date
+3. **Restart computer**
 
 ### Poor Image Quality
 
-**Solutions**:
+**Solutions:**
 
-1. **Increase resolution**:
+1. **Increase camera quality:**
    ```yaml
    camera:
      width: 640
      height: 480
    ```
 
-2. **Adjust lighting**: Ensure adequate lighting in the environment
+2. **Turn on lights** - system needs good lighting
 
-3. **Clean camera lens**: Physical cleaning may improve quality
+3. **Clean camera lens**
 
----
+## Navigation Problems
 
-## SLAM Tracking Problems
+### System Stops Tracking Position
 
-### Tracking Loss / "Lost Tracking" Warnings
+**Symptoms:** "Tracking lost" messages
 
-**Symptoms**: SLAM loses position, map disappears, frequent "tracking lost" messages
+**Solutions:**
 
-**Causes**:
-- Low-texture environments (blank walls)
-- Fast camera movement
-- Poor lighting
-- Motion blur
+1. **Move slowly** - fast movement causes problems
 
-**Solutions**:
+2. **Add visual features:**
+   - Blank walls don't work well
+   - Put up posters or furniture
 
-1. **Tune SLAM parameters** (config.yaml):
+3. **Improve lighting** - avoid dark rooms
+
+4. **Adjust settings:**
    ```yaml
    slam:
-     orb_features: 8000              # Increase from 5000
-     scale_factor: 1.2
-     n_levels: 8
-     loop_closure: true
-     relocalization_threshold: 0.75  # Lower for easier relocalization
+     orb_features: 8000  # Increase from 5000
    ```
 
-2. **Environmental improvements**:
-   - Add visual features (posters, furniture) to blank walls
-   - Improve lighting (avoid darkness and backlighting)
-   - Move camera slowly and smoothly
+## Speed Problems
 
-3. **Enable Visual Odometry fallback**:
-   ```yaml
-   slam:
-     use_vo_fallback: true  # Continue tracking even if SLAM fails
-   ```
+### Too Slow (Less than 10 FPS)
 
-4. **Switch to VO-only mode**:
-   ```bash
-   ./run_vo_mode.sh  # Trajectory tracking without mapping
-   ```
+**Solutions:**
 
-### Frequent Relocalization Attempts
-
-**Symptoms**: System constantly trying to relocalize, jerky position updates
-
-**Solutions**:
-
-1. **Aggressive relocalization tuning**:
-   ```yaml
-   slam:
-     relocalization_threshold: 0.6   # Lower = more aggressive
-     min_inliers: 15                 # Lower = more permissive
-     max_reprojection_error: 3.0     # Higher = more tolerant
-   ```
-
-2. **Enable loop closure**:
-   ```yaml
-   slam:
-     loop_closure: true
-     loop_closure_threshold: 0.7
-   ```
-
-3. **Reset map and restart**:
-   ```bash
-   rm -rf data/maps/*
-   ./run_orby.sh
-   ```
-
-### Map Drift Over Time
-
-**Symptoms**: Mapped positions don't match reality after several minutes
-
-**Solutions**:
-
-1. **Enable bundle adjustment**:
-   ```yaml
-   slam:
-     bundle_adjustment: true
-     ba_local_window: 20
-   ```
-
-2. **Improve loop closure**:
-   ```yaml
-   slam:
-     loop_closure: true
-     loop_closure_frequency: 10  # Check every 10 keyframes
-   ```
-
-3. **Use more features**:
-   ```yaml
-   slam:
-     orb_features: 10000  # More features = better accuracy
-   ```
-
----
-
-## Performance Issues
-
-### Low FPS (<10 FPS)
-
-**Symptoms**: Choppy video, slow response, lag
-
-**Solutions**:
-
-1. **Use fast mode**:
+1. **Use fast mode:**
    ```bash
    ./run_orby.sh --fast
    ```
 
-2. **Reduce camera resolution**:
+2. **Lower camera quality:**
    ```yaml
    camera:
      width: 320
      height: 240
    ```
 
-3. **Disable expensive features**:
+3. **Turn off extra features:**
    ```yaml
    slam:
-     visualization: false  # Disable 3D viewer
-     orb_features: 2000    # Reduce features
-
-   depth:
-     skip_frames: 2        # Process every 2nd frame
+     visualization: false  # Don't show 3D view
 
    features:
      mapping3d: false
      occupancy_grid_3d: false
-     trajectory_prediction: false
    ```
 
-4. **Check CPU usage**:
+4. **Close other programs** to free up computer resources
+
+### High CPU or Memory Usage
+
+**Solutions:**
+
+1. **Check what's using resources:**
    ```bash
    top -pid $(pgrep -f main.py)
    ```
 
-### High Memory Usage
-
-**Symptoms**: System slows down, "Memory pressure is high" warning
-
-**Solutions**:
-
-1. **Limit map size**:
+2. **Limit map size:**
    ```yaml
    slam:
-     max_keyframes: 100      # Limit stored keyframes
-     max_map_points: 5000    # Limit map points
+     max_keyframes: 100
+     max_map_points: 5000
    ```
 
-2. **Enable memory cleanup**:
-   ```yaml
-   slam:
-     cull_redundant_keyframes: true
-     culling_frequency: 50
-   ```
-
-3. **Disable caching**:
-   ```yaml
-   depth:
-     cache_size: 0  # Disable depth cache
-   ```
-
-### GPU/MPS Not Being Used
-
-**Symptoms**: High CPU usage, low GPU usage in Activity Monitor
-
-**Solutions**:
-
-1. **Verify MPS availability**:
-   ```bash
-   python3 -c "import torch; print('MPS available:', torch.backends.mps.is_available())"
-   ```
-
-2. **Force MPS in config**:
-   ```yaml
-   models:
-     yolo:
-       device: mps
-     depth:
-       device: mps
-   ```
-
-3. **Check PyTorch version**:
-   ```bash
-   pip install --upgrade torch torchvision
-   ```
-
----
+3. **Restart OrbyGlasses**
 
 ## Audio Problems
 
-### No Audio Output
+### No Sound
 
-**Symptoms**: No spoken warnings, silence
+**Solutions:**
 
-**Solutions**:
-
-1. **Test system audio**:
+1. **Test system audio:**
    ```bash
-   say "This is a test"
+   say "Testing audio"
    ```
 
-2. **Test pyttsx3**:
-   ```bash
-   python3 -c "import pyttsx3; e = pyttsx3.init(); e.say('Test'); e.runAndWait()"
-   ```
+2. **Check speakers:**
+   - System Settings → Sound → Output
+   - Make sure correct device is selected
 
-3. **Check audio enabled in config**:
+3. **Check if audio is turned on:**
    ```yaml
    audio:
      enabled: true
    ```
 
-4. **Select audio output device**: System Settings > Sound > Output
-
-5. **Reinstall pyttsx3**:
+4. **Reinstall audio:**
    ```bash
-   pip uninstall pyttsx3 pyobjc
-   pip install pyttsx3 pyobjc
+   pip uninstall pyttsx3
+   pip install pyttsx3
    ```
 
-### Audio Is Slow/Laggy (>2 seconds delay)
+### Audio Too Slow
 
-**Symptoms**: Warnings come too late to be useful
+**Solutions:**
 
-**Solutions**:
-
-1. **Increase speech rate**:
+1. **Speed up speech:**
    ```yaml
    audio:
-     rate: 200  # Increase from 175 (words per minute)
+     tts_rate: 240  # Increase from 220
    ```
 
-2. **Reduce processing time**:
-   - Use fast mode
-   - Disable expensive features
-   - Reduce camera resolution
+2. **Use fast mode:**
+   ```bash
+   ./run_orby.sh --fast
+   ```
 
-3. **Pre-generate common phrases**: (Future enhancement)
+### Audio Cuts Out
 
-### Audio Cuts Out or Stutters
+**Solutions:**
 
-**Solutions**:
-
-1. **Increase minimum time between warnings**:
+1. **Reduce how often it talks:**
    ```yaml
    audio:
      min_time_between_warnings: 3.0  # Increase from 2.0
    ```
 
-2. **Check audio queue**:
-   ```yaml
-   audio:
-     queue_size: 5  # Limit queued messages
-   ```
+## Installation Problems
 
----
+### Python Not Found
 
-## Installation Errors
+**Solution:**
+```bash
+brew install python@3.11
+```
 
-### pySLAM Installation Fails
+### pip install Fails
 
-**Symptoms**: `./install_pyslam.sh` fails with compiler errors
-
-**Solutions**:
-
-1. **Install Xcode Command Line Tools**:
-   ```bash
-   xcode-select --install
-   ```
-
-2. **Install required dependencies**:
-   ```bash
-   brew install cmake opencv eigen boost
-   ```
-
-3. **Check Python version**:
-   ```bash
-   python3 --version  # Should be 3.10, 3.11, or 3.12
-   ```
-
-4. **Manual installation**:
-   ```bash
-   cd third_party/pyslam
-   python3 -m venv ~/.python/venvs/pyslam
-   source ~/.python/venvs/pyslam/bin/activate
-   pip install -r requirements.txt
-   ./install_dependencies.sh
-   ```
-
-### "No module named 'pyslam'" Error
-
-**Solutions**:
-
-1. **Check PYTHONPATH** (should be set by run_orby.sh):
-   ```bash
-   echo $PYTHONPATH
-   # Should include: /path/to/OrbyGlasses/third_party/pyslam
-   ```
-
-2. **Use the correct launch script**:
-   ```bash
-   ./run_orby.sh  # NOT: python3 src/main.py
-   ```
-
-3. **Activate pySLAM venv**:
-   ```bash
-   source ~/.python/venvs/pyslam/bin/activate
-   ```
-
-### Pip Install Fails with "externally-managed-environment"
-
-**Solution**:
-
+**Solution:**
 ```bash
 # Use virtual environment
 python3 -m venv venv
@@ -415,207 +199,78 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
----
+### pySLAM Won't Install
 
-## Model Loading Failures
-
-### YOLOv11 Download Fails
-
-**Solutions**:
-
-1. **Check internet connection**
-
-2. **Manual download**:
-   ```bash
-   mkdir -p models
-   cd models
-   wget https://github.com/ultralytics/assets/releases/download/v8.0.0/yolov11n.pt
-   ```
-
-3. **Update config to use local model**:
-   ```yaml
-   models:
-     yolo:
-       model: models/yolov11n.pt
-   ```
-
-### Depth Model Download Fails
-
-**Solutions**:
-
-1. **Pre-download from Hugging Face**:
-   ```bash
-   python3 -c "
-   from transformers import AutoModel
-   model = AutoModel.from_pretrained('depth-anything/Depth-Anything-V2-Small')
-   "
-   ```
-
-2. **Set Hugging Face cache**:
-   ```bash
-   export HF_HOME=~/.cache/huggingface
-   ```
-
-3. **Use proxy if needed**:
-   ```bash
-   export HTTP_PROXY=http://your-proxy:port
-   export HTTPS_PROXY=http://your-proxy:port
-   ```
-
-### Ollama Models Not Found
-
-**Solutions**:
-
-1. **Start Ollama service**:
-   ```bash
-   ollama serve &
-   ```
-
-2. **Pull required models**:
-   ```bash
-   ollama pull moondream
-   ollama pull gemma2:4b
-   ```
-
-3. **Check Ollama status**:
-   ```bash
-   ollama list
-   ```
-
----
-
-## macOS-Specific Issues
-
-### "Operation not permitted" Error
-
-**Solution**: Grant Full Disk Access
-- System Settings > Privacy & Security > Full Disk Access
-- Add Terminal or your IDE
-
-### MPS Backend Errors
-
-**Symptoms**: "MPS backend out of memory" or similar
-
-**Solutions**:
-
-1. **Reduce batch size**:
-   ```yaml
-   models:
-     yolo:
-       batch_size: 1
-   ```
-
-2. **Use half precision**:
-   ```yaml
-   models:
-     depth:
-       use_half_precision: true
-   ```
-
-3. **Fallback to CPU**:
-   ```yaml
-   models:
-     yolo:
-       device: cpu
-     depth:
-       device: cpu
-   ```
-
-### Gatekeeper Blocks Execution
-
-**Symptoms**: "cannot be opened because the developer cannot be verified"
-
-**Solution**:
+**Solution:**
 ```bash
-# Remove quarantine attribute
+# Install build tools
+xcode-select --install
+
+# Install dependencies
+brew install cmake opencv eigen boost
+
+# Try again
+./install_pyslam.sh
+```
+
+## Mac-Specific Problems
+
+### "Cannot open because developer cannot be verified"
+
+**Solution:**
+```bash
 xattr -d com.apple.quarantine run_orby.sh
 chmod +x run_orby.sh
 ```
 
----
+### "Operation not permitted"
 
-## Getting Help
+**Solution:**
+- System Settings → Privacy & Security → Full Disk Access
+- Add Terminal
 
-If none of these solutions work:
+## Still Having Problems?
 
-1. **Enable debug logging**:
-   ```yaml
-   debug:
-     enabled: true
-     log_level: DEBUG
-   ```
-
-2. **Check logs**:
-   ```bash
-   tail -f data/logs/orbyglasses.log
-   ```
-
-3. **Report an issue**:
-   - https://github.com/yourusername/OrbyGlasses/issues
-   - Include: OS version, Python version, error message, logs
-
-4. **Join discussions**:
-   - https://github.com/yourusername/OrbyGlasses/discussions
-
----
-
-## Quick Reference
-
-### Emergency Fixes
+### Reset Everything
 
 ```bash
-# Reset everything
+# Remove saved data
 rm -rf data/maps/* data/logs/*
+
+# Restart OrbyGlasses
+./run_orby.sh
+```
+
+### Get Help
+
+1. **Check logs:**
+   ```bash
+   tail -f data/logs/orbyglass.log
+   ```
+
+2. **Report problem:**
+   - Go to: https://github.com/jaskirat1616/Orby-Glasses/issues
+   - Include:
+     - Your Mac model (M1, M2, etc.)
+     - macOS version
+     - Python version
+     - Error message
+     - What you were doing
+
+3. **Ask questions:**
+   - Go to: https://github.com/jaskirat1616/Orby-Glasses/discussions
+
+## Quick Fixes
+
+```bash
+# Check if everything is installed
+python3 test_production_systems.py
+
+# Reset OrbyGlasses
+git checkout config/config.yaml
 ./run_orby.sh
 
-# Reinstall dependencies
+# Reinstall everything
 pip install -r requirements.txt --force-reinstall
-
-# Reinstall pySLAM
-rm -rf ~/.python/venvs/pyslam
 ./install_pyslam.sh
-
-# Reset configuration
-git checkout config/config.yaml
-```
-
-### Performance Tweaks (Copy-Paste)
-
-```yaml
-# Fast mode configuration
-camera:
-  width: 320
-  height: 240
-
-slam:
-  orb_features: 2000
-  visualization: false
-
-depth:
-  skip_frames: 2
-
-models:
-  yolo:
-    confidence: 0.60
-
-features:
-  mapping3d: false
-  occupancy_grid_3d: false
-  trajectory_prediction: false
-```
-
-### Debugging Commands
-
-```bash
-# Test individual components
-python3 -c "from src.core.detection import YOLODetector; print('Detection OK')"
-python3 -c "from src.core.depth_anything_v2 import DepthAnythingV2; print('Depth OK')"
-python3 -c "import pyttsx3; e=pyttsx3.init(); e.say('Audio OK'); e.runAndWait()"
-
-# Check system resources
-top -l 1 | grep -E "^CPU|^PhysMem"
-system_profiler SPCameraDataType  # List cameras
-
-# Monitor logs in real-time
-tail -f data/logs/orbyglasses.log
 ```

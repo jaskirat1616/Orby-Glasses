@@ -1,7 +1,7 @@
 """
-Health Monitoring and Auto-Recovery System
+Health Monitor
 
-Monitors system health and automatically recovers from failures.
+Watches all parts of OrbyGlasses and fixes problems automatically.
 """
 
 import time

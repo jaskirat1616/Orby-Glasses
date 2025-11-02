@@ -1,7 +1,7 @@
 """
-GPU Acceleration Checker for OrbyGlasses
+GPU Speed Checker
 
-Automatically detects and configures optimal GPU acceleration.
+Finds your computer's graphics chip to make OrbyGlasses faster.
 """
 
 import torch
