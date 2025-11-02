@@ -687,6 +687,10 @@ class OrbyGlasses:
                         closest_danger = min(danger_objects, key=lambda x: x.get('depth', 10))
                         depth = closest_danger.get('depth', 0)
 
+                        # Handle None depth
+                        if depth is None:
+                            depth = 1.0  # Assume close
+
                         # Combine detection info with VLM guidance
                         if navigation_guidance and not has_vlm_danger:
                             msg = f"STOP! {closest_danger['label']} at {depth:.1f}m. {navigation_guidance}"

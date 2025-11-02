@@ -59,8 +59,14 @@ class RobotUI:
             label = det.get('label', 'object')
             depth = det.get('depth', 0.0)
 
+            # Handle None depth
+            if depth is None or det.get('depth_uncertain', False):
+                depth = 1.0  # Assume close when uncertain
+                color = self.RED
+                danger_count += 1
+                thickness = 3
             # Color by distance
-            if depth < 1.0:
+            elif depth < 1.0:
                 color = self.RED
                 danger_count += 1
                 thickness = 3
