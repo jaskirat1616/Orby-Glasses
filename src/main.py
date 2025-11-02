@@ -431,16 +431,16 @@ class OrbyGlasses:
             detections = detections[:self.max_detections]
             det_time = self.perf_monitor.stop_timer('detection')
 
-            # Depth estimation - Skip for pySLAM (monocular SLAM doesn't need external depth)
+            # Depth estimation - ALWAYS run for safety (monocular depth critical for blind users)
+            # Even with SLAM enabled, depth estimation is essential for obstacle distance
             depth_map = None
-            skip_depth = self.slam_enabled and PYSLAM_AVAILABLE
 
             # Check if depth estimator is available
             has_depth_estimator = (hasattr(self, 'detection_pipeline') and
                                    hasattr(self.detection_pipeline, 'depth_estimator') and
                                    self.detection_pipeline.depth_estimator is not None)
 
-            if not skip_depth and has_depth_estimator:
+            if has_depth_estimator:
                 self.perf_monitor.start_timer('depth')
                 # Simplified depth computation with frame skipping
                 if self.frame_count % (self.skip_depth_frames + 1) == 0:
@@ -454,7 +454,7 @@ class OrbyGlasses:
                         self.last_depth_map = depth_map
                 depth_time = self.perf_monitor.stop_timer('depth')
             else:
-                # pySLAM handles depth internally or depth estimator not available
+                # Depth estimator not available
                 depth_time = 0.0
 
             # Add depth to detections
@@ -464,12 +464,14 @@ class OrbyGlasses:
                     bbox = detection['bbox']
                     depth = self.detection_pipeline.depth_estimator.get_depth_at_bbox(depth_map, bbox, frame_size)
                     detection['depth'] = depth
+                    detection['depth_uncertain'] = False  # Depth measured
                     detection['is_danger'] = depth < self.detection_pipeline.min_safe_distance
             else:
-                # No depth estimation - use conservative defaults
+                # CRITICAL: No depth available - mark as uncertain and treat as potential danger
                 for detection in detections:
-                    detection['depth'] = 2.0  # Assume 2 meters if no depth
-                    detection['is_danger'] = False  # Can't determine danger without depth
+                    detection['depth'] = None  # Unknown distance
+                    detection['depth_uncertain'] = True  # Flag for audio warnings
+                    detection['is_danger'] = True  # ASSUME DANGER when distance unknown (safety first)
 
             # Predict object motion and collision risks
             detections = self.smart_cache.predict_object_motion(detections)
@@ -1013,18 +1015,43 @@ class OrbyGlasses:
                         self.conversation_manager.handle_conversation_interaction(scene_context)
 
                 # Smart Audio System - Priority-based alerts
+                # Check for uncertain depth objects (no depth measurement available)
+                uncertain_objects = [d for d in detections if d.get('depth_uncertain', False)]
+                has_uncertain_depth = len(uncertain_objects) > 0
+
                 # Check for danger zone objects (< 1m) - PRIORITY ALERT
-                danger_objects = [d for d in detections if d.get('depth', 10) < self.danger_distance]
+                danger_objects = [d for d in detections if d.get('depth', None) is not None and d.get('depth', 10) < self.danger_distance]
                 has_danger = len(danger_objects) > 0
 
                 # Determine appropriate interval based on danger level
-                active_interval = self.danger_audio_interval if has_danger else self.audio_interval
+                active_interval = self.danger_audio_interval if (has_danger or has_uncertain_depth) else self.audio_interval
 
-                # DANGER ZONE - Priority alert
-                if has_danger:
+                # CRITICAL: Uncertain depth warning (depth measurement unavailable)
+                if has_uncertain_depth:
                     if (current_time - self.last_audio_time) > self.danger_audio_interval and not self.audio_manager.is_speaking:
-                        closest_danger = min(danger_objects, key=lambda x: x['depth'])
-                        depth = closest_danger['depth']
+                        # Warn about objects with unknown distance
+                        uncertain_obj = uncertain_objects[0]
+                        label = uncertain_obj['label']
+
+                        # Determine direction
+                        center = uncertain_obj.get('center', [160, 160])
+                        if center[0] < 106:
+                            direction = "on your left"
+                        elif center[0] > 213:
+                            direction = "on your right"
+                        else:
+                            direction = "ahead"
+
+                        msg = f"Caution! {label} {direction}. Distance unknown, use care"
+                        self.logger.warning(f"⚠️  UNCERTAIN DEPTH: \"{msg}\"")
+                        self.audio_manager.speak(msg, priority=True)
+                        self.last_audio_time = current_time
+
+                # DANGER ZONE - Priority alert (known depth, too close)
+                elif has_danger:
+                    if (current_time - self.last_audio_time) > self.danger_audio_interval and not self.audio_manager.is_speaking:
+                        closest_danger = min(danger_objects, key=lambda x: x.get('depth', 10))
+                        depth = closest_danger.get('depth', 0)
 
                         # Use relatable distance terms with specific actions
                         label = closest_danger['label']

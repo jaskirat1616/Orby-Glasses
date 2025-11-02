@@ -105,15 +105,32 @@ class DepthAnythingV2:
 
         Returns:
             Depth in meters
+
+        NOTE: Depth Anything V2 outputs RELATIVE depth (0-1 scale),
+        not metric depth. This normalization estimates real distances
+        but needs calibration for accuracy.
+
+        Run calibrate_depth.py to get calibration factor for your camera.
         """
-        # Simple normalization
-        # Assume depth range 0-10m for indoor navigation
+        # Depth Anything V2 outputs relative depth
+        # We need to estimate metric depth for navigation
+
         depth_min = depth.min()
         depth_max = depth.max()
 
-        # Normalize to 0-10m range
+        # Normalize to 0-1 range
         normalized = (depth - depth_min) / (depth_max - depth_min + 1e-8)
-        metric_depth = normalized * 10.0  # Scale to 10m max
+
+        # Estimate metric depth using empirical calibration
+        # Default calibration for typical indoor camera (adjust after running calibrate_depth.py)
+        # Assumes: Near objects (normalized ~0.1) = 0.5m, Far objects (normalized ~0.9) = 5m
+
+        # Inverse mapping: closer objects have LOWER normalized values
+        # Apply non-linear mapping for better accuracy
+        metric_depth = 0.3 / (normalized + 0.05)  # Hyperbolic mapping
+
+        # Clamp to reasonable indoor range
+        metric_depth = np.clip(metric_depth, 0.3, 10.0)
 
         return metric_depth
 

@@ -96,7 +96,31 @@ Your Mac's chip makes it faster:
 ```bash
 # Test if everything works
 python3 test_production_systems.py
+
+# Test audio
+python3 test_audio.py
+
+# Calibrate distance accuracy (IMPORTANT)
+python3 calibrate_depth.py
 ```
+
+### Calibrating Distance Accuracy
+
+Distance measurements need calibration for your specific camera.
+
+```bash
+python3 calibrate_depth.py
+```
+
+Follow the on-screen instructions:
+1. Place object at known distance (measure with tape)
+2. Point camera at object
+3. Press SPACE to measure
+4. Enter real distance
+5. Repeat for 0.5m, 1m, 2m, 3m, 5m
+6. Tool calculates calibration factor
+
+Then update the code with the recommended calibration.
 
 ## Safety Notice
 

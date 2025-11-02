@@ -515,16 +515,28 @@ class DetectionPipeline:
             'danger_objects': [],
             'caution_objects': [],
             'safe_objects': [],
+            'uncertain_objects': [],  # Objects with unknown distance
             'closest_object': None,
-            'path_clear': True
+            'path_clear': True,
+            'has_uncertain_depth': False  # Flag for audio warnings
         }
 
         min_distance = float('inf')
 
         for det in detections:
-            depth = det.get('depth', 0.0)
+            depth = det.get('depth', None)
+            depth_uncertain = det.get('depth_uncertain', False)
             label = det.get('label', 'unknown')
 
+            # Handle uncertain depth (safety first - assume danger)
+            if depth_uncertain or depth is None:
+                summary['uncertain_objects'].append(det)
+                summary['danger_objects'].append(det)  # Treat as danger for safety
+                summary['path_clear'] = False
+                summary['has_uncertain_depth'] = True
+                continue
+
+            # Known depth - categorize normally
             if depth < self.min_safe_distance:
                 summary['danger_objects'].append(det)
                 summary['path_clear'] = False
