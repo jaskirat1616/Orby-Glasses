@@ -497,13 +497,13 @@ class LivePySLAM:
         # Get map points
         self.map_points = self.get_map_points()
         
-        # Update visualization - CRITICAL: Call draw() for pySLAM plot windows
-        if self.plot_drawer:
-            try:
-                # This shows pySLAM's native 2D plots (trajectory, errors, etc.)
-                self.plot_drawer.draw(self.frame_count)
-            except Exception as e:
-                self.logger.warning(f"Plot visualization error: {e}")
+        # Update visualization - SKIP 2D plots for performance (shows in Pangolin 3D viewer only)
+        # Commented out for performance - uncomment if you want trajectory/error plots
+        # if self.plot_drawer:
+        #     try:
+        #         self.plot_drawer.draw(self.frame_count)
+        #     except Exception as e:
+        #         self.logger.warning(f"Plot visualization error: {e}")
 
         # Update 3D viewer - CRITICAL: This shows the 3D point cloud window
         if hasattr(self, 'viewer3d') and self.viewer3d:

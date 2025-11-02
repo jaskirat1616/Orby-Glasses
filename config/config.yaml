@@ -201,7 +201,7 @@ slam:
     enabled: true
     type: TSDF  # TSDF or GAUSSIAN_SPLATTING
     extract_mesh: true  # true = mesh, false = point cloud
-    voxel_length: 0.015  # meters - smaller = more detail
+    voxel_length: 0.04  # meters - 4cm for fast real-time (0.015 too detailed)
     depth_trunc: 4.0  # meters - max depth for indoor scenes
 stair_detection:
   enabled: true  # Critical safety feature - detect stairs and curbs
