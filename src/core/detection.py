@@ -36,19 +36,33 @@ class ObjectDetector:
         # Load YOLOv11 model with optimizations
         try:
             if os.path.exists(model_path):
+                # Load model directly on device (ultralytics handles device assignment)
                 self.model = YOLO(model_path)
             else:
                 # Fallback to YOLOv11 nano model
                 self.model = YOLO('yolo11n.pt')
 
-            # Set device and optimize for inference
-            self.model.to(self.device)
+            # For ultralytics, device is set during inference, but let's ensure it's configured
+            # Move model to device explicitly
+            if self.device == "mps":
+                # MPS device for ultralytics YOLO
+                try:
+                    self.model.to("mps")
+                except Exception as e:
+                    logging.warning(f"Could not move YOLO to MPS: {e}, will use device parameter during inference")
+            elif self.device == "cuda":
+                self.model.to("cuda")
 
-            # Warm up the model for faster inference
+            # Warm up the model for faster inference (on correct device)
             dummy_input = np.zeros((320, 320, 3), dtype=np.uint8)
-            self.model(dummy_input, verbose=False)
-
-            logging.info("YOLOv11 model loaded and optimized")
+            self.model(dummy_input, device=self.device, verbose=False, half=(self.device in ["mps", "cuda"]))
+            
+            # Verify device is actually being used
+            if self.device == "mps":
+                logging.info(f"✓ YOLOv11 loaded on MPS (Metal Performance Shaders)")
+                logging.info(f"  → GPU acceleration enabled for {torch.backends.mps.is_available()}")
+            else:
+                logging.info(f"✓ YOLOv11 model loaded and optimized on {self.device.upper()}")
 
         except Exception as e:
             logging.error(f"Failed to load YOLO model: {e}")
@@ -186,13 +200,20 @@ class DepthEstimator:
 
             if self.device == "mps":
                 model = model.to("mps")
+                logging.info(f"✓ Depth Anything V2 loaded on MPS (Metal Performance Shaders)")
+                logging.info(f"  → GPU acceleration enabled: {torch.backends.mps.is_available()}")
+            elif self.device == "cuda":
+                model = model.to("cuda")
+                logging.info(f"✓ Depth Anything V2 loaded on CUDA")
+            else:
+                logging.info(f"✓ Depth Anything V2 loaded on CPU")
             model.eval()
 
             self.model = model
             self.processor = None
             self.model_type = "depth_anything_v2_sota"
 
-            logging.info(f"✓ Depth Anything V2 loaded (518px SHARP depth)")
+            logging.info(f"  Device: {self.device.upper()}, Resolution: {self.max_resolution}px")
             logging.info(f"  SOTA: 0.22s inference, 0.454m MAE accuracy")
 
         except Exception as e:
