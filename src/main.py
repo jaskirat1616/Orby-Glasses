@@ -907,17 +907,24 @@ class OrbyGlasses:
         # Add closest object info if detections exist
         if detections:
             closest = min(detections, key=lambda x: x.get('depth') if x.get('depth') is not None else 10)
-            closest_text = Text(f"{closest['label']} {closest['depth']:.1f}m", style="bold")
-            
-            # Color code based on distance
-            if closest['depth'] < self.danger_distance:
-                closest_text.stylize("red", 0, len(closest_text))
-            elif closest['depth'] < self.caution_distance:
-                closest_text.stylize("yellow", 0, len(closest_text))
-            else:
-                closest_text.stylize("green", 0, len(closest_text))
+            # Handle None depth safely
+            closest_depth = closest.get('depth')
+            if closest_depth is not None:
+                closest_text = Text(f"{closest['label']} {closest_depth:.1f}m", style="bold")
                 
-            table.add_row("Closest Object", closest_text.plain)
+                # Color code based on distance
+                if closest_depth < self.danger_distance:
+                    closest_text.stylize("red", 0, len(closest_text))
+                elif closest_depth < self.caution_distance:
+                    closest_text.stylize("yellow", 0, len(closest_text))
+                else:
+                    closest_text.stylize("green", 0, len(closest_text))
+                    
+                table.add_row("Closest Object", closest_text.plain)
+            else:
+                # Unknown distance
+                closest_text = Text(f"{closest['label']} (unknown)", style="bold yellow")
+                table.add_row("Closest Object", closest_text.plain)
         
         # Add SLAM info if available
         if slam_result is not None:
