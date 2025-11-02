@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 import cv2
 import numpy as np
-from core.depth_anything_v2 import DepthAnythingV2
+from core.detection import DepthEstimator
 from core.utils import ConfigManager
 
 print("\n" + "="*60)
@@ -23,7 +23,11 @@ print("You'll need a measuring tape or ruler.\n")
 
 # Initialize
 config = ConfigManager('config/config.yaml')
-depth_estimator = DepthAnythingV2(config)
+depth_estimator = DepthEstimator(
+    model_path=config.get('models.depth.path', 'depth-anything/Depth-Anything-V2-Small-hf'),
+    device=config.get('models.depth.device', 'mps'),
+    max_resolution=config.get('models.depth.max_resolution', 518)
+)
 
 # Open camera
 camera_source = config.get('camera.source', 0)
@@ -74,17 +78,25 @@ while True:
         print("\n📏 Measuring depth...")
         depth_map = depth_estimator.estimate_depth(frame)
 
-        # Get depth at center
-        center_depth = depth_map[h//2, w//2]
+        # Get depth at center using bounding box
+        # Create small bbox around center
+        bbox_size = 40
+        center_bbox = [
+            w//2 - bbox_size//2,
+            h//2 - bbox_size//2,
+            w//2 + bbox_size//2,
+            h//2 + bbox_size//2
+        ]
 
-        # Get depth in a small region around center
+        # Get depth in meters using the calibrated conversion
+        median_depth = depth_estimator.get_depth_at_bbox(depth_map, center_bbox, (w, h))
+
+        # Also show raw normalized depth for reference
         region = depth_map[h//2-10:h//2+10, w//2-10:w//2+10]
-        median_depth = np.median(region)
-        mean_depth = np.mean(region)
+        raw_depth = np.median(region)
 
-        print(f"   Center depth: {center_depth:.3f}")
-        print(f"   Median depth (20x20 region): {median_depth:.3f}")
-        print(f"   Mean depth (20x20 region): {mean_depth:.3f}")
+        print(f"   Measured depth: {median_depth:.3f}m (calibrated)")
+        print(f"   Raw normalized: {raw_depth:.3f} (0-1 scale)")
 
         # Ask for real distance
         try:
