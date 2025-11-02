@@ -95,10 +95,7 @@ class RobotUI:
         # Top status bar - simple
         cv2.rectangle(overlay, (0, 0), (w, 35), self.BLACK, -1)
 
-        # FPS (increased text size)
-        fps_color = self.GREEN if fps > 15 else self.YELLOW if fps > 10 else self.RED
-        cv2.putText(overlay, f"FPS: {fps:.0f}", (10, 25),
-                   cv2.FONT_HERSHEY_SIMPLEX, 1.2, fps_color, 3)
+        # FPS removed - cleaner UI
 
         # Status (increased text size)
         if danger_count > 0:
