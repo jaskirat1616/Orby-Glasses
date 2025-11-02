@@ -253,9 +253,52 @@ Contributions welcome! Please:
 3. Add tests for new features
 4. Submit a pull request
 
+## Production Status
+
+**Current Status:** Beta (v0.9.0)
+
+OrbyGlasses is under active development. While core features are functional, this software is:
+- ✅ Suitable for testing and development
+- ⚠️ **Not yet recommended for independent use by blind users without supervision**
+- 🚧 Requires further real-world validation and safety testing
+
+**Safety Notice:**
+OrbyGlasses is a navigation aid, not a replacement for traditional mobility tools like white canes or guide dogs. Always use it alongside your existing mobility aids and with appropriate caution.
+
+## Installation
+
+See [SETUP.md](SETUP.md) for complete installation instructions.
+
+**Quick Install:**
+```bash
+git clone https://github.com/yourusername/OrbyGlasses.git
+cd OrbyGlasses
+./install_pyslam.sh
+pip install -r requirements.txt
+./run_orby.sh
+```
+
+## Contributing
+
+We welcome contributions! Please read:
+- [CONTRIBUTING.md](CONTRIBUTING.md) - How to contribute
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) - Community guidelines
+- [ARCHITECTURE.md](ARCHITECTURE.md) - System design
+
+## Support & Documentation
+
+- **Setup Guide:** [SETUP.md](SETUP.md)
+- **Troubleshooting:** [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
+- **Architecture:** [ARCHITECTURE.md](ARCHITECTURE.md)
+- **Changelog:** [CHANGELOG.md](CHANGELOG.md)
+- **Issues:** [GitHub Issues](https://github.com/yourusername/OrbyGlasses/issues)
+- **Discussions:** [GitHub Discussions](https://github.com/yourusername/OrbyGlasses/discussions)
+
 ## License
 
-MIT License - see LICENSE file for details.
+GNU General Public License v3.0 or later - see [LICENSE](LICENSE) file for details.
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 
 ## Credits
 

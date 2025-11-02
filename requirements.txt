@@ -26,6 +26,7 @@ requests>=2.31.0
 pyyaml>=6.0.0
 numpy>=1.24.0
 rich>=13.0.0  # For optimized terminal display
+psutil>=5.9.0  # System resource monitoring
 
 # Testing - Minimal
 pytest>=8.0.0
