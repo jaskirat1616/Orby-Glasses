@@ -106,7 +106,7 @@ indoor_navigation:
   path_planning: true
   save_locations: true
 logging:
-  level: DEBUG
+  level: INFO  # Reduced from DEBUG for performance
   log_file: data/logs/orbyglass.log
   save_detections: false
   save_frames: false
