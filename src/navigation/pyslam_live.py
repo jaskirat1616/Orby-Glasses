@@ -110,8 +110,9 @@ class LivePySLAM:
         # Camera parameters
         self.width = config.get('camera.width', 640)
         self.height = config.get('camera.height', 480)
-        self.fx = config.get('mapping3d.fx', 500)
-        self.fy = config.get('mapping3d.fy', 500)
+        # Use camera.fx/fy if available, fall back to mapping3d.fx/fy, then default
+        self.fx = config.get('camera.fx', config.get('mapping3d.fx', 500))
+        self.fy = config.get('camera.fy', config.get('mapping3d.fy', 500))
         self.cx = self.width / 2
         self.cy = self.height / 2
 
@@ -204,6 +205,13 @@ class LivePySLAM:
             Parameters.kRelocalizationFeatureMatchRatioTestLarge = 0.95  # Relaxed from 0.9 (for search)
             Parameters.kRelocalizationMaxReprojectionDistanceMapSearchCoarse = 15  # Increased from 10 pixels
             Parameters.kRelocalizationMaxReprojectionDistanceMapSearchFine = 5  # Increased from 3 pixels
+
+            # Triangulation parameters - reduce warnings for slow/still camera
+            # Lower threshold = less strict = fewer warnings when camera moves slowly
+            Parameters.kMinRatioBaselineDepth = 0.001  # Reduced from 0.01 (much more tolerant)
+            self.logger.info("🔧 Triangulation tuned for slow movement:")
+            self.logger.info(f"   • Min ratio baseline/depth: {Parameters.kMinRatioBaselineDepth}")
+            self.logger.info("   → Will create map points even with slow camera movement")
 
             self.logger.info("🔧 Relocalization tuned for real-world conditions:")
             self.logger.info(f"   • Min matches to attempt: {Parameters.kRelocalizationMinKpsMatches}")

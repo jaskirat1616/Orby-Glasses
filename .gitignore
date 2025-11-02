@@ -44,3 +44,6 @@ models/ollama/
 data/orbslam3/
 third_party/pyslam/
 rtabmap/
+
+# Documentation
+QUICKFIX.md
