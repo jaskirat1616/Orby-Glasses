@@ -198,17 +198,11 @@ class LivePySLAM:
             loop_detection_config = None
             if self.config.get('slam.loop_closure', False):
                 try:
-                    # Try IBOW first (no vocabulary needed, more reliable)
+                    # Use DBOW3 (Discriminative Bag of Words) - reliable and well-tested
                     from pyslam.loop_closing.loop_detector_configs import LoopDetectorConfigs
-                    try:
-                        # IBOW doesn't need pre-built vocabulary
-                        loop_detection_config = LoopDetectorConfigs.IBOW
-                        self.logger.info("✓ Loop closure enabled with IBOW (incremental vocabulary)")
-                    except:
-                        # Fallback to DBOW3 if available
-                        import pydbow3
-                        loop_detection_config = LoopDetectorConfigs.DBOW3
-                        self.logger.info("✓ Loop closure enabled with DBOW3")
+                    import pydbow3
+                    loop_detection_config = LoopDetectorConfigs.DBOW3
+                    self.logger.info("✓ Loop closure enabled with DBOW3")
                 except ImportError:
                     self.logger.warning("⚠️  Loop closure DISABLED - loop detector not available")
                     self.logger.warning("   → Cannot relocalize if tracking is lost!")
@@ -458,6 +452,16 @@ class LivePySLAM:
         if self.use_rerun and self.rerun:
             try:
                 self.rerun.log_slam_frame(self.frame_count, self.slam)
+                # Also log the annotated OrbyGlasses frame to Rerun
+                try:
+                    import rerun as rr
+                    # Log OrbyGlasses annotated feed to Rerun
+                    rr.set_time_sequence("frame_id", self.frame_count)
+                    # Convert BGR to RGB for correct color display
+                    rgb_frame = frame[:, :, ::-1].copy()
+                    rr.log("/orby/camera_feed", rr.Image(rgb_frame))
+                except Exception as e:
+                    self.logger.debug(f"OrbyGlasses Rerun logging error: {e}")
             except Exception as e:
                 self.logger.debug(f"Rerun logging error: {e}")
 

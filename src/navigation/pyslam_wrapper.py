@@ -114,9 +114,9 @@ class PySLAMWrapper:
             feature_tracker_config["num_features"] = self.config.get('slam.orb_features', 2000)
 
             # Configure loop closing/relocalization
-            # Using IBOW (Incremental Bag of Words) - it builds vocabulary incrementally
-            # and doesn't require a pre-existing vocabulary file
-            loop_detector_config = LoopDetectorConfigs.IBOW
+            # Using DBOW3 (Discriminative Bag of Words) - reliable and well-tested
+            # Works with pre-built ORB vocabulary
+            loop_detector_config = LoopDetectorConfigs.DBOW3
 
             # Initialize SLAM with loop closing enabled
             self.slam = Slam(self.camera, feature_tracker_config, loop_detector_config=loop_detector_config)
