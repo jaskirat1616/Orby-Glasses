@@ -158,7 +158,7 @@ performance:
   audio_update_interval: 1.5
   cache_depth_maps: true
   danger_audio_interval: 0.4
-  depth_skip_frames: 3  # Skip 3 frames = run depth every 4th frame (75% faster when SLAM enabled)
+  depth_skip_frames: 7  # Skip 7 frames = run depth every 8th frame (87% faster)
   enable_multithreading: true
   frame_skip: 0
   max_detections: 5
@@ -183,7 +183,7 @@ safety:
 slam:
   enabled: true
   feature_type: ORB
-  orb_features: 1000  # Reduced for real-time speed
+  orb_features: 800  # Further reduced for real-time speed
   loop_closure: false  # Disabled for speed (was causing relocalization overhead)
   use_pyslam: true
   use_rerun: false  # Disabled for 20-30% performance boost

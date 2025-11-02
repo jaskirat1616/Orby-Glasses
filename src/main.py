@@ -1281,8 +1281,8 @@ class OrbyGlasses:
 
                 self.logger.debug("Frame processed. Displaying windows.")
                 
-                # Display terminal info window with TTS text
-                if self.frame_count % 30 == 0:  # Update every 30 frames (~1 second)
+                # Display terminal info window with TTS text (less frequent for performance)
+                if self.frame_count % 60 == 0:  # Update every 60 frames (~2 seconds)
                     self._display_terminal_info(fps, detections, total_time, slam_result, trajectory_result)
                 
                 # Clean robot-style display - only show main camera view
@@ -1306,8 +1306,8 @@ class OrbyGlasses:
                 if video_writer:
                     video_writer.write(annotated_frame)
 
-                # Check for quit and handle keyboard controls
-                key = cv2.waitKey(10) & 0xFF
+                # Check for quit and handle keyboard controls (minimal delay)
+                key = cv2.waitKey(1) & 0xFF  # Reduced from 10ms to 1ms
                 emergency_key = self.config.get('safety.emergency_stop_key', 'q')
 
                 # Handle occupancy grid controls

@@ -540,8 +540,8 @@ class LivePySLAM:
             self.logger.warning(f"Camera window error: {e}")
             cv2.imshow("pySLAM - Camera", frame)
 
-        # Process OpenCV events to update windows
-        cv2.waitKey(1)
+        # Process OpenCV events to update windows (minimal - main loop handles this)
+        # cv2.waitKey(1)  # Removed - handled in main loop
 
         # Update Rerun visualization (like main_slam.py)
         if self.use_rerun and self.rerun:
