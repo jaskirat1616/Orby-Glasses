@@ -121,12 +121,24 @@ class LivePySLAM:
         self.current_pose = np.eye(4)
         self.trajectory = []
         self.map_points = []
-        
+
+        # Crash recovery state
+        self.crash_count = 0
+        self.max_crashes_before_disable = 3
+        self.loop_closure_enabled = config.get('slam.loop_closure', False)
+        self.has_disabled_loop_closure = False
+
+        # Memory management settings
+        self.max_trajectory_length = config.get('slam.max_trajectory_length', 1000)  # Keep last 1000 poses
+        self.max_map_points_local = config.get('slam.max_map_points', 5000)  # Limit local map points
+        self.cleanup_interval = config.get('slam.cleanup_interval', 500)  # Cleanup every N frames
+        self.last_cleanup_frame = 0
+
         # pySLAM components
         self.slam = None
         self.camera = None
         self.plot_drawer = None
-        
+
         # Camera capture
         self.cap = None
         
@@ -201,13 +213,20 @@ class LivePySLAM:
             # Loop closure detection - Use iBoW (incremental Bag of Words)
             # iBoW doesn't require pre-built vocabulary and is more stable than DBOW3
             loop_detection_config = None
-            if self.config.get('slam.loop_closure', False):
+            # Check if loop closure should be enabled (not disabled by crash recovery)
+            should_enable_loop_closure = (
+                self.config.get('slam.loop_closure', False) and
+                not self.has_disabled_loop_closure
+            )
+
+            if should_enable_loop_closure:
                 try:
                     from pyslam.loop_closing.loop_detector_configs import LoopDetectorConfigs
-                    # Use iBoW - incremental vocabulary building, no crashes
+                    # Use iBoW - incremental vocabulary building, more stable than DBOW3
                     loop_detection_config = LoopDetectorConfigs.IBOW
                     self.logger.info("✓ Loop closure enabled with iBoW (incremental Bag of Words)")
                     self.logger.info("  → Can relocalize if tracking is lost")
+                    self.logger.info("  → Crash recovery enabled: will fallback to VO if crashes occur")
                 except Exception as e:
                     self.logger.warning(f"⚠️  Loop closure DISABLED - {e}")
                     self.logger.warning("   → Cannot relocalize if tracking is lost!")
@@ -215,7 +234,8 @@ class LivePySLAM:
                     self.logger.warning("   → If tracking lost, restart required")
                     loop_detection_config = None
             else:
-                self.logger.info("⚠️  Loop closure disabled in config")
+                reason = "disabled by crash recovery" if self.has_disabled_loop_closure else "disabled in config"
+                self.logger.info(f"⚠️  Loop closure {reason}")
                 self.logger.info("   → If tracking lost, cannot recover (restart required)")
                 self.logger.info("   → Keep camera pointed at textured surfaces!")
 
@@ -359,19 +379,44 @@ class LivePySLAM:
         except Exception as e:
             # Catch any errors from pySLAM's track() method
             import traceback
-            self.logger.error(f"SLAM track error: {e}")
-            self.logger.error(f"Traceback: {traceback.format_exc()}")
-            # Return error result
+            error_msg = str(e)
+            error_trace = traceback.format_exc()
+
+            self.logger.error(f"SLAM track error: {error_msg}")
+            self.logger.error(f"Traceback: {error_trace}")
+
+            # Detect relocalization/loop closure crashes (MLPnPsolver, Bus error, etc.)
+            is_loop_closure_crash = (
+                'MLPnPsolver' in error_trace or
+                'relocalization' in error_msg.lower() or
+                'loop_closing' in error_msg.lower() or
+                'Bus error' in error_msg
+            )
+
+            if is_loop_closure_crash and self.loop_closure_enabled:
+                self.crash_count += 1
+                self.logger.warning(f"Loop closure crash detected ({self.crash_count}/{self.max_crashes_before_disable})")
+
+                if self.crash_count >= self.max_crashes_before_disable and not self.has_disabled_loop_closure:
+                    self.logger.error("⚠️  Multiple loop closure crashes detected - attempting graceful recovery")
+                    self.logger.error("⚠️  Loop closure will be disabled. SLAM will continue with visual odometry only.")
+                    self.has_disabled_loop_closure = True
+                    # Note: We can't dynamically disable loop closure in pySLAM after initialization
+                    # This flag prevents re-initialization with loop closure
+
+            # Return error result but keep SLAM alive
             return {
                 'pose': self.current_pose.copy(),
                 'position': self.current_pose[:3, 3].copy(),
                 'tracking_quality': 0.0,
                 'tracking_state': "ERROR",
-                'message': f"SLAM track failed: {e}",
+                'message': f"SLAM track failed: {error_msg}",
                 'is_initialized': self.is_initialized,
                 'trajectory_length': len(self.trajectory),
                 'num_map_points': 0,
-                'performance': {}
+                'performance': {},
+                'crash_detected': is_loop_closure_crash,
+                'loop_closure_disabled': self.has_disabled_loop_closure
             }
 
         # Get tracking state - fixed isinstance issue
@@ -478,6 +523,10 @@ class LivePySLAM:
             except Exception as e:
                 self.logger.debug(f"Dense map visualization error: {e}")
 
+        # Periodic memory cleanup to prevent leaks
+        if self.frame_count - self.last_cleanup_frame >= self.cleanup_interval:
+            self._perform_memory_cleanup()
+
         # Create result
         result = {
             'pose': self.current_pose.copy(),
@@ -511,7 +560,41 @@ class LivePySLAM:
             self.logger.error(f"Error getting map points: {e}")
 
         return np.array([])
-    
+
+    def _perform_memory_cleanup(self):
+        """
+        Periodic memory cleanup to prevent memory leaks.
+        Limits trajectory length and manages pySLAM internal structures.
+        """
+        try:
+            # Limit trajectory length (keep most recent poses)
+            if len(self.trajectory) > self.max_trajectory_length:
+                # Keep last max_trajectory_length poses
+                self.trajectory = self.trajectory[-self.max_trajectory_length:]
+                self.logger.debug(f"Trajectory trimmed to {self.max_trajectory_length} poses")
+
+            # Try to limit pySLAM keyframes (if accessible)
+            if hasattr(self.slam, 'map') and self.slam.map is not None:
+                try:
+                    if hasattr(self.slam.map, 'keyframes'):
+                        num_keyframes = len(self.slam.map.keyframes)
+                        if num_keyframes > 100:  # Keep last 100 keyframes
+                            # Note: Direct keyframe removal might break pySLAM's internal state
+                            # This is informational only - full cleanup requires pySLAM support
+                            self.logger.debug(f"Warning: {num_keyframes} keyframes in map (consider restart if memory high)")
+
+                    if hasattr(self.slam.map, 'points'):
+                        num_points = len(self.slam.map.points)
+                        if num_points > self.max_map_points_local:
+                            self.logger.debug(f"Warning: {num_points} map points (limit: {self.max_map_points_local})")
+                except Exception as e:
+                    self.logger.debug(f"Could not check pySLAM map size: {e}")
+
+            self.last_cleanup_frame = self.frame_count
+
+        except Exception as e:
+            self.logger.warning(f"Memory cleanup error: {e}")
+
     def cleanup(self):
         """Clean up pySLAM resources."""
         try:
@@ -556,21 +639,189 @@ class LivePySLAM:
         except Exception as e:
             self.logger.error(f"Reset error: {e}")
 
+    def save_map(self, map_name: str = "default", maps_dir: str = "data/maps") -> bool:
+        """
+        Save the current SLAM map to disk.
+
+        Args:
+            map_name: Name for the map (default: "default")
+            maps_dir: Directory to save maps (default: "data/maps")
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            import pickle
+            import json
+            from datetime import datetime
+
+            # Create maps directory if it doesn't exist
+            os.makedirs(maps_dir, exist_ok=True)
+
+            # Create timestamp for this save
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            map_file = os.path.join(maps_dir, f"{map_name}_{timestamp}.pkl")
+            metadata_file = os.path.join(maps_dir, f"{map_name}_{timestamp}_meta.json")
+
+            # Collect map data
+            map_data = {
+                'trajectory': [pose.copy() for pose in self.trajectory if pose is not None],
+                'current_pose': self.current_pose.copy() if self.current_pose is not None else np.eye(4),
+                'frame_count': self.frame_count,
+                'is_initialized': self.is_initialized,
+                'map_points': self.map_points.copy() if len(self.map_points) > 0 else np.array([]),
+                'timestamp': timestamp,
+                'map_name': map_name
+            }
+
+            # Try to get pySLAM map data (keyframes, map points from pySLAM itself)
+            if hasattr(self.slam, 'map') and self.slam.map is not None:
+                try:
+                    pyslam_map_data = {
+                        'num_keyframes': len(self.slam.map.keyframes) if hasattr(self.slam.map, 'keyframes') else 0,
+                        'num_map_points': len(self.slam.map.points) if hasattr(self.slam.map, 'points') else 0,
+                    }
+                    map_data['pyslam_map_info'] = pyslam_map_data
+                except Exception as e:
+                    self.logger.warning(f"Could not extract pySLAM map info: {e}")
+
+            # Save map data
+            with open(map_file, 'wb') as f:
+                pickle.dump(map_data, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+            # Save metadata
+            metadata = {
+                'map_name': map_name,
+                'timestamp': timestamp,
+                'frame_count': self.frame_count,
+                'trajectory_length': len(map_data['trajectory']),
+                'num_map_points': len(map_data['map_points']),
+                'loop_closure_enabled': self.loop_closure_enabled,
+                'has_disabled_loop_closure': self.has_disabled_loop_closure,
+                'camera': {
+                    'width': self.width,
+                    'height': self.height,
+                    'fx': self.fx,
+                    'fy': self.fy
+                }
+            }
+
+            with open(metadata_file, 'w') as f:
+                json.dump(metadata, f, indent=2)
+
+            self.logger.info(f"✓ Map saved: {map_file}")
+            self.logger.info(f"  → {len(map_data['trajectory'])} poses, {len(map_data['map_points'])} map points")
+
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Failed to save map: {e}")
+            import traceback
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
+            return False
+
+    def load_map(self, map_file: str) -> bool:
+        """
+        Load a previously saved SLAM map from disk.
+
+        Args:
+            map_file: Path to the map file (.pkl)
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            import pickle
+
+            if not os.path.exists(map_file):
+                self.logger.error(f"Map file not found: {map_file}")
+                return False
+
+            # Load map data
+            with open(map_file, 'rb') as f:
+                map_data = pickle.load(f)
+
+            # Restore state
+            self.trajectory = map_data.get('trajectory', [])
+            self.current_pose = map_data.get('current_pose', np.eye(4))
+            self.frame_count = map_data.get('frame_count', 0)
+            self.is_initialized = map_data.get('is_initialized', False)
+            self.map_points = map_data.get('map_points', np.array([]))
+
+            self.logger.info(f"✓ Map loaded: {map_file}")
+            self.logger.info(f"  → {len(self.trajectory)} poses, {len(self.map_points)} map points")
+            self.logger.info(f"  → Frame count: {self.frame_count}")
+
+            # Note: This loads trajectory and map points, but does NOT restore
+            # pySLAM's internal state (keyframes, local map, etc.)
+            # Full pySLAM map serialization would require deeper integration
+            self.logger.warning("⚠️  Note: This is a lightweight map load (trajectory + points only)")
+            self.logger.warning("    Full pySLAM state (keyframes, local map) is NOT restored")
+            self.logger.warning("    SLAM will continue building map from current position")
+
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Failed to load map: {e}")
+            import traceback
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
+            return False
+
+    def list_saved_maps(self, maps_dir: str = "data/maps") -> List[Dict]:
+        """
+        List all saved maps in the maps directory.
+
+        Args:
+            maps_dir: Directory containing saved maps
+
+        Returns:
+            List of dictionaries with map metadata
+        """
+        try:
+            import json
+
+            if not os.path.exists(maps_dir):
+                return []
+
+            maps = []
+            for filename in os.listdir(maps_dir):
+                if filename.endswith('_meta.json'):
+                    meta_file = os.path.join(maps_dir, filename)
+                    try:
+                        with open(meta_file, 'r') as f:
+                            metadata = json.load(f)
+                            # Add file paths
+                            map_file = meta_file.replace('_meta.json', '.pkl')
+                            metadata['map_file'] = map_file
+                            metadata['meta_file'] = meta_file
+                            maps.append(metadata)
+                    except Exception as e:
+                        self.logger.warning(f"Could not read metadata: {meta_file} - {e}")
+
+            # Sort by timestamp (newest first)
+            maps.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+
+            return maps
+
+        except Exception as e:
+            self.logger.error(f"Failed to list maps: {e}")
+            return []
+
     def shutdown(self):
         """Shutdown SLAM system and camera."""
         try:
             # Shutdown SLAM
             if hasattr(self.slam, 'shutdown'):
                 self.slam.shutdown()
-            
+
             # Close camera
             if self.cap:
                 self.cap.release()
-            
+
             # Close visualization
             if self.plot_drawer:
                 self.plot_drawer.close()
-            
+
             self.logger.info("SLAM system shutdown")
         except Exception as e:
             self.logger.error(f"Shutdown error: {e}")

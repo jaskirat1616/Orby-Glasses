@@ -1,0 +1,38 @@
+# Development Dependencies for OrbyGlasses
+# Install with: pip install -r requirements-dev.txt
+
+# Include base requirements
+-r requirements.txt
+
+# Testing
+pytest>=8.0.0
+pytest-cov>=4.1.0  # Coverage reporting
+pytest-xdist>=3.5.0  # Parallel test execution
+pytest-mock>=3.12.0  # Mocking utilities
+
+# Code Quality
+black>=24.0.0  # Code formatting
+isort>=5.13.0  # Import sorting
+flake8>=7.0.0  # Linting
+pylint>=3.0.0  # Advanced linting
+mypy>=1.8.0  # Type checking
+
+# Documentation
+sphinx>=7.2.0  # Documentation generation
+sphinx-rtd-theme>=2.0.0  # ReadTheDocs theme
+myst-parser>=2.0.0  # Markdown support for Sphinx
+
+# Development Tools
+ipython>=8.20.0  # Enhanced REPL
+jupyter>=1.0.0  # Notebooks for experimentation
+pre-commit>=3.6.0  # Git hooks for code quality
+
+# Profiling & Debugging
+line-profiler>=4.1.0  # Line-by-line profiling
+memory-profiler>=0.61.0  # Memory profiling
+py-spy>=0.3.0  # Sampling profiler
+
+# Build & Release
+build>=1.0.0  # PEP 517 build
+twine>=5.0.0  # PyPI uploads
+bump2version>=1.0.0  # Version management

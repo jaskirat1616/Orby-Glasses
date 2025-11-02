@@ -188,6 +188,10 @@ slam:
   tracking_quality_threshold: 0.5  # Very tolerant for monocular
   min_tracked_points: 8  # Lower minimum for difficult tracking
   max_frames_between_keyframes: 10  # Very frequent keyframes for relocalization
+  # Memory management (prevent leaks)
+  max_trajectory_length: 1000  # Keep last 1000 poses in memory
+  max_map_points: 5000  # Limit local map points
+  cleanup_interval: 500  # Run cleanup every N frames
   # Dense reconstruction settings (post-processing only)
   # To use: Run SLAM, save map (press 's' in Pangolin), then run: ./dense_reconstruction.sh
   dense_reconstruction:

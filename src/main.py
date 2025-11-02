@@ -35,24 +35,11 @@ from core.error_handler import ErrorHandler
 
 # New modules
 try:
-    from core.yolo_world_detector import YOLOWorldDetector
-    YOLO_WORLD_AVAILABLE = True
-except ImportError:
-    YOLO_WORLD_AVAILABLE = False
-    print("Note: YOLO-World not available (install CLIP for text-based detection)")
-
-try:
     from core.depth_anything_v2 import DepthAnythingV2
     DEPTH_ANYTHING_V2_AVAILABLE = True
 except ImportError:
     DEPTH_ANYTHING_V2_AVAILABLE = False
     print("Note: Depth Anything V2 not available")
-
-try:
-    from navigation.simple_slam import SimpleSLAM
-    SIMPLE_SLAM_AVAILABLE = True
-except ImportError:
-    SIMPLE_SLAM_AVAILABLE = False
 
 try:
     from visualization.depth_visualizer_2025 import DarkThemeDepthVisualizer
@@ -294,13 +281,6 @@ class OrbyGlasses:
             if self.depth_v2:
                 self.logger.info("✓ Depth estimator linked to SLAM for scale recovery")
 
-        # NEW: Simple SLAM (alternative to full SLAM)
-        use_simple_slam = self.config.get('slam.use_simple', False)
-        if use_simple_slam and SIMPLE_SLAM_AVAILABLE and not self.slam_enabled:
-            self.simple_slam = SimpleSLAM(self.config)
-            self.logger.info("✓ Simple SLAM initialized")
-        else:
-            self.simple_slam = None
 
         # Data logging
         self.data_logger = DataLogger()
@@ -572,9 +552,9 @@ class OrbyGlasses:
             # Generate LLM guidance (always, for display)
             self.perf_monitor.start_timer('narrative')
             if self.vlm_enabled and self.scene_processor:
-                guidance = self._generate_enhanced_guidance(detections, nav_summary, scene_analysis)
+                guidance = self._generate_enhanced_guidance(detections, nav_summary, scene_analysis, slam_result)
             else:
-                guidance = self._generate_fast_guidance(detections, nav_summary)
+                guidance = self._generate_fast_guidance(detections, nav_summary, slam_result)
             narr_time = self.perf_monitor.stop_timer('narrative')
 
             # Generate audio cues
@@ -639,7 +619,7 @@ class OrbyGlasses:
             traceback.print_exc()  # Print the full exception trace
             return None
 
-    def _generate_enhanced_guidance(self, detections: List[Dict], nav_summary: Dict, scene_analysis: Optional[Dict]) -> Dict:
+    def _generate_enhanced_guidance(self, detections: List[Dict], nav_summary: Dict, scene_analysis: Optional[Dict], slam_result: Optional[Dict] = None) -> Dict:
         """
         Generate enhanced guidance using VLM scene understanding with improved extraction.
 
@@ -733,27 +713,45 @@ class OrbyGlasses:
                     }
 
             # Fallback to fast guidance if VLM unavailable
-            return self._generate_fast_guidance(detections, nav_summary)
+            return self._generate_fast_guidance(detections, nav_summary, slam_result)
 
         except Exception as e:
             self.logger.error(f"Enhanced guidance generation error: {e}")
             import traceback
             traceback.print_exc()
-            return self._generate_fast_guidance(detections, nav_summary)
+            return self._generate_fast_guidance(detections, nav_summary, slam_result)
 
-    def _generate_fast_guidance(self, detections: List[Dict], nav_summary: Dict) -> Dict:
+    def _generate_fast_guidance(self, detections: List[Dict], nav_summary: Dict, slam_result: Optional[Dict] = None) -> Dict:
         """
         Generate simple, clear guidance for blind users.
 
         Args:
             detections: List of detected objects
             nav_summary: Navigation summary
+            slam_result: SLAM position and tracking info (optional)
 
         Returns:
             Guidance dictionary with simple messages
         """
         try:
             safe_direction = nav_summary.get('safe_direction', 'forward')
+
+            # SLAM position context (if available)
+            position_info = ""
+            if slam_result and slam_result.get('is_initialized', False):
+                position = slam_result.get('position', [0, 0, 0])
+                # Only announce position if user has moved significantly (>1m from origin)
+                distance_from_start = np.sqrt(position[0]**2 + position[2]**2)  # X-Z plane distance
+                if distance_from_start > 1.0:
+                    # Round to nearest meter for simplicity
+                    x_dist = int(abs(position[0]))
+                    z_dist = int(abs(position[2]))
+                    direction_x = "left" if position[0] < 0 else "right"
+                    direction_z = "forward" if position[2] > 0 else "back"
+
+                    # Only add position context if it's meaningful (not near origin)
+                    if x_dist > 0 or z_dist > 0:
+                        position_info = f" You're {z_dist}m {direction_z}, {x_dist}m {direction_x} from start."
 
             # Immediate danger - very simple
             danger_objects = nav_summary.get('danger_objects', [])
@@ -775,11 +773,13 @@ class OrbyGlasses:
             caution_objects = nav_summary.get('caution_objects', [])
             if caution_objects:
                 closest = min(caution_objects, key=lambda x: x.get('depth') if x.get('depth') is not None else 10)
-                msg = f"{closest['label']} ahead. Slow down"
+                msg = f"{closest['label']} ahead. Slow down{position_info}"
                 return {'narrative': msg, 'predictive': '', 'combined': msg}
 
-            # Clear path
+            # Clear path - add position info if available
             msg = "Path clear"
+            if position_info:
+                msg += "." + position_info
             return {'narrative': msg, 'predictive': '', 'combined': ''}
 
         except Exception as e:
