@@ -684,7 +684,8 @@ class OrbyGlasses:
                 danger_objects = nav_summary.get('danger_objects', [])
                 if danger_objects or has_vlm_danger:
                     if danger_objects:
-                        closest_danger = min(danger_objects, key=lambda x: x.get('depth', 10))
+                        # Find closest danger, handling None depth (treat as 1.0)
+                        closest_danger = min(danger_objects, key=lambda x: x.get('depth') if x.get('depth') is not None else 1.0)
                         depth = closest_danger.get('depth', 0)
 
                         # Handle None depth
@@ -709,7 +710,7 @@ class OrbyGlasses:
                 # Check for caution objects and combine with VLM guidance
                 caution_objects = nav_summary.get('caution_objects', [])
                 if caution_objects:
-                    closest_caution = min(caution_objects, key=lambda x: x.get('depth', 10))
+                    closest_caution = min(caution_objects, key=lambda x: x.get('depth') if x.get('depth') is not None else 10)
                     depth = closest_caution.get('depth', 0)
 
                     if navigation_guidance:
@@ -757,7 +758,7 @@ class OrbyGlasses:
             # Immediate danger - very simple
             danger_objects = nav_summary.get('danger_objects', [])
             if danger_objects:
-                closest = min(danger_objects, key=lambda x: x.get('depth', 10))
+                closest = min(danger_objects, key=lambda x: x.get('depth') if x.get('depth') is not None else 10)
                 label = closest['label']
 
                 # Simple direction
@@ -773,7 +774,7 @@ class OrbyGlasses:
             # Caution - simple warning
             caution_objects = nav_summary.get('caution_objects', [])
             if caution_objects:
-                closest = min(caution_objects, key=lambda x: x.get('depth', 10))
+                closest = min(caution_objects, key=lambda x: x.get('depth') if x.get('depth') is not None else 10)
                 msg = f"{closest['label']} ahead. Slow down"
                 return {'narrative': msg, 'predictive': '', 'combined': msg}
 
@@ -836,7 +837,7 @@ class OrbyGlasses:
         
         # Add closest object info if detections exist
         if detections:
-            closest = min(detections, key=lambda x: x.get('depth', 10))
+            closest = min(detections, key=lambda x: x.get('depth') if x.get('depth') is not None else 10)
             closest_text = Text(f"{closest['label']} {closest['depth']:.1f}m", style="bold")
             
             # Color code based on distance
@@ -1054,7 +1055,7 @@ class OrbyGlasses:
                 # DANGER ZONE - Priority alert (known depth, too close)
                 elif has_danger:
                     if (current_time - self.last_audio_time) > self.danger_audio_interval and not self.audio_manager.is_speaking:
-                        closest_danger = min(danger_objects, key=lambda x: x.get('depth', 10))
+                        closest_danger = min(danger_objects, key=lambda x: x.get('depth') if x.get('depth') is not None else 10)
                         depth = closest_danger.get('depth', 0)
 
                         # Use relatable distance terms with specific actions
@@ -1108,7 +1109,7 @@ class OrbyGlasses:
                 # Fallback to simple message - ALWAYS provide audio feedback
                 if len(detections) > 0 and (current_time - self.last_audio_time) > self.audio_interval and not self.audio_manager.is_speaking:
                     # Get closest object overall
-                    closest = min(detections, key=lambda x: x.get('depth', 10))
+                    closest = min(detections, key=lambda x: x.get('depth') if x.get('depth') is not None else 10)
                     label = closest.get('label', 'object')
                     depth = closest.get('depth', 5.0)
                     center = closest.get('center', [160, 160])
