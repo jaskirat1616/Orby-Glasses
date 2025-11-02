@@ -185,19 +185,20 @@ class LivePySLAM:
             # Create camera - PinholeCamera should be available from imports
             self.camera = PinholeCamera(camera_config)
 
-            # Create feature tracker config - use ORB2 (ORB-SLAM2 optimized detector/descriptor)
-            # Same as main_slam.py for best accuracy
-            feature_tracker_config = FeatureTrackerConfigs.ORB2.copy()
+            # Create feature tracker config - use ORB (ORB2 C++ not built)
+            # ORB2 requires building orbslam2_features C++ extension
+            feature_tracker_config = FeatureTrackerConfigs.ORB.copy()
             feature_tracker_config["num_features"] = self.config.get('slam.orb_features', 1000)
             
-            # Note: ORB2 config already has num_levels=8 and scale_factor=1.2 as defaults
-            # Override if needed from config (though defaults are optimal)
+            # Balanced pyramid levels for efficient detection
+            feature_tracker_config["num_levels"] = 8  # Standard levels
+            feature_tracker_config["scale_factor"] = 1.2  # Standard scale
 
-            self.logger.info(f"📊 ORB2 configured for optimal accuracy:")
+            self.logger.info(f"📊 ORB configured for optimal performance:")
             self.logger.info(f"   • {feature_tracker_config['num_features']} features target")
             self.logger.info(f"   • {feature_tracker_config['num_levels']} pyramid levels")
             self.logger.info(f"   • Scale factor: {feature_tracker_config['scale_factor']}")
-            self.logger.info(f"   → Using ORB-SLAM2 optimized detector/descriptor (best accuracy)")
+            self.logger.info(f"   → Using OpenCV ORB detector/descriptor")
 
             # Relocalization parameters - AGGRESSIVE tuning for real-world success
             # Research shows ORB-SLAM uses min 10 inliers, we're being even more lenient
