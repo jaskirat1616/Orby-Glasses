@@ -158,7 +158,7 @@ performance:
   audio_update_interval: 1.5
   cache_depth_maps: true
   danger_audio_interval: 0.4
-  depth_skip_frames: 1
+  depth_skip_frames: 3  # Skip 3 frames = run depth every 4th frame (75% faster when SLAM enabled)
   enable_multithreading: true
   frame_skip: 0
   max_detections: 5
@@ -183,7 +183,7 @@ safety:
 slam:
   enabled: true
   feature_type: ORB
-  orb_features: 5000  # Increased for better relocalization
+  orb_features: 2000  # Balanced for real-time performance with depth model
   loop_closure: false  # Disabled due to pyibow installation issue
   use_pyslam: true
   use_rerun: false  # Disabled for 20-30% performance boost
