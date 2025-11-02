@@ -200,6 +200,17 @@ slam:
     extract_mesh: true  # true = mesh, false = point cloud
     voxel_length: 0.015  # meters - smaller = more detail
     depth_trunc: 4.0  # meters - max depth for indoor scenes
+stair_detection:
+  enabled: true  # Critical safety feature - detect stairs and curbs
+  min_drop_height: 0.15  # Minimum drop to detect (meters) - 15cm
+  stair_height_range: [0.15, 0.25]  # Typical stair height range (meters)
+  detection_distance: 2.5  # Detect hazards up to this distance (meters)
+  ground_roi_bottom: 0.7  # Bottom of ground ROI (fraction of frame height)
+  ground_roi_top: 0.4  # Top of ground ROI (fraction of frame height)
+  gradient_threshold: 0.3  # Depth gradient threshold (meters/meter)
+  edge_confidence: 0.6  # Minimum confidence for edge detection (0-1)
+  warning_distance_danger: 1.0  # Distance for danger warning (meters)
+  warning_distance_caution: 2.0  # Distance for caution warning (meters)
 social_navigation:
   enabled: true
   region: us

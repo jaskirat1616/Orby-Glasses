@@ -32,6 +32,7 @@ from core.echolocation import AudioCueGenerator
 from core.narrative import ContextualAssistant
 from core.smart_cache import SmartCache, PredictiveEngine
 from core.error_handler import ErrorHandler
+from core.stair_detection import StairCurbDetector
 
 # New modules
 try:
@@ -132,7 +133,16 @@ class OrbyGlasses:
         self.audio_cue_generator = AudioCueGenerator(self.config)
         self.contextual_assistant = ContextualAssistant(self.config)
         self.path_planner = PathPlanner(self.config)
-        
+
+        # Stair and curb detection (critical safety feature)
+        self.stair_detection_enabled = self.config.get('stair_detection.enabled', True)
+        if self.stair_detection_enabled:
+            self.stair_detector = StairCurbDetector(self.config)
+            self.logger.info("✓ Stair/curb detection enabled (critical safety feature)")
+        else:
+            self.stair_detector = None
+            self.logger.warning("⚠️  Stair/curb detection DISABLED - falls risk increased!")
+
         # Enhanced scene understanding with VLM
         self.vlm_enabled = self.config.get('models.llm.vlm_enabled', True)
         if self.vlm_enabled:
@@ -452,6 +462,20 @@ class OrbyGlasses:
                     detection['depth'] = None  # Unknown distance
                     detection['depth_uncertain'] = True  # Flag for audio warnings
                     detection['is_danger'] = True  # ASSUME DANGER when distance unknown (safety first)
+
+            # CRITICAL: Stair and curb detection (prevent falls)
+            stair_result = None
+            if self.stair_detection_enabled and self.stair_detector and depth_map is not None:
+                self.perf_monitor.start_timer('stair_detection')
+                stair_result = self.stair_detector.detect(depth_map, frame)
+                stair_time = self.perf_monitor.stop_timer('stair_detection')
+
+                # Log stair detections
+                if stair_result.get('drop_detected', False):
+                    hazard_type = stair_result.get('hazard_type', 'unknown')
+                    distance = stair_result.get('distance_to_hazard', 'unknown')
+                    confidence = stair_result.get('confidence', 0.0)
+                    self.logger.warning(f"⚠️  HAZARD DETECTED: {hazard_type} at {distance}m (confidence: {confidence:.1%})")
 
             # Predict object motion and collision risks
             detections = self.smart_cache.predict_object_motion(detections)
@@ -1020,6 +1044,34 @@ class OrbyGlasses:
                         self.conversation_manager.handle_conversation_interaction(scene_context)
 
                 # Smart Audio System - Priority-based alerts
+
+                # HIGHEST PRIORITY: Stair/curb detection warnings (prevent falls)
+                if stair_result and stair_result.get('drop_detected', False):
+                    warning_level = stair_result.get('warning_level', 'safe')
+                    hazard_type = stair_result.get('hazard_type', 'hazard')
+                    distance = stair_result.get('distance_to_hazard')
+
+                    if warning_level in ['danger', 'caution']:
+                        if (current_time - self.last_audio_time) > 0.3 and not self.audio_manager.is_speaking:
+                            # Immediate, urgent warning for stairs/curbs
+                            if hazard_type == 'stair_down':
+                                msg = f"STOP! Stairs going down ahead!"
+                            elif hazard_type == 'stair_up':
+                                msg = f"Stairs going up ahead. Use handrail."
+                            elif hazard_type == 'curb':
+                                msg = f"STOP! Curb ahead!"
+                            elif hazard_type == 'drop':
+                                msg = f"STOP! Drop detected ahead!"
+                            else:
+                                msg = f"STOP! {hazard_type.replace('_', ' ')} ahead!"
+
+                            if distance is not None:
+                                msg += f" {distance:.1f} meters."
+
+                            self.logger.error(f"🚨 FALL HAZARD: \"{msg}\"")
+                            self.audio_manager.speak(msg, priority=True)
+                            self.last_audio_time = current_time
+
                 # Check for uncertain depth objects (no depth measurement available)
                 uncertain_objects = [d for d in detections if d.get('depth_uncertain', False)]
                 has_uncertain_depth = len(uncertain_objects) > 0
