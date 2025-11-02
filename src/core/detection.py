@@ -426,19 +426,40 @@ class DetectionPipeline:
         """
         self.config = config
 
+        # Get device from config and verify GPU availability
+        device = config.get('models.yolo.device', 'mps')
+        
+        # Verify GPU is available if MPS requested
+        if device == 'mps' and not torch.backends.mps.is_available():
+            logging.warning("⚠️ MPS requested but not available, falling back to CPU")
+            device = 'cpu'
+        elif device == 'cuda' and not torch.cuda.is_available():
+            logging.warning("⚠️ CUDA requested but not available, falling back to CPU")
+            device = 'cpu'
+        
+        if device in ['mps', 'cuda']:
+            logging.info(f"✅ GPU acceleration enabled: {device.upper()}")
+        
         # Initialize YOLOv11 detector
         self.detector = ObjectDetector(
             model_path=config.get('models.yolo.path', 'models/yolo/yolo11n.pt'),
             confidence=config.get('models.yolo.confidence', 0.6),
             iou_threshold=config.get('models.yolo.iou_threshold', 0.45),
-            device=config.get('models.yolo.device', 'mps')
+            device=device
         )
 
+        # Use same verified device for depth model (ensure consistency)
+        depth_device = config.get('models.depth.device', device)
+        if depth_device == 'mps' and not torch.backends.mps.is_available():
+            depth_device = 'cpu'
+        elif depth_device == 'cuda' and not torch.cuda.is_available():
+            depth_device = 'cpu'
+        
         # Initialize Depth Anything V2 estimator for object depth (always needed)
         # pySLAM provides camera pose, but we need depth estimator for object distances
         self.depth_estimator = DepthEstimator(
             model_path=config.get('models.depth.path', 'depth-anything/Depth-Anything-V2-Small-hf'),
-            device=config.get('models.depth.device', 'mps'),
+            device=depth_device,
             max_resolution=config.get('models.depth.max_resolution', 384)
         )
 
