@@ -241,6 +241,10 @@ class PredictiveEngine:
             depth = det.get('depth', 10.0)
             center = det.get('center', [160, 160])
 
+            # Handle uncertain depth (None) - treat as close/dangerous
+            if depth is None or det.get('depth_uncertain', False):
+                depth = 1.0  # Assume close when uncertain (safety first)
+
             # Predict future position
             speed = np.linalg.norm(velocity)
 
@@ -301,6 +305,10 @@ class PredictiveEngine:
             center_x = det.get('center', [frame_width/2, 0])[0]
             depth = det.get('depth', 10.0)
             collision_risk = det.get('collision_risk', 0.0)
+
+            # Handle uncertain depth (None) - treat as close/dangerous
+            if depth is None or det.get('depth_uncertain', False):
+                depth = 1.0  # Assume close when uncertain (safety first)
 
             # Weight by inverse distance (closer = higher risk)
             risk_weight = 1.0 / max(depth, 0.5)

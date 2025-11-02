@@ -805,9 +805,9 @@ class OrbyGlasses:
         else:
             fps_text = Text(f"FPS: {fps:.1f}", style="bold red")
         
-        # Danger/Caution counts
-        danger_objects = [d for d in detections if d.get('depth', 10) < self.danger_distance]
-        caution_objects = [d for d in detections if self.danger_distance <= d.get('depth', 10) < self.caution_distance]
+        # Danger/Caution counts (handle None depth)
+        danger_objects = [d for d in detections if d.get('depth') is not None and d.get('depth', 10) < self.danger_distance]
+        caution_objects = [d for d in detections if d.get('depth') is not None and self.danger_distance <= d.get('depth', 10) < self.caution_distance]
         
         # Status indicator
         if danger_objects:
@@ -1134,7 +1134,8 @@ class OrbyGlasses:
                     # Look for additional nearby objects
                     additional = []
                     for det in detections[1:3]:  # Check next 2 objects
-                        if det.get('depth', 10) < 2.5:
+                        depth = det.get('depth', 10)
+                        if depth is not None and depth < 2.5:
                             det_center = det.get('center', [160, 160])
                             if det_center[0] < 106:
                                 det_pos = "left"

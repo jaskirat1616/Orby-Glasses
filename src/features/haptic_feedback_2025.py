@@ -431,7 +431,13 @@ class HapticFeedbackController:
             angle_norm = center_x  # 0 (left) to 1 (right)
             angle_deg = (angle_norm - 0.5) * 180  # -90 to +90
             bin_idx = int((angle_deg + 90) / 10) % 18
-            histogram[bin_idx] += 1.0 / max(det['depth'], 0.5)
+
+            # Handle uncertain depth (None)
+            depth = det.get('depth', 1.0)
+            if depth is None or det.get('depth_uncertain', False):
+                depth = 1.0  # Assume close when uncertain
+
+            histogram[bin_idx] += 1.0 / max(depth, 0.5)
 
         # Find direction with minimum obstacles
         safe_bin = np.argmin(histogram)
