@@ -14,7 +14,11 @@ Everything runs on your computer - no internet needed.
 ## Quick Start
 
 ```bash
+# Full version (with indoor tracking)
 ./run_orby.sh
+
+# Simple version (if crashes occur)
+./run_simple.sh
 ```
 
 Press `q` or spacebar to stop.

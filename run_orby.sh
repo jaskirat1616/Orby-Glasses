@@ -70,5 +70,22 @@ echo -e "${GREEN}🎯 Launching OrbyGlasses...${NC}"
 echo -e "${BLUE}════════════════════════════════════════════════════════${NC}"
 echo ""
 
-# Run OrbyGlasses
+# Run OrbyGlasses with error handling
+set +e  # Don't exit on error
 python3 src/main.py "$@"
+EXIT_CODE=$?
+
+# Handle different exit codes
+if [ $EXIT_CODE -eq 138 ]; then
+    echo -e "\n${YELLOW}⚠️  System stopped by user (Ctrl+C)${NC}"
+elif [ $EXIT_CODE -eq 139 ] || [ $EXIT_CODE -eq 10 ]; then
+    echo -e "\n${RED}❌ Crash detected (Bus error/Segmentation fault)${NC}"
+    echo -e "${YELLOW}   This is usually caused by SLAM relocalization.${NC}"
+    echo -e "${YELLOW}   Try disabling loop_closure in config/config.yaml:${NC}"
+    echo -e "${GREEN}   slam:${NC}"
+    echo -e "${GREEN}     loop_closure: false${NC}"
+elif [ $EXIT_CODE -ne 0 ]; then
+    echo -e "\n${RED}❌ OrbyGlasses exited with error code: $EXIT_CODE${NC}"
+fi
+
+exit $EXIT_CODE

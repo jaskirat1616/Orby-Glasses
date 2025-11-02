@@ -180,8 +180,8 @@ safety:
 slam:
   enabled: true
   feature_type: ORB
-  orb_features: 5000  # Increased to prevent tracking loss
-  loop_closure: true  # Enabled - required for relocalization when tracking is lost
+  orb_features: 3000  # Reduced to prevent crashes
+  loop_closure: false  # Disabled - causes Bus error crashes
   use_pyslam: true
   use_rerun: false  # Disabled for 20-30% performance boost
   # Tracking optimizations for stable performance
