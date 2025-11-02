@@ -185,20 +185,19 @@ class LivePySLAM:
             # Create camera - PinholeCamera should be available from imports
             self.camera = PinholeCamera(camera_config)
 
-            # Create feature tracker config - use ORB (OpenCV) instead of ORB2 (ORB-SLAM2)
-            # Optimized for speed + accuracy balance
-            feature_tracker_config = FeatureTrackerConfigs.ORB.copy()
-            feature_tracker_config["num_features"] = self.config.get('slam.orb_features', 1300)
+            # Create feature tracker config - use ORB2 (ORB-SLAM2 optimized detector/descriptor)
+            # Same as main_slam.py for best accuracy
+            feature_tracker_config = FeatureTrackerConfigs.ORB2.copy()
+            feature_tracker_config["num_features"] = self.config.get('slam.orb_features', 1000)
+            
+            # Note: ORB2 config already has num_levels=8 and scale_factor=1.2 as defaults
+            # Override if needed from config (though defaults are optimal)
 
-            # Balanced pyramid levels for efficient detection
-            feature_tracker_config["num_levels"] = 8  # Standard levels (12 too many)
-            feature_tracker_config["scale_factor"] = 1.2  # Standard scale (1.1 too fine = too many features)
-
-            self.logger.info(f"📊 ORB configured for optimal speed/accuracy:")
+            self.logger.info(f"📊 ORB2 configured for optimal accuracy:")
             self.logger.info(f"   • {feature_tracker_config['num_features']} features target")
-            self.logger.info(f"   • {feature_tracker_config['num_levels']} pyramid levels (balanced)")
-            self.logger.info(f"   • Scale factor: {feature_tracker_config['scale_factor']} (balanced)")
-            self.logger.info(f"   → Should detect ~{feature_tracker_config['num_features']} features (fast + accurate)")
+            self.logger.info(f"   • {feature_tracker_config['num_levels']} pyramid levels")
+            self.logger.info(f"   • Scale factor: {feature_tracker_config['scale_factor']}")
+            self.logger.info(f"   → Using ORB-SLAM2 optimized detector/descriptor (best accuracy)")
 
             # Relocalization parameters - AGGRESSIVE tuning for real-world success
             # Research shows ORB-SLAM uses min 10 inliers, we're being even more lenient
@@ -210,39 +209,28 @@ class LivePySLAM:
             Parameters.kRelocalizationMaxReprojectionDistanceMapSearchCoarse = 15  # Increased from 10 pixels
             Parameters.kRelocalizationMaxReprojectionDistanceMapSearchFine = 5  # Increased from 3 pixels
 
-            # SUPER ACCURATE AND FAST SLAM PARAMETERS
-            # Triangulation parameters - balance between accuracy and tolerance
-            Parameters.kMinRatioBaselineDepth = 0.001  # Very tolerant for slow movement
+            # Optimize parameters for real-time performance (matching main_slam.py defaults)
+            # Use main_slam.py defaults for stability - no custom tuning needed
             
-            # Parallax - stricter for accuracy, but keep init tolerant
-            Parameters.kCosMaxParallaxInitializer = 0.9998  # Tolerant for initialization
-            Parameters.kCosMaxParallax = 0.9998  # Keep same for stability
+            # Keep defaults from config_parameters.py:
+            # - kNumFeatures: 2000 (default, we override with config)
+            # - kMinRatioBaselineDepth: 0.01 (default, very reasonable)
+            # - kCosMaxParallax: 0.9998 (default)
+            # - kCosMaxParallaxInitializer: 0.99998 (default, stricter)
+            # - kFeatureMatchDefaultRatioTest: 0.7 (default)
+            # - kMaxOutliersRatioInPoseOptimization: 0.9 (default)
+            # - kMinNumMatchedFeaturesSearchFrameByProjection: 20 (default)
+            # - kMaxNumOfKeyframesInLocalMap: 80 (default)
+            # - kNumBestCovisibilityKeyFrames: 10 (default)
             
-            # Feature matching - tighter for better accuracy (fewer false matches)
-            Parameters.kFeatureMatchDefaultRatioTest = 0.75  # Slightly stricter (0.7 default)
-            Parameters.kMaxReprojectionDistanceFrame = 6  # Tighter (7 default) - faster + accurate
-            Parameters.kMaxReprojectionDistanceMap = 2.5  # Tighter (3 default) - reject bad matches
-            
-            # Bundle Adjustment - optimized for speed + accuracy
-            Parameters.kLocalBAWindow = 12  # Smaller window for faster convergence (20 default)
+            # Disable large BA for real-time performance
             Parameters.kUseLargeWindowBA = False  # Disable large BA for real-time
             
-            # Keyframe management - efficient selection
-            Parameters.kNumMinPointsForNewKf = 20  # More points needed (15 default) - fewer KFs = faster
-            Parameters.kThNewKfRefRatioMonocular = 0.85  # Lower threshold = more keyframes (0.9 default)
-            Parameters.kMaxNumOfKeyframesInLocalMap = 60  # Smaller map (80 default) - faster BA
-            Parameters.kNumBestCovisibilityKeyFrames = 12  # Slightly more (10 default) for accuracy
-            
-            # Pose optimization - tighter filtering
-            Parameters.kMaxOutliersRatioInPoseOptimization = 0.75  # Tighter (0.9 default) - reject outliers
-            Parameters.kMinNumMatchedFeaturesSearchFrameByProjection = 25  # More matches (20 default) - accuracy
-            
-            self.logger.info("🎯 ACCURATE & FAST SLAM MODE:")
-            self.logger.info(f"   • Min ratio baseline/depth: {Parameters.kMinRatioBaselineDepth}")
-            self.logger.info(f"   • Local BA window: {Parameters.kLocalBAWindow} frames (reduced)")
-            self.logger.info(f"   • Tighter reprojection: {Parameters.kMaxReprojectionDistanceFrame}px")
-            self.logger.info(f"   • Keyframes in map: {Parameters.kMaxNumOfKeyframesInLocalMap}")
-            self.logger.info("   → Optimized for both accuracy and speed!")
+            self.logger.info("🎯 REAL-TIME SLAM MODE:")
+            self.logger.info(f"   • Using main_slam.py default parameters for stability")
+            self.logger.info(f"   • ORB2 detector/descriptor (ORB-SLAM2 optimized)")
+            self.logger.info(f"   • Large BA disabled for real-time")
+            self.logger.info("   → Optimized for stability and speed!")
 
             self.logger.info("🔧 Relocalization tuned for real-world conditions:")
             self.logger.info(f"   • Min matches to attempt: {Parameters.kRelocalizationMinKpsMatches}")
