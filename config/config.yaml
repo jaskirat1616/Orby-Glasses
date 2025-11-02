@@ -181,7 +181,7 @@ slam:
   enabled: true
   feature_type: ORB
   orb_features: 3000  # Reduced to prevent crashes
-  loop_closure: false  # Disabled - causes Bus error crashes
+  loop_closure: true  # Using iBoW (stable, no crashes)
   use_pyslam: true
   use_rerun: false  # Disabled for 20-30% performance boost
   # Tracking optimizations for stable performance

@@ -194,23 +194,24 @@ class LivePySLAM:
             self.logger.info(f"   • Success threshold: {Parameters.kRelocalizationDoPoseOpt2NumInliers} inliers")
             self.logger.info(f"   • Coarse search window: {Parameters.kRelocalizationMaxReprojectionDistanceMapSearchCoarse}px")
 
-            # Loop closure detection - Check if pydbow3 is actually available
+            # Loop closure detection - Use iBoW (incremental Bag of Words)
+            # iBoW doesn't require pre-built vocabulary and is more stable than DBOW3
             loop_detection_config = None
             if self.config.get('slam.loop_closure', False):
                 try:
-                    # Use DBOW3 (Discriminative Bag of Words) - reliable and well-tested
                     from pyslam.loop_closing.loop_detector_configs import LoopDetectorConfigs
-                    import pydbow3
-                    loop_detection_config = LoopDetectorConfigs.DBOW3
-                    self.logger.info("✓ Loop closure enabled with DBOW3")
-                except ImportError:
-                    self.logger.warning("⚠️  Loop closure DISABLED - loop detector not available")
+                    # Use iBoW - incremental vocabulary building, no crashes
+                    loop_detection_config = LoopDetectorConfigs.IBOW
+                    self.logger.info("✓ Loop closure enabled with iBoW (incremental Bag of Words)")
+                    self.logger.info("  → Can relocalize if tracking is lost")
+                except Exception as e:
+                    self.logger.warning(f"⚠️  Loop closure DISABLED - {e}")
                     self.logger.warning("   → Cannot relocalize if tracking is lost!")
                     self.logger.warning("   → MUST keep camera on textured surfaces")
                     self.logger.warning("   → If tracking lost, restart required")
                     loop_detection_config = None
             else:
-                self.logger.info("⚠️  Loop closure disabled")
+                self.logger.info("⚠️  Loop closure disabled in config")
                 self.logger.info("   → If tracking lost, cannot recover (restart required)")
                 self.logger.info("   → Keep camera pointed at textured surfaces!")
 
