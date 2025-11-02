@@ -512,7 +512,7 @@ class AudioCueGenerator:
 
         # Generate voice message
         danger_objects = [d for d in detections if d.get('is_danger', False)]
-        caution_objects = [d for d in detections if d.get('depth', 10) < 3.0 and not d.get('is_danger', False)]
+        caution_objects = [d for d in detections if d.get('depth') is not None and d.get('depth') < 3.0 and not d.get('is_danger', False)]
 
         if len(danger_objects) > 0:
             closest = min(danger_objects, key=lambda x: x.get('depth', 10))

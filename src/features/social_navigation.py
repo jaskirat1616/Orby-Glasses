@@ -129,9 +129,9 @@ class SocialNavigationAI:
         if len(people_detections) == 0:
             return 'sparse'
         
-        # Count people in different distance ranges
-        close_people = [p for p in people_detections if p.get('depth', 10) < 1.5]
-        medium_people = [p for p in people_detections if 1.5 <= p.get('depth', 10) < 3.0]
+        # Count people in different distance ranges (handle None depth)
+        close_people = [p for p in people_detections if p.get('depth') is not None and p.get('depth') < 1.5]
+        medium_people = [p for p in people_detections if p.get('depth') is not None and 1.5 <= p.get('depth') < 3.0]
         
         if len(close_people) >= 3 or len(people_detections) >= 5:
             return 'dense'
@@ -274,12 +274,13 @@ class SocialNavigationAI:
         
         # Additional context about people behavior
         if people_detections:
-            closest_person = min(people_detections, key=lambda x: x.get('depth', float('inf')))
-            if closest_person.get('depth', 10) < 1.5:
-                advice_parts.append(f"Person {closest_person['depth']:.1f}m ahead.")
-                
+            closest_person = min(people_detections, key=lambda x: x.get('depth') if x.get('depth') is not None else float('inf'))
+            closest_depth = closest_person.get('depth')
+            if closest_depth is not None and closest_depth < 1.5:
+                advice_parts.append(f"Person {closest_depth:.1f}m ahead.")
+
                 # If people are yielding space
-                if len(people_detections) == 1 and closest_person.get('depth', 10) > 1.0:
+                if len(people_detections) == 1 and closest_depth > 1.0:
                     advice_parts.append("Person appears to be yielding space, safe to proceed.")
         
         return " ".join(advice_parts)
