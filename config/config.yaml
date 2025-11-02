@@ -183,18 +183,18 @@ safety:
 slam:
   enabled: true
   feature_type: ORB
-  orb_features: 2000  # Balanced for real-time performance with depth model
-  loop_closure: false  # Disabled due to pyibow installation issue
+  orb_features: 1300  # Optimized for speed + accuracy balance
+  loop_closure: true  # Enabled for drift correction
   use_pyslam: true
   use_rerun: false  # Disabled for 20-30% performance boost
   # Tracking optimizations for stable performance
-  tracking_quality_threshold: 0.5  # Very tolerant for monocular
-  min_tracked_points: 8  # Lower minimum for difficult tracking
-  max_frames_between_keyframes: 10  # Very frequent keyframes for relocalization
+  tracking_quality_threshold: 0.6  # Balanced tolerance
+  min_tracked_points: 10  # Balanced minimum
+  max_frames_between_keyframes: 15  # Efficient keyframe selection
   # Memory management (prevent leaks)
-  max_trajectory_length: 1000  # Keep last 1000 poses in memory
-  max_map_points: 5000  # Limit local map points
-  cleanup_interval: 500  # Run cleanup every N frames
+  max_trajectory_length: 500  # Reduced for speed (1000 default)
+  max_map_points: 3000  # Reduced for faster BA (5000 default)
+  cleanup_interval: 300  # More frequent cleanup (500 default)
   # Dense reconstruction settings (post-processing only)
   # To use: Run SLAM, save map (press 's' in Pangolin), then run: ./dense_reconstruction.sh
   dense_reconstruction:

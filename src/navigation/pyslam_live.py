@@ -210,40 +210,39 @@ class LivePySLAM:
             Parameters.kRelocalizationMaxReprojectionDistanceMapSearchCoarse = 15  # Increased from 10 pixels
             Parameters.kRelocalizationMaxReprojectionDistanceMapSearchFine = 5  # Increased from 3 pixels
 
-            # SUPER ACCURATE SLAM PARAMETERS FOR HIGH PRECISION TRACKING
+            # SUPER ACCURATE AND FAST SLAM PARAMETERS
             # Triangulation parameters - balance between accuracy and tolerance
             Parameters.kMinRatioBaselineDepth = 0.001  # Very tolerant for slow movement
-            # Note: Keep kCosMaxParallax at default 0.9998 for initialization
-            # Then use stricter 0.998 for ongoing tracking
-            Parameters.kCosMaxParallaxInitializer = 0.9998  # Default for initialization (0.89 deg parallax)
-            Parameters.kCosMaxParallax = 0.9998  # Keep same as initializer for stability (original: 0.9998)
             
-            # Feature matching - use defaults for initialization stability
-            # Will use stricter values post-initialization in future optimization
-            Parameters.kFeatureMatchDefaultRatioTest = 0.7  # Default value for stability
-            Parameters.kMaxReprojectionDistanceFrame = 7  # Default value for initialization
-            Parameters.kMaxReprojectionDistanceMap = 3  # Default value for initialization
+            # Parallax - stricter for accuracy, but keep init tolerant
+            Parameters.kCosMaxParallaxInitializer = 0.9998  # Tolerant for initialization
+            Parameters.kCosMaxParallax = 0.9998  # Keep same for stability
             
-            # Bundle Adjustment - enable for higher accuracy
-            Parameters.kLocalBAWindow = 15  # Smaller window for faster convergence (20 default)
+            # Feature matching - tighter for better accuracy (fewer false matches)
+            Parameters.kFeatureMatchDefaultRatioTest = 0.75  # Slightly stricter (0.7 default)
+            Parameters.kMaxReprojectionDistanceFrame = 6  # Tighter (7 default) - faster + accurate
+            Parameters.kMaxReprojectionDistanceMap = 2.5  # Tighter (3 default) - reject bad matches
+            
+            # Bundle Adjustment - optimized for speed + accuracy
+            Parameters.kLocalBAWindow = 12  # Smaller window for faster convergence (20 default)
             Parameters.kUseLargeWindowBA = False  # Disable large BA for real-time
             
-            # Keyframe management - balanced for initialization stability
-            Parameters.kNumMinPointsForNewKf = 15  # Default value for initialization stability
-            Parameters.kThNewKfRefRatioMonocular = 0.9  # Default value for initialization
-            Parameters.kMaxNumOfKeyframesInLocalMap = 100  # More keyframes in map (80 default) - OK post-init
-            Parameters.kNumBestCovisibilityKeyFrames = 15  # More covisibility (10 default) - OK post-init
+            # Keyframe management - efficient selection
+            Parameters.kNumMinPointsForNewKf = 20  # More points needed (15 default) - fewer KFs = faster
+            Parameters.kThNewKfRefRatioMonocular = 0.85  # Lower threshold = more keyframes (0.9 default)
+            Parameters.kMaxNumOfKeyframesInLocalMap = 60  # Smaller map (80 default) - faster BA
+            Parameters.kNumBestCovisibilityKeyFrames = 12  # Slightly more (10 default) for accuracy
             
-            # Pose optimization - use defaults for initialization
-            Parameters.kMaxOutliersRatioInPoseOptimization = 0.9  # Default value for initialization
-            Parameters.kMinNumMatchedFeaturesSearchFrameByProjection = 20  # Default value for initialization
+            # Pose optimization - tighter filtering
+            Parameters.kMaxOutliersRatioInPoseOptimization = 0.75  # Tighter (0.9 default) - reject outliers
+            Parameters.kMinNumMatchedFeaturesSearchFrameByProjection = 25  # More matches (20 default) - accuracy
             
-            self.logger.info("🎯 BALANCED SLAM MODE ENABLED:")
+            self.logger.info("🎯 ACCURATE & FAST SLAM MODE:")
             self.logger.info(f"   • Min ratio baseline/depth: {Parameters.kMinRatioBaselineDepth}")
-            self.logger.info(f"   • Local BA window: {Parameters.kLocalBAWindow} frames")
-            self.logger.info(f"   • More keyframes in map: {Parameters.kMaxNumOfKeyframesInLocalMap}")
-            self.logger.info(f"   • More covisible keyframes: {Parameters.kNumBestCovisibilityKeyFrames}")
-            self.logger.info("   → Balanced settings for stable initialization and good tracking!")
+            self.logger.info(f"   • Local BA window: {Parameters.kLocalBAWindow} frames (reduced)")
+            self.logger.info(f"   • Tighter reprojection: {Parameters.kMaxReprojectionDistanceFrame}px")
+            self.logger.info(f"   • Keyframes in map: {Parameters.kMaxNumOfKeyframesInLocalMap}")
+            self.logger.info("   → Optimized for both accuracy and speed!")
 
             self.logger.info("🔧 Relocalization tuned for real-world conditions:")
             self.logger.info(f"   • Min matches to attempt: {Parameters.kRelocalizationMinKpsMatches}")
