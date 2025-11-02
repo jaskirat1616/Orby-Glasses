@@ -144,7 +144,11 @@ class VisionLanguageModel:
         current_time = time.time()
 
         # Check for danger objects - force more frequent analysis if danger present
-        has_danger = any(d.get('depth', 10) < 1.5 for d in detections)
+        # Handle None depth values
+        has_danger = any(
+            d.get('depth') is not None and d.get('depth', 10) < 1.5
+            for d in detections
+        )
         active_interval = self.danger_analysis_interval if has_danger else self.analysis_interval
 
         # Check if we should analyze this frame
@@ -267,6 +271,10 @@ Be specific and actionable. Focus on navigation, not description."""
             confidence = det.get('confidence', 0.0)
             depth = det.get('depth', 0.0)
 
+            # Handle None depth
+            if depth is None or det.get('depth_uncertain', False):
+                depth = 0.0  # Will show as "unknown" in context
+
             # ACCURACY IMPROVEMENT: Add spatial position context
             bbox = det.get('bbox', [0, 0, 0, 0])
             center = det.get('center', [(bbox[0] + bbox[2])/2, (bbox[1] + bbox[3])/2])
@@ -348,13 +356,19 @@ Be specific and actionable. Focus on navigation, not description."""
             'confidence': 0.3
         }
         
-        # Basic analysis from detections
+        # Basic analysis from detections (handle None depth)
         if detections:
-            danger_objects = [d for d in detections if d.get('depth', 10) < 1.5]
+            danger_objects = [
+                d for d in detections
+                if d.get('depth') is not None and d.get('depth', 10) < 1.5
+            ]
             if danger_objects:
                 analysis['hazards'].append(f"{len(danger_objects)} objects in danger zone")
-            
-            safe_objects = [d for d in detections if d.get('depth', 10) > 3.0]
+
+            safe_objects = [
+                d for d in detections
+                if d.get('depth') is not None and d.get('depth', 10) > 3.0
+            ]
             if safe_objects:
                 analysis['safe_areas'].append(f"{len(safe_objects)} objects at safe distance")
         
