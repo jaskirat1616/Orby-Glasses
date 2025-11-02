@@ -106,6 +106,7 @@ class LivePySLAM:
         # Suppress excessive pySLAM INFO logs (loop closing, relocalization)
         logging.getLogger('loop_closing_logger').setLevel(logging.WARNING)
         logging.getLogger('relocalization_logger').setLevel(logging.WARNING)
+        logging.getLogger('tracking').setLevel(logging.ERROR)  # Suppress loop closure warnings
         
         # Camera parameters
         self.width = config.get('camera.width', 640)
