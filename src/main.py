@@ -26,7 +26,8 @@ try:
     from rich.table import Table
     from rich.text import Text
     from rich.panel import Panel
-    from rich import box as ROUNDED
+    from rich import box
+    ROUNDED = box.ROUNDED
     RICH_AVAILABLE = True
 except ImportError:
     RICH_AVAILABLE = False

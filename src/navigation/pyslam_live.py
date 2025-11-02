@@ -108,6 +108,9 @@ class LivePySLAM:
         logging.getLogger('relocalization_logger').setLevel(logging.WARNING)
         logging.getLogger('tracking').setLevel(logging.ERROR)  # Suppress loop closure warnings
         
+        # Suppress local_mapping verbose logs for performance
+        logging.getLogger('local_mapping_logger').setLevel(logging.WARNING)  # Disable INFO logs from local mapping
+        
         # Camera parameters
         self.width = config.get('camera.width', 640)
         self.height = config.get('camera.height', 480)
