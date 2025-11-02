@@ -286,15 +286,20 @@ class LivePySLAM:
                 Parameters.kUseVolumetricIntegration = True
                 Parameters.kVolumetricIntegrationType = dense_config.get('type', 'TSDF')
                 Parameters.kVolumetricIntegrationExtractMesh = dense_config.get('extract_mesh', True)
-                Parameters.kVolumetricIntegrationVoxelLength = dense_config.get('voxel_length', 0.015)
+                Parameters.kVolumetricIntegrationVoxelLength = dense_config.get('voxel_length', 0.04)
                 Parameters.kVolumetricIntegrationDepthTruncIndoor = dense_config.get('depth_trunc', 4.0)
                 Parameters.kVolumetricIntegrationOutputTimeInterval = 2.0  # Update every 2 seconds
+                
+                # CRITICAL: Enable depth estimator for monocular SLAM TSDF
+                Parameters.kVolumetricIntegrationUseDepthEstimator = True
+                Parameters.kVolumetricIntegrationDepthEstimatorType = "DEPTH_ANYTHING_V2"
 
                 self.logger.info("🗺️  Real-time Dense Reconstruction ENABLED")
                 self.logger.info(f"   • Type: {Parameters.kVolumetricIntegrationType}")
                 self.logger.info(f"   • Voxel size: {Parameters.kVolumetricIntegrationVoxelLength}m")
                 self.logger.info(f"   • Extract mesh: {Parameters.kVolumetricIntegrationExtractMesh}")
                 self.logger.info(f"   • Depth truncation: {Parameters.kVolumetricIntegrationDepthTruncIndoor}m")
+                self.logger.info(f"   • Depth estimator: {Parameters.kVolumetricIntegrationDepthEstimatorType}")
                 self.logger.info("   ⚠️  This is CPU/GPU intensive - expect slower performance")
             else:
                 Parameters.kUseVolumetricIntegration = False
@@ -517,6 +522,13 @@ class LivePySLAM:
                     # Fallback for older versions
                     if hasattr(self.slam, 'map'):
                         self.viewer3d.update(self.slam.map)
+                
+                # Draw dense TSDF map (same as main_slam.py line 366)
+                if self.use_dense_reconstruction and hasattr(self.viewer3d, 'draw_dense_map'):
+                    try:
+                        self.viewer3d.draw_dense_map(self.slam)
+                    except Exception as e:
+                        self.logger.debug(f"Dense map visualization: {e}")
             except Exception as e:
                 self.logger.warning(f"3D visualization error: {e}")
 
