@@ -194,11 +194,11 @@ slam:
   # Memory management (prevent leaks)
   max_trajectory_length: 500  # Reduced for speed (1000 default)
   max_map_points: 3000  # Reduced for faster BA (5000 default)
-  cleanup_interval: 300  # More frequent cleanup (500 default)
+  cleanup_interval: 700  # More frequent cleanup (500 default)
   # Dense reconstruction settings (post-processing only)
   # To use: Run SLAM, save map (press 's' in Pangolin), then run: ./dense_reconstruction.sh
   dense_reconstruction:
-    enabled: false
+    enabled: true
     type: TSDF  # TSDF or GAUSSIAN_SPLATTING
     extract_mesh: true  # true = mesh, false = point cloud
     voxel_length: 0.015  # meters - smaller = more detail

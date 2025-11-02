@@ -186,19 +186,19 @@ class LivePySLAM:
             self.camera = PinholeCamera(camera_config)
 
             # Create feature tracker config - use ORB (OpenCV) instead of ORB2 (ORB-SLAM2)
-            # Optimized to work in typical environments (not just perfect textured ones)
+            # Optimized for speed + accuracy balance
             feature_tracker_config = FeatureTrackerConfigs.ORB.copy()
-            feature_tracker_config["num_features"] = self.config.get('slam.orb_features', 5000)
+            feature_tracker_config["num_features"] = self.config.get('slam.orb_features', 1300)
 
-            # Increase pyramid levels for better multi-scale detection
-            feature_tracker_config["num_levels"] = 12  # More levels = more features in varied environments
-            feature_tracker_config["scale_factor"] = 1.1  # Finer scale = more features per level
+            # Balanced pyramid levels for efficient detection
+            feature_tracker_config["num_levels"] = 8  # Standard levels (12 too many)
+            feature_tracker_config["scale_factor"] = 1.2  # Standard scale (1.1 too fine = too many features)
 
-            self.logger.info(f"📊 ORB configured for typical environments:")
+            self.logger.info(f"📊 ORB configured for optimal speed/accuracy:")
             self.logger.info(f"   • {feature_tracker_config['num_features']} features target")
-            self.logger.info(f"   • {feature_tracker_config['num_levels']} pyramid levels (high coverage)")
-            self.logger.info(f"   • Scale factor: {feature_tracker_config['scale_factor']} (fine-grained)")
-            self.logger.info(f"   → Should detect 2500-4000 features in normal rooms")
+            self.logger.info(f"   • {feature_tracker_config['num_levels']} pyramid levels (balanced)")
+            self.logger.info(f"   • Scale factor: {feature_tracker_config['scale_factor']} (balanced)")
+            self.logger.info(f"   → Should detect ~1300 features (fast + accurate)")
 
             # Relocalization parameters - AGGRESSIVE tuning for real-world success
             # Research shows ORB-SLAM uses min 10 inliers, we're being even more lenient
