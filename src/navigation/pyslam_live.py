@@ -247,18 +247,10 @@ class LivePySLAM:
             # Initialization parameters - optimize for faster initialization in feature matching mode
             if self.viz_mode == 'feature_matching':
                 # For feature matching mode, allow faster initialization with fewer points
-                # These parameters are set via pySLAM's Parameters but may need to be set before SLAM creation
-                # We'll set them here if they exist
-                try:
-                    # Lower requirements for initialization (faster startup)
-                    if hasattr(Parameters, 'kMinNumTriangulated'):
-                        Parameters.kMinNumTriangulated = 50  # Lower from default (usually 100)
-                    if hasattr(Parameters, 'kMaxNumFramesForInit'):
-                        Parameters.kMaxNumFramesForInit = 30  # Try to initialize faster
-                    if hasattr(Parameters, 'kMinNumInliersForInit'):
-                        Parameters.kMinNumInliersForInit = 100  # Lower inlier requirement
-                except:
-                    pass  # Parameters may not have these attributes
+                # Lower requirements for initialization (faster startup)
+                Parameters.kInitializerNumMinTriangulatedPoints = 50  # Lower from default 150
+                Parameters.kInitializerNumMinFeatures = 80  # Lower from default 100
+                Parameters.kInitializerFeatureMatchRatioTest = 0.92  # More relaxed from default 0.9
             
             # Relocalization parameters - AGGRESSIVE tuning for real-world success
             # Research shows ORB-SLAM uses min 10 inliers, we're being even more lenient
