@@ -36,12 +36,19 @@ except ImportError:
 # Add src to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Core modules
+# Core modules - lazy import for feature_matching mode
 from core.utils import (
     ConfigManager, Logger, AudioManager,
     DataLogger, PerformanceMonitor, ensure_directories, check_device
 )
-from core.detection import DetectionPipeline
+
+# Lazy import DetectionPipeline to avoid YOLO dependency issues in feature_matching mode
+DetectionPipeline = None
+try:
+    from core.detection import DetectionPipeline
+except ImportError as e:
+    print(f"⚠️ DetectionPipeline not available: {e}")
+    print("   This is OK for feature_matching mode")
 from core.echolocation import AudioCueGenerator
 from core.narrative import ContextualAssistant
 from core.smart_cache import SmartCache, PredictiveEngine
@@ -115,7 +122,7 @@ class OrbyGlasses:
     Combines object detection, depth sensing, and SLAM.
     """
 
-    def __init__(self, config_path: str = "config/config.yaml", video_source: Optional[str] = None):
+    def __init__(self, config_path: str = "config/config.yaml", video_source: Optional[str] = None, mode: Optional[str] = None):
         """
         Initialize optimized OrbyGlasses system.
 
@@ -129,6 +136,54 @@ class OrbyGlasses:
         # Load configuration
         self.config = ConfigManager(config_path)
 
+        # Set visualization mode (already set in early init if feature_matching)
+        if not hasattr(self, 'viz_mode'):
+            if mode:
+                self.viz_mode = mode
+            else:
+                self.viz_mode = self.config.get('visualization_mode.mode', 'features') if self.config else 'features'
+
+        # Adjust SLAM/VO settings based on mode (access internal dict)
+        if self.viz_mode == 'features':
+            # Features mode: Use SLAM but only show feature matching window
+            # SLAM is needed to get feature matching data
+            if 'slam' not in self.config.config:
+                self.config.config['slam'] = {}
+            if 'visual_odometry' not in self.config.config:
+                self.config.config['visual_odometry'] = {}
+            self.config.config['slam']['enabled'] = True
+            self.config.config['visual_odometry']['enabled'] = False
+            # Note: We'll control which windows to show via show_features flag
+        elif self.viz_mode == 'full_slam':
+            # Full SLAM mode: Enable SLAM and show ALL windows
+            if 'slam' not in self.config.config:
+                self.config.config['slam'] = {}
+            if 'visual_odometry' not in self.config.config:
+                self.config.config['visual_odometry'] = {}
+            self.config.config['slam']['enabled'] = True
+            self.config.config['visual_odometry']['enabled'] = False
+        elif self.viz_mode == 'vo':
+            # VO mode: Visual odometry only (no SLAM)
+            if 'slam' not in self.config.config:
+                self.config.config['slam'] = {}
+            if 'visual_odometry' not in self.config.config:
+                self.config.config['visual_odometry'] = {}
+            self.config.config['slam']['enabled'] = False
+            self.config.config['visual_odometry']['enabled'] = True
+        elif self.viz_mode == 'basic':
+            # Basic mode: Use whatever config says (default SLAM)
+            pass  # Don't override config
+        elif self.viz_mode == 'feature_matching':
+            # Feature matching mode: Use SLAM, overlay feature matching on main window only
+            # SLAM is needed to get feature matching data
+            if 'slam' not in self.config.config:
+                self.config.config['slam'] = {}
+            if 'visual_odometry' not in self.config.config:
+                self.config.config['visual_odometry'] = {}
+            self.config.config['slam']['enabled'] = True
+            self.config.config['visual_odometry']['enabled'] = False
+            # Only show main window with feature matching overlay
+
         # Initialize minimal logger for performance
         log_level_str = self.config.get('logging.level', 'WARNING')  # Reduced logging
         import logging
@@ -139,12 +194,19 @@ class OrbyGlasses:
         # Check device
         device = check_device()
         self.logger.info(f"Device: {device}")
+        self.logger.info(f"Mode: {self.viz_mode.upper()}")
 
         # Initialize core components only
         self.logger.info("Initializing core components...")
 
         self.audio_manager = AudioManager(self.config)
-        self.detection_pipeline = DetectionPipeline(self.config)
+        # Only initialize DetectionPipeline if available and not in feature_matching mode
+        if DetectionPipeline is not None and self.viz_mode != 'feature_matching':
+            self.detection_pipeline = DetectionPipeline(self.config)
+        else:
+            self.detection_pipeline = None
+            if self.viz_mode == 'feature_matching':
+                print("ℹ️  Running in feature_matching mode - skipping detection pipeline")
         self.audio_cue_generator = AudioCueGenerator(self.config)
         self.contextual_assistant = ContextualAssistant(self.config)
         self.path_planner = PathPlanner(self.config)
@@ -191,7 +253,8 @@ class OrbyGlasses:
         if self.slam_enabled:
             if PYSLAM_AVAILABLE:
                 self.logger.info("🚀 Initializing pySLAM (Professional Python SLAM Framework)...")
-                self.slam = LivePySLAM(self.config)
+                # Pass viz_mode to LivePySLAM so it can hide windows in feature_matching mode
+                self.slam = LivePySLAM(self.config, viz_mode=self.viz_mode)
                 feature_type = self.config.get('slam.feature_type', 'ORB')
                 self.logger.info(f"✓ Using pySLAM with {feature_type} features")
                 self.logger.info("✓ Loop closure, bundle adjustment, map persistence")
@@ -433,15 +496,23 @@ class OrbyGlasses:
                 actual_height = int(self.camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
                 
                 # Auto-downscale high-resolution videos for better performance
-                max_width = self.config.get('camera.max_video_width', 1280)  # Default 1280px max width
-                max_height = self.config.get('camera.max_video_height', 720)  # Default 720px max height
-                
+                max_width = self.config.get('camera.max_video_width', 640)  # Landscape videos
+                max_height = self.config.get('camera.max_video_height', 480)  # Standard height
+
+                # For portrait videos (height > width), swap the constraints
+                is_portrait = actual_height > actual_width
+                if is_portrait:
+                    # For portrait: constrain width more aggressively to avoid too-narrow FOV
+                    max_width = 480   # Allow wider portrait frames
+                    max_height = 640  # But not too tall
+                    self.logger.info(f"Portrait video detected ({actual_width}x{actual_height})")
+
                 if actual_width > max_width or actual_height > max_height:
                     # Calculate scale to fit within max dimensions while maintaining aspect ratio
                     width_scale = max_width / actual_width if actual_width > max_width else 1.0
                     height_scale = max_height / actual_height if actual_height > max_height else 1.0
                     scale = min(width_scale, height_scale)
-                    
+
                     self.frame_width = int(actual_width * scale)
                     self.frame_height = int(actual_height * scale)
                     self.need_frame_resize = True  # Mark that frames need resizing
@@ -493,11 +564,14 @@ class OrbyGlasses:
             # Start timer
             self.perf_monitor.start_timer('total')
 
-            # Optimized detection with caching
+            # Optimized detection with caching (skip in feature_matching mode)
             self.perf_monitor.start_timer('detection')
-            detections = self.detection_pipeline.detector.detect(frame)
-            # Limit detections for performance
-            detections = detections[:self.max_detections]
+            if self.detection_pipeline is not None:
+                detections = self.detection_pipeline.detector.detect(frame)
+                # Limit detections for performance
+                detections = detections[:self.max_detections]
+            else:
+                detections = []  # No detections in feature_matching mode
             det_time = self.perf_monitor.stop_timer('detection')
 
             # Depth estimation - ALWAYS run for safety (monocular depth critical for blind users)
@@ -527,7 +601,7 @@ class OrbyGlasses:
                 depth_time = 0.0
 
             # Add depth to detections
-            if depth_map is not None and has_depth_estimator:
+            if depth_map is not None and has_depth_estimator and self.detection_pipeline is not None:
                 frame_size = (frame.shape[1], frame.shape[0])  # (width, height)
                 for detection in detections:
                     bbox = detection['bbox']
@@ -560,8 +634,11 @@ class OrbyGlasses:
             detections = self.smart_cache.predict_object_motion(detections)
             detections = self.predictive_engine.predict_collision_risk(detections)
 
-            # Get navigation summary
-            nav_summary = self.detection_pipeline.get_navigation_summary(detections)
+            # Get navigation summary (skip in feature_matching mode)
+            if self.detection_pipeline is not None:
+                nav_summary = self.detection_pipeline.get_navigation_summary(detections)
+            else:
+                nav_summary = {'path_clear': True, 'danger_objects': [], 'caution_objects': []}
 
             # Add safe direction suggestion
             safe_direction = self.predictive_engine.suggest_safe_direction(detections, frame.shape[1])
@@ -673,9 +750,18 @@ class OrbyGlasses:
             fps = self.perf_monitor.get_avg_fps()
 
             # Create UI overlay (no depth visualization - pySLAM handles that)
-            annotated_frame = self.robot_ui.draw_clean_overlay(
-                frame, detections, fps, safe_direction, None  # No depth overlay
-            )
+            # In feature_matching mode, skip overlay or use minimal overlay
+            if self.viz_mode == 'feature_matching':
+                # Minimal overlay for feature_matching mode
+                annotated_frame = frame.copy()
+                # Add FPS if available
+                if fps > 0:
+                    cv2.putText(annotated_frame, f"FPS: {fps:.1f}", (10, 30),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            else:
+                annotated_frame = self.robot_ui.draw_clean_overlay(
+                    frame, detections, fps, safe_direction, None  # No depth overlay
+                )
 
             # Add SLAM info if enabled
             if slam_result is not None:
@@ -688,6 +774,10 @@ class OrbyGlasses:
                            (10, 145), cv2.FONT_HERSHEY_SIMPLEX, 0.5, slam_color, 1)
                 cv2.putText(annotated_frame, f"Quality: {quality:.2f} | Points: {slam_result['num_map_points']}",
                            (10, 165), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+
+            # Overlay feature matching on main frame if in feature_matching mode
+            if self.viz_mode == 'feature_matching' and slam_result is not None and self.slam:
+                annotated_frame = self._overlay_feature_matching(annotated_frame, slam_result)
 
             # Add trajectory prediction info if enabled
             if trajectory_result is not None:
@@ -823,6 +913,178 @@ class OrbyGlasses:
             import traceback
             traceback.print_exc()
             return self._generate_fast_guidance(detections, nav_summary, slam_result)
+
+    def _create_feature_matching_view(self, frame: np.ndarray, slam_result: Optional[Dict]) -> Optional[np.ndarray]:
+        """
+        Create a lightweight feature matching visualization without the full map.
+
+        Args:
+            frame: Current frame
+            slam_result: SLAM tracking result with feature info
+
+        Returns:
+            Visualization image or None
+        """
+        if slam_result is None or not slam_result.get('is_initialized', False):
+            return None
+
+        try:
+            # Create a blank canvas
+            h, w = frame.shape[:2]
+            viz_height = 400
+            viz_width = 600
+            viz = np.zeros((viz_height, viz_width, 3), dtype=np.uint8)
+
+            # Get feature information from SLAM result
+            num_matches = slam_result.get('num_matches', 0)
+            num_map_points = slam_result.get('num_map_points', 0)
+            tracking_quality = slam_result.get('tracking_quality', 0.0)
+            is_keyframe = slam_result.get('is_keyframe', False)
+
+            # Title
+            cv2.putText(viz, "SLAM Feature Tracking", (20, 30),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+
+            # Status indicator
+            if tracking_quality > 0.7:
+                status_color = (0, 255, 0)  # Green - good
+                status_text = "TRACKING: GOOD"
+            elif tracking_quality > 0.4:
+                status_color = (0, 165, 255)  # Orange - ok
+                status_text = "TRACKING: OK"
+            else:
+                status_color = (0, 0, 255)  # Red - poor
+                status_text = "TRACKING: POOR"
+
+            cv2.putText(viz, status_text, (20, 70),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, status_color, 2)
+
+            # Feature statistics
+            y_offset = 110
+            line_height = 30
+
+            stats = [
+                f"Matched Points: {num_matches}",
+                f"Map Points: {num_map_points}",
+                f"Quality: {tracking_quality:.2f}",
+                f"Keyframe: {'YES' if is_keyframe else 'NO'}"
+            ]
+
+            for i, stat in enumerate(stats):
+                cv2.putText(viz, stat, (20, y_offset + i * line_height),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
+
+            # Visual indicator - feature count bar
+            bar_x = 20
+            bar_y = 260
+            bar_width = 560
+            bar_height = 30
+
+            # Background bar
+            cv2.rectangle(viz, (bar_x, bar_y), (bar_x + bar_width, bar_y + bar_height),
+                         (50, 50, 50), -1)
+
+            # Filled bar based on matches (assume 200 matches is full)
+            max_matches = 200
+            fill_width = int((min(num_matches, max_matches) / max_matches) * bar_width)
+
+            # Color based on quality
+            if num_matches > 100:
+                bar_color = (0, 255, 0)  # Green
+            elif num_matches > 50:
+                bar_color = (0, 165, 255)  # Orange
+            else:
+                bar_color = (0, 0, 255)  # Red
+
+            if fill_width > 0:
+                cv2.rectangle(viz, (bar_x, bar_y), (bar_x + fill_width, bar_y + bar_height),
+                             bar_color, -1)
+
+            # Bar label
+            cv2.putText(viz, f"{num_matches} / {max_matches} features",
+                       (bar_x + 10, bar_y + 20),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+
+            # Instructions
+            cv2.putText(viz, "Press 'q' to quit", (20, viz_height - 20),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.4, (150, 150, 150), 1)
+
+            return viz
+
+        except Exception as e:
+            self.logger.error(f"Error creating feature view: {e}")
+            return None
+
+    def _overlay_feature_matching(self, frame: np.ndarray, slam_result: Optional[Dict]) -> np.ndarray:
+        """
+        Overlay feature matching visualization directly on the main frame.
+        Similar to the reference image: shows side-by-side frames with matched features connected.
+
+        Args:
+            frame: Current annotated frame
+            slam_result: SLAM tracking result with feature info
+
+        Returns:
+            Frame with feature matching overlay
+        """
+        try:
+            if not self.slam:
+                return frame
+
+            # Get feature matching image from SLAM
+            feature_match_img = self.slam.get_feature_matching_image()
+            if feature_match_img is None or feature_match_img.size == 0:
+                return frame
+
+            # Get frame dimensions
+            h, w = frame.shape[:2]
+
+            # Resize feature matching image to fit in a corner or overlay
+            # We'll create a side-by-side view with the current frame and reference frame
+            # Resize to about 40% of frame width for side-by-side display
+            overlay_width = int(w * 0.4)
+            overlay_height = int(overlay_width * feature_match_img.shape[0] / feature_match_img.shape[1])
+            
+            # Ensure overlay doesn't exceed frame height
+            if overlay_height > h * 0.6:
+                overlay_height = int(h * 0.6)
+                overlay_width = int(overlay_height * feature_match_img.shape[1] / feature_match_img.shape[0])
+
+            # Resize feature matching image
+            feature_match_resized = cv2.resize(feature_match_img, (overlay_width, overlay_height),
+                                              interpolation=cv2.INTER_LINEAR)
+
+            # Create a copy of the frame to overlay on
+            overlay_frame = frame.copy()
+
+            # Position overlay in top-right corner with some padding
+            pad = 10
+            overlay_x = w - overlay_width - pad
+            overlay_y = pad
+
+            # Create semi-transparent background for better visibility
+            overlay = overlay_frame[overlay_y:overlay_y+overlay_height, overlay_x:overlay_x+overlay_width].copy()
+            cv2.rectangle(overlay, (0, 0), (overlay_width, overlay_height), (0, 0, 0), -1)
+            cv2.addWeighted(overlay, 0.3, overlay_frame[overlay_y:overlay_y+overlay_height, overlay_x:overlay_x+overlay_width], 0.7, 0,
+                           overlay_frame[overlay_y:overlay_y+overlay_height, overlay_x:overlay_x+overlay_width])
+
+            # Overlay the feature matching image
+            overlay_frame[overlay_y:overlay_y+overlay_height, overlay_x:overlay_x+overlay_width] = feature_match_resized
+
+            # Add border for visibility
+            cv2.rectangle(overlay_frame, (overlay_x-2, overlay_y-2), 
+                          (overlay_x+overlay_width+2, overlay_y+overlay_height+2), (0, 255, 0), 2)
+
+            # Add label
+            label = "Feature Matching"
+            cv2.putText(overlay_frame, label, (overlay_x, overlay_y-5),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+            return overlay_frame
+
+        except Exception as e:
+            self.logger.debug(f"Could not overlay feature matching: {e}")
+            return frame
 
     def _generate_fast_guidance(self, detections: List[Dict], nav_summary: Dict, slam_result: Optional[Dict] = None) -> Dict:
         """
@@ -1002,7 +1264,7 @@ class OrbyGlasses:
         console.print(Panel(performance_text, title="Performance", border_style="green"))
 
 
-    def run(self, display: bool = True, save_video: bool = False, separate_slam: bool = False):
+    def run(self, display: bool = True, save_video: bool = False, separate_slam: bool = False, show_features: bool = False):
         """
         Main run loop.
 
@@ -1010,6 +1272,7 @@ class OrbyGlasses:
             display: Show video display
             save_video: Save output video
             separate_slam: Show SLAM map in a separate window
+            show_features: Show feature matching window (lightweight, no map)
         """
         if not self.initialize_camera():
             self.logger.error("Cannot start without camera")
@@ -1128,7 +1391,10 @@ class OrbyGlasses:
                 # Conversational Navigation - Check for activation (non-blocking)
                 if self.conversation_enabled and self.conversation_manager:
                     # Update conversation context
-                    nav_summary = self.detection_pipeline.get_navigation_summary(detections)
+                    if self.detection_pipeline is not None:
+                        nav_summary = self.detection_pipeline.get_navigation_summary(detections)
+                    else:
+                        nav_summary = {'path_clear': True, 'danger_objects': [], 'caution_objects': []}
                     self.conversation_manager.update_scene_context(detections, nav_summary)
 
                     # Check if activation was detected (completely non-blocking queue check)
@@ -1332,15 +1598,63 @@ class OrbyGlasses:
                 
                 # Clean robot-style display - only show main camera view
                 if display:
-                    # Main camera view - resize to smaller size for cleaner desktop
-                    display_width = 480
-                    display_height = 360
-                    camera_display = cv2.resize(annotated_frame, (display_width, display_height),
-                                               interpolation=cv2.INTER_LINEAR)
-                    cv2.imshow('OrbyGlasses', camera_display)
+                    # In feature_matching mode, show feature matching as main content
+                    if self.viz_mode == 'feature_matching' and self.slam:
+                        feature_match_img = self.slam.get_feature_matching_image()
+                        if feature_match_img is not None and feature_match_img.size > 0:
+                            # Convert RGB to BGR if needed (draw_feature_matches returns RGB)
+                            if feature_match_img.shape[2] == 3:
+                                # Check if it's RGB (opencv uses BGR)
+                                # draw_feature_matches should return RGB, but we'll check
+                                feature_match_img_bgr = cv2.cvtColor(feature_match_img, cv2.COLOR_RGB2BGR) if len(feature_match_img.shape) == 3 else feature_match_img
+                            else:
+                                feature_match_img_bgr = feature_match_img
+                            
+                            # Resize to fit display - make it larger for better visibility
+                            h, w = feature_match_img_bgr.shape[:2]
+                            display_width = 1200  # Wider for side-by-side view
+                            display_height = int(display_width * h / w)
+                            if display_height > 800:
+                                display_height = 800
+                                display_width = int(display_height * w / h)
+                            feature_match_display = cv2.resize(feature_match_img_bgr, (display_width, display_height),
+                                                              interpolation=cv2.INTER_LINEAR)
+                            cv2.imshow('OrbyGlasses', feature_match_display)
+                        else:
+                            # Fallback to regular view if no feature matching available
+                            display_width = 480
+                            display_height = 360
+                            camera_display = cv2.resize(annotated_frame, (display_width, display_height),
+                                                       interpolation=cv2.INTER_LINEAR)
+                            cv2.imshow('OrbyGlasses', camera_display)
+                    else:
+                        # Main camera view - resize to smaller size for cleaner desktop
+                        display_width = 480
+                        display_height = 360
+                        camera_display = cv2.resize(annotated_frame, (display_width, display_height),
+                                                   interpolation=cv2.INTER_LINEAR)
+                        cv2.imshow('OrbyGlasses', camera_display)
+
+                    # Show feature matching view if requested (for other modes)
+                    if show_features and self.slam and self.viz_mode != 'feature_matching':
+                        # Try to get actual feature matching image from pyslam
+                        feature_match_img = self.slam.get_feature_matching_image()
+                        if feature_match_img is not None and feature_match_img.size > 0:
+                            # Resize if too large
+                            h, w = feature_match_img.shape[:2]
+                            if w > 1200:
+                                scale = 1200 / w
+                                new_w, new_h = int(w * scale), int(h * scale)
+                                feature_match_img = cv2.resize(feature_match_img, (new_w, new_h))
+                            cv2.imshow('Feature Matching', feature_match_img)
+                        else:
+                            # Fallback to statistics view if no matching image available
+                            feature_viz = self._create_feature_matching_view(frame, slam_result)
+                            if feature_viz is not None:
+                                cv2.imshow('Feature Tracking Stats', feature_viz)
 
                     # pySLAM shows its own windows (3D viewer, trajectory, features)
-                    # No need for custom SLAM or depth windows
+                    # No need for custom SLAM or depth windows unless separate_slam is enabled
 
                     # Show 3D Occupancy Grid if enabled
                     if self.occupancy_grid_enabled and self.occupancy_grid is not None:
@@ -1457,15 +1771,33 @@ def main():
                        help='Train RL model before running')
     parser.add_argument('--test', action='store_true',
                        help='Run in test mode with sample video')
+    parser.add_argument('--mode', type=str, choices=['full_slam', 'vo', 'features', 'basic', 'feature_matching'],
+                        help='Visualization mode: full_slam (all windows), vo (visual odometry), features (feature matching window), basic (main window only), feature_matching (feature matching in main window only)')
     parser.add_argument('--separate-slam', action='store_true',
-                        help='Show SLAM map in a separate window')
+                        help='[DEPRECATED] Use --mode full_slam instead')
+    parser.add_argument('--show-features', action='store_true',
+                        help='[DEPRECATED] Use --mode features instead')
     parser.add_argument('--video', type=str, default=None,
                        help='Path to video file (overrides camera.source in config)')
 
     args = parser.parse_args()
 
+    # Determine mode (handle deprecated flags)
+    mode = args.mode
+    if mode is None:
+        # Check deprecated flags
+        if args.show_features:
+            mode = 'features'
+            print("⚠️  --show-features is deprecated, use --mode features")
+        elif args.separate_slam:
+            mode = 'full_slam'
+            print("⚠️  --separate-slam is deprecated, use --mode full_slam")
+        else:
+            # Use config file default
+            mode = None
+
     # Initialize system
-    system = OrbyGlasses(config_path=args.config, video_source=args.video)
+    system = OrbyGlasses(config_path=args.config, video_source=args.video, mode=mode)
 
     # Train RL if requested
     if args.train_rl:
@@ -1479,7 +1811,14 @@ def main():
         print("Test mode not yet implemented")
         # TODO: Implement test mode with sample videos
     else:
-        system.run(display=not args.no_display, save_video=args.save_video, separate_slam=args.separate_slam)
+        # Determine flags based on mode
+        show_features = (mode == 'features')
+        separate_slam = (mode == 'full_slam')
+        # Note: feature_matching mode shows feature matching in main window only,
+        # so we don't set show_features or separate_slam
+
+        system.run(display=not args.no_display, save_video=args.save_video,
+                  separate_slam=separate_slam, show_features=show_features)
 
 
 if __name__ == "__main__":

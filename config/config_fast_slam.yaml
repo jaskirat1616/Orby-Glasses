@@ -1,0 +1,120 @@
+# Fast SLAM Configuration - Optimized for Speed
+# Based on config.yaml but with aggressive performance optimizations
+
+adaptive_system:
+  battery_monitoring: false  # Disabled for speed
+  emergency_mode_enabled: false
+  time_based_adjustments: false
+
+audio:
+  adaptive_beaconing_enabled: false
+  spatial_audio: true
+  tts_engine: pyttsx3
+  tts_rate: 200
+  tts_volume: 1.0
+
+camera:
+  fps: 30
+  height: 480
+  width: 640
+  source: 1
+  fx: 525.0
+  fy: 525.0
+  cx: 320.0
+  cy: 240.0
+  max_video_width: 480   # Smaller for speed
+  max_video_height: 360  # Smaller for speed
+  max_video_fps: 30
+
+conversation:
+  enabled: false  # Disabled for speed
+
+haptic:
+  enabled: false
+
+indoor_navigation:
+  enabled: false
+
+logging:
+  level: WARNING  # Minimal logging for speed
+  log_file: data/logs/orbyglass.log
+  save_detections: false
+  save_frames: false
+
+mapping3d:
+  enabled: false
+
+models:
+  depth:
+    enabled: false  # DISABLED FOR MAXIMUM SPEED
+    device: mps
+    half_precision: true
+    max_resolution: 256
+  llm:
+    vlm_enabled: false  # Disabled for speed
+  yolo:
+    confidence: 0.6
+    device: mps
+    half_precision: true
+    iou_threshold: 0.5
+    path: models/yolo/yolo11n.pt
+
+movement_visualizer:
+  enabled: false
+
+occupancy_grid_3d:
+  enabled: false
+
+performance:
+  audio_update_interval: 2.0  # Less frequent
+  cache_depth_maps: false  # No depth
+  danger_audio_interval: 0.5
+  depth_skip_frames: 0  # No depth model
+  enable_multithreading: true
+  frame_skip: 0
+  max_detections: 5
+  stats_interval: 100  # More frequent stats
+
+point_cloud_viewer:
+  enabled: false
+
+prediction:
+  enabled: false
+
+safety:
+  caution_distance: 2.5
+  danger_distance: 1.0
+  emergency_stop_key: q
+  max_obstacle_alerts: 3
+  min_safe_distance: 1.5
+
+slam:
+  enabled: true
+  feature_type: ORB2
+  orb_features: 1500  # Balanced: enough features but not too many
+  loop_closure: false  # Disabled for speed
+  use_pyslam: true
+  use_rerun: false
+  # Aggressive performance settings
+  tracking_quality_threshold: 0.5  # More tolerant
+  min_tracked_points: 8  # Lower minimum
+  max_frames_between_keyframes: 20  # Fewer keyframes
+  max_trajectory_length: 300  # Less history
+  max_map_points: 3000  # Fewer map points
+  cleanup_interval: 300  # More frequent cleanup
+
+stair_detection:
+  enabled: false  # Disabled for speed
+
+social_navigation:
+  enabled: false
+
+trajectory_prediction:
+  enabled: false
+
+visual_odometry:
+  enabled: false  # Disabled for speed
+
+visualization:
+  advanced_nav_panel: false  # Disabled for speed
+  use_fast_depth: true

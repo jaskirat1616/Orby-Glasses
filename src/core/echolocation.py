@@ -515,11 +515,20 @@ class AudioCueGenerator:
         caution_objects = [d for d in detections if d.get('depth') is not None and d.get('depth') < 3.0 and not d.get('is_danger', False)]
 
         if len(danger_objects) > 0:
-            closest = min(danger_objects, key=lambda x: x.get('depth', 10))
-            message = f"Warning! {closest['label']} {closest['depth']:.1f} meters ahead"
+            # Filter out None depths and use a safe fallback for comparison
+            closest = min(danger_objects, key=lambda x: x.get('depth') if x.get('depth') is not None else 999)
+            depth = closest.get('depth')
+            if depth is not None:
+                message = f"Warning! {closest['label']} {depth:.1f} meters ahead"
+            else:
+                message = f"Warning! {closest['label']} ahead - distance unknown"
         elif len(caution_objects) > 0:
-            closest = min(caution_objects, key=lambda x: x.get('depth', 10))
-            message = f"Caution. {closest['label']} at {closest['depth']:.1f} meters"
+            closest = min(caution_objects, key=lambda x: x.get('depth') if x.get('depth') is not None else 999)
+            depth = closest.get('depth')
+            if depth is not None:
+                message = f"Caution. {closest['label']} at {depth:.1f} meters"
+            else:
+                message = f"Caution. {closest['label']} detected"
         else:
             message = f"{len(detections)} objects detected. Path clear"
 

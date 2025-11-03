@@ -97,9 +97,10 @@ class LivePySLAM:
     Uses the actual pySLAM library with live camera support.
     """
 
-    def __init__(self, config: Dict):
+    def __init__(self, config: Dict, viz_mode: str = None):
         """Initialize live pySLAM system."""
         self.config = config
+        self.viz_mode = viz_mode  # Store viz_mode to control window visibility
         self.logger = logging.getLogger(__name__)
 
         # Suppress excessive pySLAM INFO logs (loop closing, relocalization)
@@ -207,18 +208,19 @@ class LivePySLAM:
             else:
                 feature_tracker_config = FeatureTrackerConfigs.ORB.copy()
             
-            feature_tracker_config["num_features"] = self.config.get('slam.orb_features', 800)
-            
+            feature_tracker_config["num_features"] = self.config.get('slam.orb_features', 2000)
+
             # Balanced pyramid levels for efficient detection
             if use_orb2:
                 # ORB2 uses fixed 8 levels and 1.2 scale (ORB-SLAM2 defaults)
+                # Note: FAST thresholds are hardcoded in ORB-SLAM2 C++ code (cannot be changed via config)
                 self.logger.info(f"📊 ORB2 configured (ORB-SLAM2 optimized):")
             else:
                 feature_tracker_config["num_levels"] = 8  # Standard levels
                 feature_tracker_config["scale_factor"] = 1.2  # Standard scale
                 self.logger.info(f"📊 ORB configured:")
-            
-            self.logger.info(f"   • {feature_tracker_config['num_features']} features target")
+
+            self.logger.info(f"   • {feature_tracker_config['num_features']} features target (increased from 800)")
             self.logger.info(f"   • {feature_tracker_config.get('num_levels', 8)} pyramid levels")
             self.logger.info(f"   • Scale factor: {feature_tracker_config.get('scale_factor', 1.2)}")
             self.logger.info(f"   → Using {'ORB-SLAM2 optimized' if use_orb2 else 'OpenCV'} detector/descriptor")
@@ -249,12 +251,12 @@ class LivePySLAM:
             
             # Optimize for both speed and accuracy
             # Local Bundle Adjustment - smaller window = faster, but keep quality
-            Parameters.kLocalBAWindow = 12  # Reduced from 20 for speed (default 20)
+            Parameters.kLocalBAWindow = 6  # Reduced from 20 for speed (default 20, was 12)
             
-            # Keyframe management - slightly more aggressive for speed
-            Parameters.kNumMinPointsForNewKf = 12  # Reduced from 15 (default)
-            Parameters.kThNewKfRefRatioMonocular = 0.85  # Lower = more keyframes (default 0.9)
-            Parameters.kMaxNumOfKeyframesInLocalMap = 60  # Reduced from 80
+            # Keyframe management - more aggressive for speed
+            Parameters.kNumMinPointsForNewKf = 10  # Reduced from 12 for speed (default 15)
+            Parameters.kThNewKfRefRatioMonocular = 0.80  # Lower = more keyframes (default 0.9, was 0.85)
+            Parameters.kMaxNumOfKeyframesInLocalMap = 40  # Reduced from 60 for speed (default 80)
             Parameters.kNumBestCovisibilityKeyFrames = 10  # Keep default
             
             # Pose optimization - slightly stricter for accuracy
@@ -555,7 +557,8 @@ class LivePySLAM:
         #         self.logger.warning(f"Plot visualization error: {e}")
 
         # Update 3D viewer - CRITICAL: This shows the 3D point cloud window
-        if hasattr(self, 'viewer3d') and self.viewer3d:
+        # Skip in feature_matching mode (only show feature matching in main window)
+        if self.viz_mode != 'feature_matching' and hasattr(self, 'viewer3d') and self.viewer3d:
             try:
                 # After tracking: draw_slam_map (same as main_slam.py line 330)
                 if hasattr(self.viewer3d, 'draw_slam_map'):
@@ -577,23 +580,25 @@ class LivePySLAM:
                 self.logger.warning(f"3D visualization error: {e}")
 
         # Show pySLAM camera window with feature tracking
-        try:
-            if hasattr(self.slam, 'tracking') and hasattr(self.slam.tracking, 'draw_img'):
-                # Use pySLAM's own tracking visualization
-                img_draw = self.slam.tracking.draw_img
-                if img_draw is not None:
-                    cv2.imshow("SLAM Camera", img_draw)
+        # Skip in feature_matching mode (only show feature matching in main window)
+        if self.viz_mode != 'feature_matching':
+            try:
+                if hasattr(self.slam, 'tracking') and hasattr(self.slam.tracking, 'draw_img'):
+                    # Use pySLAM's own tracking visualization
+                    img_draw = self.slam.tracking.draw_img
+                    if img_draw is not None:
+                        cv2.imshow("SLAM Camera", img_draw)
+                    else:
+                        cv2.imshow("SLAM Camera", frame)
+                elif hasattr(self.slam, 'map') and hasattr(self.slam.map, 'draw_feature_trails'):
+                    img_draw = self.slam.map.draw_feature_trails(frame)
+                    cv2.imshow("pySLAM - Camera", img_draw)
                 else:
+                    # Fallback to basic camera view
                     cv2.imshow("SLAM Camera", frame)
-            elif hasattr(self.slam, 'map') and hasattr(self.slam.map, 'draw_feature_trails'):
-                img_draw = self.slam.map.draw_feature_trails(frame)
-                cv2.imshow("pySLAM - Camera", img_draw)
-            else:
-                # Fallback to basic camera view
+            except Exception as e:
+                self.logger.warning(f"Camera window error: {e}")
                 cv2.imshow("SLAM Camera", frame)
-        except Exception as e:
-            self.logger.warning(f"Camera window error: {e}")
-            cv2.imshow("SLAM Camera", frame)
 
         # Process OpenCV events to update windows (minimal - main loop handles this)
         # cv2.waitKey(1)  # Removed - handled in main loop
@@ -716,6 +721,194 @@ class LivePySLAM:
     def get_current_pose(self) -> np.ndarray:
         """Get the current estimated camera pose."""
         return self.current_pose
+
+    def get_feature_matching_image(self) -> Optional[np.ndarray]:
+        """
+        Get/create the feature matching visualization image.
+        Shows current frame features matched with reference keyframe.
+
+        Returns:
+            Feature matching image or None if not available
+        """
+        try:
+            if not self.is_initialized or not hasattr(self.slam, 'tracking'):
+                return None
+
+            tracking = self.slam.tracking
+
+            # Check if we have current frame and reference
+            if not hasattr(tracking, 'f_cur') or tracking.f_cur is None:
+                return None
+
+            if not hasattr(tracking, 'f_ref') or tracking.f_ref is None:
+                return None
+
+            f_cur = tracking.f_cur
+            f_ref = tracking.f_ref
+
+            # Get images
+            if not hasattr(f_cur, 'img') or not hasattr(f_ref, 'img'):
+                return None
+
+            img_cur = f_cur.img
+            img_ref = f_ref.img
+
+            # Get keypoints and matches
+            if not hasattr(f_cur, 'kps') or not hasattr(f_ref, 'kps'):
+                return None
+
+            # Extract keypoints as arrays of [x, y] coordinates
+            # In pySLAM, kps are stored as [Nx2] numpy arrays after conversion from cv2.KeyPoint
+            if not hasattr(f_cur, 'kps') or not hasattr(f_ref, 'kps'):
+                return None
+                
+            kps_cur = f_cur.kps
+            kps_ref = f_ref.kps
+            
+            # Ensure they're numpy arrays
+            if kps_cur is None or kps_ref is None or len(kps_cur) == 0 or len(kps_ref) == 0:
+                return None
+                
+            kps_cur_pts = np.array(kps_cur) if not isinstance(kps_cur, np.ndarray) else kps_cur
+            kps_ref_pts = np.array(kps_ref) if not isinstance(kps_ref, np.ndarray) else kps_ref
+            
+            # Get keypoint sizes if available (for green circles)
+            kps_cur_sizes = None
+            kps_ref_sizes = None
+            if hasattr(f_cur, 'sizes') and f_cur.sizes is not None:
+                kps_cur_sizes = np.array(f_cur.sizes) if not isinstance(f_cur.sizes, np.ndarray) else f_cur.sizes
+            if hasattr(f_ref, 'sizes') and f_ref.sizes is not None:
+                kps_ref_sizes = np.array(f_ref.sizes) if not isinstance(f_ref.sizes, np.ndarray) else f_ref.sizes
+
+            # Try to get matched indices from multiple sources
+            matched_indices = []
+            
+            # Method 1: Direct matched indices from tracking
+            if hasattr(tracking, 'idxs_ref') and hasattr(tracking, 'idxs_cur'):
+                idxs_ref = tracking.idxs_ref
+                idxs_cur = tracking.idxs_cur
+                if idxs_ref is not None and idxs_cur is not None:
+                    # Convert to numpy arrays if needed
+                    if not isinstance(idxs_ref, np.ndarray):
+                        idxs_ref = np.array(idxs_ref)
+                    if not isinstance(idxs_cur, np.ndarray):
+                        idxs_cur = np.array(idxs_cur)
+                    
+                    if len(idxs_ref) > 0 and len(idxs_cur) > 0 and len(idxs_ref) == len(idxs_cur):
+                        # Ensure indices are valid
+                        valid_matches = []
+                        for idx_ref, idx_cur in zip(idxs_ref, idxs_cur):
+                            idx_ref = int(idx_ref)
+                            idx_cur = int(idx_cur)
+                            if 0 <= idx_ref < len(kps_ref_pts) and 0 <= idx_cur < len(kps_cur_pts):
+                                valid_matches.append((idx_ref, idx_cur))
+                        matched_indices = valid_matches
+            
+            # Method 2: Try to get matches from frame itself (if available)
+            # Sometimes matches are stored in the frame objects
+            if len(matched_indices) == 0:
+                try:
+                    # Check if frames have matched keypoints stored
+                    if hasattr(f_cur, 'matched_kps') and hasattr(f_ref, 'matched_kps'):
+                        # Matches might be stored in frame objects
+                        pass  # Skip for now
+                except:
+                    pass
+            
+            # Method 3: Simple matching based on descriptor similarity (last resort)
+            # This is expensive, so only use if other methods fail
+            # For now, skip this and rely on Method 1
+
+            # If no matches available, just show the frames side by side
+            if len(matched_indices) == 0:
+                # Just stack the two images
+                h1, w1 = img_cur.shape[:2] if len(img_cur.shape) > 2 else (*img_cur.shape, 1)
+                h2, w2 = img_ref.shape[:2] if len(img_ref.shape) > 2 else (*img_ref.shape, 1)
+
+                # Ensure both images have same height
+                if h1 != h2:
+                    if h1 > h2:
+                        img_ref = cv2.resize(img_ref, (int(w2 * h1 / h2), h1))
+                    else:
+                        img_cur = cv2.resize(img_cur, (int(w1 * h2 / h1), h2))
+
+                # Stack horizontally
+                if len(img_cur.shape) == 2:
+                    img_cur = cv2.cvtColor(img_cur, cv2.COLOR_GRAY2BGR)
+                if len(img_ref.shape) == 2:
+                    img_ref = cv2.cvtColor(img_ref, cv2.COLOR_GRAY2BGR)
+
+                img_matches = np.hstack([img_ref, img_cur])
+
+                # Add text
+                cv2.putText(img_matches, f"Reference (KF)", (10, 30),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                cv2.putText(img_matches, f"Current", (img_ref.shape[1] + 10, 30),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+
+                return img_matches
+
+            # Import draw function
+            try:
+                from pyslam.utilities.utils_draw import draw_feature_matches
+            except ImportError:
+                return None
+
+            # Extract matched keypoints using the matched indices
+            matched_kps_ref = kps_ref_pts[[idx[0] for idx in matched_indices]]
+            matched_kps_cur = kps_cur_pts[[idx[1] for idx in matched_indices]]
+            
+            # Extract matched keypoint sizes if available
+            matched_kps_ref_sizes = None
+            matched_kps_cur_sizes = None
+            if kps_ref_sizes is not None:
+                matched_kps_ref_sizes = kps_ref_sizes[[idx[0] for idx in matched_indices]]
+            if kps_cur_sizes is not None:
+                matched_kps_cur_sizes = kps_cur_sizes[[idx[1] for idx in matched_indices]]
+            
+            # Ensure images are RGB (draw_feature_matches expects RGB)
+            # Convert from BGR to RGB if needed
+            if len(img_ref.shape) == 3 and img_ref.shape[2] == 3:
+                # Check if it's BGR (OpenCV default) or RGB
+                # If it's grayscale, convert to RGB
+                if len(img_ref.shape) == 2:
+                    img_ref = cv2.cvtColor(img_ref, cv2.COLOR_GRAY2RGB)
+                elif hasattr(f_ref, 'img') and f_ref.img is not None:
+                    # pySLAM frames are RGB, but check anyway
+                    if img_ref.dtype != np.uint8:
+                        img_ref = (img_ref * 255).astype(np.uint8) if img_ref.max() <= 1.0 else img_ref.astype(np.uint8)
+            
+            if len(img_cur.shape) == 3 and img_cur.shape[2] == 3:
+                if len(img_cur.shape) == 2:
+                    img_cur = cv2.cvtColor(img_cur, cv2.COLOR_GRAY2RGB)
+                elif hasattr(f_cur, 'img') and f_cur.img is not None:
+                    if img_cur.dtype != np.uint8:
+                        img_cur = (img_cur * 255).astype(np.uint8) if img_cur.max() <= 1.0 else img_cur.astype(np.uint8)
+            
+            # Draw matches - draw_feature_matches expects arrays of keypoint coordinates
+            # This will show colored lines connecting matched features and green circles for keypoint sizes
+            img_matches = draw_feature_matches(
+                img_ref, img_cur,
+                matched_kps_ref, matched_kps_cur,
+                kps1_sizes=matched_kps_ref_sizes,
+                kps2_sizes=matched_kps_cur_sizes,
+                horizontal=True,
+                show_kp_sizes=True,  # Show green circles for keypoint sizes (like reference image)
+                lineType=cv2.LINE_AA  # Smooth lines
+            )
+
+            # draw_feature_matches returns RGB, convert to BGR for OpenCV display
+            if len(img_matches.shape) == 3 and img_matches.shape[2] == 3:
+                img_matches = cv2.cvtColor(img_matches, cv2.COLOR_RGB2BGR)
+
+            return img_matches
+
+        except Exception as e:
+            # Log error for debugging
+            import traceback
+            self.logger.warning(f"Could not create feature matching image: {e}")
+            self.logger.debug(f"Traceback: {traceback.format_exc()}")
+            return None
 
     def reset(self):
         """Reset the SLAM system."""

@@ -25,9 +25,10 @@ camera:
   fy: 525.0
   cx: 320.0
   cy: 240.0
-  max_video_width: 640   # Auto-downscale videos > this width
-  max_video_height: 480  # Auto-downscale videos > this height
+  max_video_width: 480   # Smaller for speed (was 640)
+  max_video_height: 360  # Smaller for speed (was 480)
   max_video_fps: 30      # Cap video FPS (skip frames if higher)
+  maintain_aspect_ratio: true  # Keep original aspect ratio when downscaling
 conversation:
   activation_phrase: hey orby
   check_interval: 0.5
@@ -109,7 +110,7 @@ indoor_navigation:
   path_planning: true
   save_locations: true
 logging:
-  level: INFO  # Reduced from DEBUG for performance
+  level: WARNING  # Minimal logging for maximum speed
   log_file: data/logs/orbyglass.log
   save_detections: false
   save_frames: false
@@ -124,10 +125,10 @@ mapping3d:
   voxel_size: 0.15
 models:
   depth:
-    enabled: false  # Disabled for testing/performance
+    enabled: false  # DISABLED - Major bottleneck (30-50ms per frame)
     device: mps
     half_precision: true
-    max_resolution: 256
+    max_resolution: 256  # Smaller for speed
     path: depth-anything/Depth-Anything-V2-Small-hf
   llm:
     max_tokens: 150
@@ -159,14 +160,14 @@ occupancy_grid_3d:
   resolution: 0.1
   visualize: false
 performance:
-  audio_update_interval: 1.5
-  cache_depth_maps: true
-  danger_audio_interval: 0.4
-  depth_skip_frames: 7  # Skip 7 frames = run depth every 8th frame (87% faster)
+  audio_update_interval: 2.0  # Less frequent for speed
+  cache_depth_maps: false  # No depth model
+  danger_audio_interval: 0.5
+  depth_skip_frames: 0  # No depth model
   enable_multithreading: true
   frame_skip: 0
   max_detections: 5
-  stats_interval: 200
+  stats_interval: 50  # More frequent stats to monitor FPS
 point_cloud_viewer:
   enabled: false
   max_depth: 5.0
@@ -185,20 +186,20 @@ safety:
   max_obstacle_alerts: 3
   min_safe_distance: 1.5
 slam:
-  enabled: true
+  enabled: false  # Full SLAM (only used in full_slam and basic modes)
   feature_type: ORB2  # ORB-SLAM2 optimized features (now built!)
-  orb_features: 800  # Reduced for real-time performance (~30 FPS)
+  orb_features: 1200  # REDUCED from 2000 for speed while maintaining tracking
   loop_closure: false  # Disabled for speed (was causing relocalization overhead)
   use_pyslam: true
   use_rerun: false  # Disabled for 20-30% performance boost
   # Tracking optimizations for stable performance
-  tracking_quality_threshold: 0.6  # Balanced tolerance
-  min_tracked_points: 10  # Balanced minimum
-  max_frames_between_keyframes: 15  # Efficient keyframe selection
+  tracking_quality_threshold: 0.5  # More tolerant for speed
+  min_tracked_points: 8  # Lower for speed (was 10)
+  max_frames_between_keyframes: 20  # Less frequent keyframes for speed
   # Memory management (prevent leaks)
-  max_trajectory_length: 500  # Reduced for better performance
-  max_map_points: 5000  # Reduced for better performance (was 10000)
-  cleanup_interval: 500  # Default cleanup interval
+  max_trajectory_length: 300  # Reduced for better performance
+  max_map_points: 3000  # Reduced for better performance (was 5000)
+  cleanup_interval: 300  # More frequent cleanup
   # Dense reconstruction settings (post-processing only)
   # To use: Run SLAM, save map (press 's' in Pangolin), then run: ./dense_reconstruction.sh
   dense_reconstruction:
@@ -230,16 +231,26 @@ trajectory_prediction:
   time_step: 0.5
   visualize: false
 visual_odometry:
-  bundle_adjustment: false
-  enabled: false
+  bundle_adjustment: true
+  enabled: false  # VO enabled automatically in 'features' and 'vo' modes
   fast_threshold: 12
   feature_type: ORB2
   keyframe_threshold: 30
-  loop_closure: true
+  loop_closure: false
   max_depth: 10.0
   max_position_jump: 0.5
   max_rotation_jump: 0.5
   min_depth: 0.1
+
+# Visualization modes
+visualization_mode:
+  # Options: 'full_slam', 'vo', 'features', 'basic', 'feature_matching'
+  # - features: VO + feature matching window (RECOMMENDED - lighter, no map building)
+  # - basic: SLAM only, main window (fast, no visualization)
+  # - full_slam: Full SLAM + 3D viewer + trajectory + all windows (heavy)
+  # - vo: Visual odometry + VO window (lighter than SLAM)
+  # - feature_matching: Feature matching visualization in main window only (runs on webcam)
+  mode: 'features'  # Default to feature matching mode
   min_matches: 5
   min_parallax: 0.5
   min_tracked_features: 10

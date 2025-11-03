@@ -1,4 +1,6 @@
 #!/bin/bash
+# OrbyGlasses Launcher Script
+# Supports: --video <path>, --show-features, --separate-slam, --no-display
 #
 # OrbyGlasses Launcher - Properly configured for pySLAM integration
 #
