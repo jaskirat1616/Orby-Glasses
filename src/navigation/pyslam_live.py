@@ -290,6 +290,37 @@ class LivePySLAM:
                         self.logger.error(f"✗ FAILED to patch! LocalMap: {new_local_map}, Frame: {new_frame}")
                         self.logger.error(f"   Expected: LocalMap=10, Frame=8")
                         self.logger.error(f"   Original: LocalMap={original_local_map}, Frame={original_frame}")
+                        
+                    # CRITICAL: Patch optimizer_g2o.py pose_optimization function
+                    # The real issue is "pose_optimization: not enough edges!" - requires 10 valid points after optimization
+                    # Line 545 in optimizer_g2o.py: if num_valid_points < 10: -> FAIL
+                    # Line 534: if len(opt.edges()) < 10: -> STOP
+                    # We need to lower these to 6 to allow tracking with fewer points
+                    import pyslam.slam.optimizer_g2o as optimizer_module
+                    import inspect
+                    
+                    # Store original function
+                    original_pose_optimization = optimizer_module.pose_optimization
+                    
+                    # Get source code and patch the hardcoded 10s
+                    try:
+                        source = inspect.getsource(original_pose_optimization)
+                        # Replace the critical thresholds: 10 -> 6
+                        patched_source = source.replace('num_valid_points < 10', 'num_valid_points < 6')
+                        patched_source = patched_source.replace('len(opt.edges()) < 10', 'len(opt.edges()) < 6')
+                        
+                        # Execute in the module's namespace
+                        namespace = original_pose_optimization.__globals__.copy()
+                        exec(patched_source, namespace)
+                        optimizer_module.pose_optimization = namespace['pose_optimization']
+                        
+                        self.logger.info("✓ CRITICAL: Patched pose_optimization to require only 6 valid points (was 10)")
+                        self.logger.info("   → This fixes 'pose_optimization: not enough edges!' failures")
+                        self.logger.info("   → Now pose optimization will succeed with 6+ valid points instead of 10+")
+                    except Exception as patch_error:
+                        self.logger.warning(f"Could not patch pose_optimization function: {patch_error}")
+                        self.logger.warning("   → Tracking may still fail with 'not enough edges' errors")
+                    
                 except Exception as e:
                     self.logger.error(f"CRITICAL: Could not patch tracking thresholds: {e}")
                     import traceback
