@@ -244,6 +244,22 @@ class LivePySLAM:
             self.logger.info(f"   • Scale factor: {feature_tracker_config.get('scale_factor', 1.2)}")
             self.logger.info(f"   → Using {'ORB-SLAM2 optimized' if use_orb2 else 'OpenCV'} detector/descriptor")
 
+            # Initialization parameters - optimize for faster initialization in feature matching mode
+            if self.viz_mode == 'feature_matching':
+                # For feature matching mode, allow faster initialization with fewer points
+                # These parameters are set via pySLAM's Parameters but may need to be set before SLAM creation
+                # We'll set them here if they exist
+                try:
+                    # Lower requirements for initialization (faster startup)
+                    if hasattr(Parameters, 'kMinNumTriangulated'):
+                        Parameters.kMinNumTriangulated = 50  # Lower from default (usually 100)
+                    if hasattr(Parameters, 'kMaxNumFramesForInit'):
+                        Parameters.kMaxNumFramesForInit = 30  # Try to initialize faster
+                    if hasattr(Parameters, 'kMinNumInliersForInit'):
+                        Parameters.kMinNumInliersForInit = 100  # Lower inlier requirement
+                except:
+                    pass  # Parameters may not have these attributes
+            
             # Relocalization parameters - AGGRESSIVE tuning for real-world success
             # Research shows ORB-SLAM uses min 10 inliers, we're being even more lenient
             if self.viz_mode == 'feature_matching':
@@ -324,6 +340,7 @@ class LivePySLAM:
                 self.logger.info("   → Minimal local map (5 keyframes max)")
                 self.logger.info("   → Very high keyframe threshold (almost no keyframes)")
                 self.logger.info("   → Lenient relocalization (works with fewer points)")
+                self.logger.info("   → Faster initialization (lower triangulation requirements)")
                 self.logger.info("   → Focus on feature tracking only (no map building overhead)")
             
             self.logger.info("🎯 SPEED + ACCURACY OPTIMIZED:")
