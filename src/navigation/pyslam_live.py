@@ -130,6 +130,11 @@ class LivePySLAM:
         # Store matched indices for feature matching visualization
         self.last_idxs_ref = None
         self.last_idxs_cur = None
+        
+        # Store recent frames for feature matching visualization
+        # pySLAM might not store images in frames, so we cache them
+        self.last_frame_img = None
+        self.last_ref_frame_img = None
 
         # Crash recovery state
         self.crash_count = 0
@@ -470,6 +475,10 @@ class LivePySLAM:
             # Already grayscale, convert back to RGB for consistency
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2RGB)
 
+        # Store current frame image for feature matching visualization
+        # pySLAM might not store images in frames, so we cache them
+        self.last_frame_img = rgb_frame.copy() if rgb_frame is not None else None
+        
         # Process frame through pySLAM
         timestamp = time.time()
 
@@ -556,6 +565,12 @@ class LivePySLAM:
                         self.last_idxs_cur = idxs_cur.copy()
                     else:
                         self.last_idxs_cur = np.array(idxs_cur) if idxs_cur is not None else None
+                    
+                    # Store reference frame image if available
+                    if hasattr(tracking, 'f_ref') and tracking.f_ref is not None:
+                        f_ref = tracking.f_ref
+                        if hasattr(f_ref, 'img') and f_ref.img is not None:
+                            self.last_ref_frame_img = f_ref.img.copy()
                     
                     # Debug: log matches found
                     if self.viz_mode == 'feature_matching' and len(self.last_idxs_ref) > 0:
@@ -772,12 +787,43 @@ class LivePySLAM:
             f_cur = tracking.f_cur
             f_ref = tracking.f_ref
 
-            # Get images
-            if not hasattr(f_cur, 'img') or not hasattr(f_ref, 'img'):
+            # Get images - check for None explicitly
+            if not hasattr(f_cur, 'img') or f_cur.img is None:
+                self.logger.debug("f_cur.img is None or missing")
                 return None
 
-            img_cur = f_cur.img
-            img_ref = f_ref.img
+            if not hasattr(f_ref, 'img') or f_ref.img is None:
+                self.logger.debug("f_ref.img is None or missing")
+                return None
+
+            # Try to get images from frame objects first
+            img_cur = f_cur.img if hasattr(f_cur, 'img') and f_cur.img is not None else None
+            img_ref = f_ref.img if hasattr(f_ref, 'img') and f_ref.img is not None else None
+            
+            # Fallback: Use cached images if frame images are not available
+            if img_cur is None:
+                img_cur = self.last_frame_img
+                if img_cur is not None:
+                    self.logger.debug("Using cached current frame image")
+            
+            if img_ref is None:
+                img_ref = self.last_ref_frame_img
+                if img_ref is not None:
+                    self.logger.debug("Using cached reference frame image")
+            
+            # Ensure images are valid numpy arrays with shape
+            if img_cur is None or img_ref is None:
+                self.logger.debug(f"Images are None: img_cur={img_cur is None}, img_ref={img_ref is None}")
+                return None
+            
+            if not hasattr(img_cur, 'shape') or not hasattr(img_ref, 'shape'):
+                self.logger.debug("Images don't have shape attribute")
+                return None
+            
+            # Ensure images have valid shapes
+            if len(img_cur.shape) < 2 or len(img_ref.shape) < 2:
+                self.logger.debug(f"Invalid image shapes: img_cur={img_cur.shape if hasattr(img_cur, 'shape') else 'no shape'}, img_ref={img_ref.shape if hasattr(img_ref, 'shape') else 'no shape'}")
+                return None
 
             # Get keypoints and matches
             if not hasattr(f_cur, 'kps') or not hasattr(f_ref, 'kps'):
@@ -927,22 +973,29 @@ class LivePySLAM:
             
             # Ensure images are RGB (draw_feature_matches expects RGB)
             # pySLAM stores images as RGB, but convert to ensure consistency
+            # Convert grayscale to RGB if needed
             if len(img_ref.shape) == 2:
                 img_ref = cv2.cvtColor(img_ref, cv2.COLOR_GRAY2RGB)
             elif len(img_ref.shape) == 3 and img_ref.shape[2] == 3:
-                # Assume it's RGB (pySLAM default), but ensure dtype
+                # Ensure dtype is uint8
                 if img_ref.dtype != np.uint8:
-                    img_ref = (img_ref * 255).astype(np.uint8) if img_ref.max() <= 1.0 else img_ref.astype(np.uint8)
-                # Convert BGR to RGB if needed (OpenCV uses BGR)
-                # Check by comparing with known RGB characteristics - safer to assume RGB from pySLAM
-                # But if it looks like BGR (blue channel strong), convert
-                # For now, trust pySLAM provides RGB
+                    if img_ref.max() <= 1.0:
+                        img_ref = (img_ref * 255).astype(np.uint8)
+                    else:
+                        img_ref = img_ref.astype(np.uint8)
+                # pySLAM provides RGB, but if we got it from cache (BGR), convert
+                # For now, assume pySLAM frames are RGB, cached frames might be BGR
+                # We'll convert BGR to RGB if needed based on the image source
+                # Actually, cached frames are from rgb_frame which is RGB, so we're good
             
             if len(img_cur.shape) == 2:
                 img_cur = cv2.cvtColor(img_cur, cv2.COLOR_GRAY2RGB)
             elif len(img_cur.shape) == 3 and img_cur.shape[2] == 3:
                 if img_cur.dtype != np.uint8:
-                    img_cur = (img_cur * 255).astype(np.uint8) if img_cur.max() <= 1.0 else img_cur.astype(np.uint8)
+                    if img_cur.max() <= 1.0:
+                        img_cur = (img_cur * 255).astype(np.uint8)
+                    else:
+                        img_cur = img_cur.astype(np.uint8)
             
             # Draw matches - draw_feature_matches expects arrays of keypoint coordinates
             # This will show colored lines connecting matched features and green circles for keypoint sizes
