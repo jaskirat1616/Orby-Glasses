@@ -304,16 +304,34 @@ class PySLAMVisualOdometry:
             frame_h, frame_w = frame.shape[0:2]
             if frame_h != self.height or frame_w != self.width:
                 self.logger.debug(f"VO: Updating dimensions from {self.width}x{self.height} to {frame_w}x{frame_h}")
+                old_width, old_height = self.width, self.height
                 self.width = frame_w
                 self.height = frame_h
                 self.cx = self.width / 2
                 self.cy = self.height / 2
+                
+                # Scale focal length proportionally to maintain field of view
+                width_scale = self.width / old_width if old_width > 0 else 1.0
+                height_scale = self.height / old_height if old_height > 0 else 1.0
+                self.fx *= width_scale
+                self.fy *= height_scale
+                
                 # Update camera calibration if it exists
                 if hasattr(self, 'camera') and self.camera:
                     self.camera.width = self.width
                     self.camera.height = self.height
+                    self.camera.fx = self.fx
+                    self.camera.fy = self.fy
                     self.camera.cx = self.cx
                     self.camera.cy = self.cy
+                    # CRITICAL: Update K and Kinv matrices used by VO
+                    self.camera.K = np.array([[self.fx, 0.0, self.cx], [0.0, self.fy, self.cy], [0.0, 0.0, 1.0]], dtype=np.float64)
+                    self.camera.Kinv = np.array(
+                        [[1.0 / self.fx, 0.0, -self.cx / self.fx], [0.0, 1.0 / self.fy, -self.cy / self.fy], [0.0, 0.0, 1.0]],
+                        dtype=np.float64,
+                    )
+                    self.camera.u_min, self.camera.u_max = 0, self.width
+                    self.camera.v_min, self.camera.v_max = 0, self.height
             
             # Convert BGR to RGB (pySLAM expects RGB from datasets)
             if len(frame.shape) == 3:

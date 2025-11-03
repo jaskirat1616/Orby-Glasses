@@ -466,6 +466,14 @@ class LivePySLAM:
                 self.camera.fy = self.fy
                 self.camera.cx = self.cx
                 self.camera.cy = self.cy
+                # CRITICAL: Update K and Kinv matrices used by SLAM
+                self.camera.K = np.array([[self.fx, 0.0, self.cx], [0.0, self.fy, self.cy], [0.0, 0.0, 1.0]], dtype=np.float64)
+                self.camera.Kinv = np.array(
+                    [[1.0 / self.fx, 0.0, -self.cx / self.fx], [0.0, 1.0 / self.fy, -self.cy / self.fy], [0.0, 0.0, 1.0]],
+                    dtype=np.float64,
+                )
+                self.camera.u_min, self.camera.u_max = 0, self.width
+                self.camera.v_min, self.camera.v_max = 0, self.height
 
         # Convert BGR to RGB (pySLAM expects RGB from datasets)
         if len(frame.shape) == 3:
