@@ -300,10 +300,20 @@ class PySLAMVisualOdometry:
     def _process_pyslam_frame(self, frame: np.ndarray) -> Dict:
         """Process frame using pySLAM Visual Odometry."""
         try:
-            # Resize frame to match camera config if needed
-            if frame.shape[0:2] != (self.height, self.width):
-                self.logger.debug(f"VO: Resizing frame from {frame.shape[0:2]} to ({self.height}, {self.width})")
-                frame = cv2.resize(frame, (self.width, self.height), interpolation=cv2.INTER_LINEAR)
+            # Update VO dimensions to match frame if it's different (use original video size)
+            frame_h, frame_w = frame.shape[0:2]
+            if frame_h != self.height or frame_w != self.width:
+                self.logger.debug(f"VO: Updating dimensions from {self.width}x{self.height} to {frame_w}x{frame_h}")
+                self.width = frame_w
+                self.height = frame_h
+                self.cx = self.width / 2
+                self.cy = self.height / 2
+                # Update camera calibration if it exists
+                if hasattr(self, 'camera') and self.camera:
+                    self.camera.width = self.width
+                    self.camera.height = self.height
+                    self.camera.cx = self.cx
+                    self.camera.cy = self.cy
             
             # Convert BGR to RGB (pySLAM expects RGB from datasets)
             if len(frame.shape) == 3:

@@ -424,17 +424,36 @@ class OrbyGlasses:
             if is_camera_index:
                 self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, self.frame_width)
                 self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self.frame_height)
+            else:
+                # For video files, use the actual dimensions (don't resize)
+                actual_width = int(self.camera.get(cv2.CAP_PROP_FRAME_WIDTH))
+                actual_height = int(self.camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                # Update frame dimensions to match video's original size
+                self.frame_width = actual_width
+                self.frame_height = actual_height
+                # Update config for SLAM to use video dimensions
+                self.config['camera.width'] = actual_width
+                self.config['camera.height'] = actual_height
+                # Update SLAM camera dimensions if already initialized
+                if hasattr(self, 'slam') and self.slam:
+                    self.slam.width = actual_width
+                    self.slam.height = actual_height
+                    self.slam.cx = actual_width / 2
+                    self.slam.cy = actual_height / 2
+                    # Update camera calibration if it exists
+                    if hasattr(self.slam, 'camera') and self.slam.camera:
+                        self.slam.camera.width = actual_width
+                        self.slam.camera.height = actual_height
+                self.logger.info(f"Using video's original resolution: {actual_width}x{actual_height}")
 
             # Set FPS (only for cameras, videos have fixed FPS)
             if is_camera_index:
                 fps = self.config.get('camera.fps', 30)
                 self.camera.set(cv2.CAP_PROP_FPS, fps)
             else:
-                # For video files, get the actual FPS and frame dimensions
+                # For video files, get the actual FPS
                 actual_fps = self.camera.get(cv2.CAP_PROP_FPS)
-                actual_width = int(self.camera.get(cv2.CAP_PROP_FRAME_WIDTH))
-                actual_height = int(self.camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                self.logger.info(f"Video properties: {actual_width}x{actual_height} @ {actual_fps} FPS")
+                self.logger.info(f"Video properties: {self.frame_width}x{self.frame_height} @ {actual_fps} FPS")
 
             self.logger.info(f"{source_type.capitalize()} initialized successfully")
             return True
@@ -1026,8 +1045,7 @@ class OrbyGlasses:
                     self.logger.warning("Failed to capture frame")
                     break
 
-                # Flip frame horizontally for mirror effect (before processing)
-                frame = cv2.flip(frame, 1)
+                # Don't flip - use video as-is (mirroring was causing confusion)
 
                 self.logger.debug("Frame read successfully. Processing frame.")
                 self.frame_count += 1
