@@ -290,16 +290,13 @@ class LivePySLAM:
             # Disable large BA for real-time performance
             Parameters.kUseLargeWindowBA = False  # Disable large BA for real-time
             
-            # For feature matching mode, disable heavy features for maximum speed
+            # For feature matching mode, minimize keyframes to reduce overhead
+            # (Already set above in keyframe management section)
             if self.viz_mode == 'feature_matching':
-                # Disable local mapping for feature matching (we only need tracking)
-                # This will make it much faster - no map building, no BA, no keyframe management overhead
-                Parameters.kUseLocalMapping = False
-                Parameters.kUseLoopClosure = False
-                Parameters.kUseLocalBA = False  # Disable local bundle adjustment
-                Parameters.kNumMinPointsForNewKf = 1000  # Very high = fewer keyframes (almost no keyframes)
-                self.logger.info("⚡ FEATURE MATCHING MODE: Local mapping disabled for maximum speed")
-                self.logger.info("   → Only feature tracking enabled (no map building)")
+                self.logger.info("⚡ FEATURE MATCHING MODE: Minimized keyframes for maximum speed")
+                self.logger.info("   → Minimal local map (5 keyframes max)")
+                self.logger.info("   → Very high keyframe threshold (almost no keyframes)")
+                self.logger.info("   → Focus on feature tracking only (no map building overhead)")
             
             self.logger.info("🎯 SPEED + ACCURACY OPTIMIZED:")
             self.logger.info(f"   • ORB2 detector/descriptor (ORB-SLAM2 optimized)")

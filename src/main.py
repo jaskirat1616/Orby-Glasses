@@ -173,7 +173,7 @@ class OrbyGlasses:
         elif self.viz_mode == 'basic':
             # Basic mode: Use whatever config says (default SLAM)
             pass  # Don't override config
-        el        if self.viz_mode == 'feature_matching':
+        elif self.viz_mode == 'feature_matching':
             # Feature matching mode: Use SLAM with minimal features for speed
             # Disable heavy features like local mapping, loop closure, BA
             if 'slam' not in self.config.config:
