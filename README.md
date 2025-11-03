@@ -10,16 +10,6 @@ OrbyGlasses combines state-of-the-art computer vision with real-time audio guida
 
 ## Visual Examples
 
-### Screenshots
-
-![OrbyGlasses Screenshot 1](images/IMG_5355.JPG)
-
-*Screenshot showing OrbyGlasses interface with object detection and navigation features*
-
-![OrbyGlasses Screenshot 2](images/IMG_6023.JPG)
-
-*Screenshot demonstrating SLAM tracking and depth estimation*
-
 ### Graphics Video
 
 ![OrbyGlasses Graphics Video](images/main_graphics.gif)
@@ -194,6 +184,10 @@ Camera (640x480 @ 30fps)
 │   Audio Guidance (macOS TTS)        │ → Clear voice warnings
 └─────────────────────────────────────┘
 ```
+
+![OrbyGlasses Screenshot 1](images/IMG_5355.JPG)
+
+![OrbyGlasses Screenshot 2](images/IMG_6023.JPG)
 
 **Visual Examples:**
 - Screenshots are displayed above in the README
