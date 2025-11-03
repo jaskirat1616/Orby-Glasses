@@ -54,6 +54,27 @@ OrbyGlasses combines state-of-the-art computer vision with real-time audio guida
 
 Press **SPACEBAR** or **Q** to stop.
 
+### Testing with Videos
+
+You can test OrbyGlasses with sample videos:
+
+```bash
+# Run with a test video
+./run_orby.sh --video test_videos/your_test_video.mp4 --config config/config_production.yaml
+```
+
+**Test Videos Location:** `test_videos/`
+- Add your test videos here for testing object detection, depth estimation, and SLAM
+- Supported formats: `.mp4`, `.mov`, `.avi`
+- Recommended: 640x480 or 1280x720 resolution, 30fps
+
+### Documentation Images
+
+**Images Location:** `images/`
+- Screenshots and diagrams for documentation
+- UI screenshots, feature visualizations, system architecture diagrams
+- Add images here and reference them in documentation
+
 ## Requirements
 
 ### Hardware
@@ -123,6 +144,10 @@ Camera (640x480 @ 30fps)
 │   Audio Guidance (macOS TTS)        │ → Clear voice warnings
 └─────────────────────────────────────┘
 ```
+
+**Visual Examples:**
+- See `images/` folder for screenshots, architecture diagrams, and feature visualizations
+- See `test_videos/` folder for sample videos for testing
 
 ## Usage Examples
 
