@@ -187,7 +187,7 @@ safety:
 slam:
   enabled: true
   feature_type: ORB2  # ORB-SLAM2 optimized features (now built!)
-  orb_features: 2000  # Increased for better accuracy and denser maps
+  orb_features: 800  # Reduced for real-time performance (~30 FPS)
   loop_closure: false  # Disabled for speed (was causing relocalization overhead)
   use_pyslam: true
   use_rerun: false  # Disabled for 20-30% performance boost
@@ -196,8 +196,8 @@ slam:
   min_tracked_points: 10  # Balanced minimum
   max_frames_between_keyframes: 15  # Efficient keyframe selection
   # Memory management (prevent leaks)
-  max_trajectory_length: 1000  # Keep longer trajectory for visualization
-  max_map_points: 10000  # More points for dense visualization (was 3000)
+  max_trajectory_length: 500  # Reduced for better performance
+  max_map_points: 5000  # Reduced for better performance (was 10000)
   cleanup_interval: 500  # Default cleanup interval
   # Dense reconstruction settings (post-processing only)
   # To use: Run SLAM, save map (press 's' in Pangolin), then run: ./dense_reconstruction.sh
