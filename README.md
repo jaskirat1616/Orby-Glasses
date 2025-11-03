@@ -8,8 +8,9 @@
 
 OrbyGlasses combines state-of-the-art computer vision with real-time audio guidance to help blind and visually impaired people navigate safely and independently.
 
-## Video
+## Demo Video
 
+Watch OrbyGlasses in action:
 
 [![OrbyGlasses Demo](test_videos/main.MP4)](test_videos/main.MP4)
 
