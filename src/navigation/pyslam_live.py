@@ -306,9 +306,10 @@ class LivePySLAM:
             
             # Pose optimization - balance accuracy with relocalization needs
             if self.viz_mode == 'feature_matching':
-                # For feature matching mode, be more lenient to get more matches for relocalization
-                Parameters.kMaxOutliersRatioInPoseOptimization = 0.90  # Use default (was 0.85) - more lenient
-                Parameters.kMinNumMatchedFeaturesSearchFrameByProjection = 15  # Lower than default 20 - more lenient
+                # For feature matching mode, be VERY lenient to prevent tracking failures
+                Parameters.kMaxOutliersRatioInPoseOptimization = 0.90  # Use default - more lenient
+                Parameters.kMinNumMatchedFeaturesSearchFrameByProjection = 8  # Very low - allow tracking with few points
+                Parameters.kMinNumMatchedFeaturesSearchReferenceFrame = 8  # Very low - allow reference frame tracking with few points
             else:
                 Parameters.kMaxOutliersRatioInPoseOptimization = 0.85  # Lower = stricter (default 0.9)
                 Parameters.kMinNumMatchedFeaturesSearchFrameByProjection = 25  # Higher = stricter (default 20)
@@ -333,6 +334,7 @@ class LivePySLAM:
                 self.logger.info(f"   → {default_features} ORB features (more for better matching)")
                 self.logger.info("   → Minimal local map (5 keyframes max)")
                 self.logger.info("   → Very high keyframe threshold (almost no keyframes)")
+                self.logger.info("   → Very lenient tracking (min 8 matched points, prevents failures)")
                 self.logger.info("   → Lenient relocalization (works with fewer points)")
                 self.logger.info("   → Faster initialization (lower triangulation requirements)")
                 self.logger.info("   → Focus on feature tracking only (no map building overhead)")
