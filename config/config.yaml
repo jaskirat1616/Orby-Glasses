@@ -183,7 +183,7 @@ safety:
 slam:
   enabled: true
   feature_type: ORB2  # ORB-SLAM2 optimized features (now built!)
-  orb_features: 800  # Further reduced for real-time speed
+  orb_features: 600  # Reduced for high-resolution videos (optimal for ~1280x720)
   loop_closure: false  # Disabled for speed (was causing relocalization overhead)
   use_pyslam: true
   use_rerun: false  # Disabled for 20-30% performance boost
