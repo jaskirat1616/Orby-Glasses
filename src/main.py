@@ -431,19 +431,7 @@ class OrbyGlasses:
                 # Update frame dimensions to match video's original size
                 self.frame_width = actual_width
                 self.frame_height = actual_height
-                # Update config for SLAM to use video dimensions
-                self.config['camera.width'] = actual_width
-                self.config['camera.height'] = actual_height
-                # Update SLAM camera dimensions if already initialized
-                if hasattr(self, 'slam') and self.slam:
-                    self.slam.width = actual_width
-                    self.slam.height = actual_height
-                    self.slam.cx = actual_width / 2
-                    self.slam.cy = actual_height / 2
-                    # Update camera calibration if it exists
-                    if hasattr(self.slam, 'camera') and self.slam.camera:
-                        self.slam.camera.width = actual_width
-                        self.slam.camera.height = actual_height
+                # Note: SLAM dimensions will be updated dynamically in _process_pyslam_frame
                 self.logger.info(f"Using video's original resolution: {actual_width}x{actual_height}")
 
             # Set FPS (only for cameras, videos have fixed FPS)
