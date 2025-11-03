@@ -8,6 +8,13 @@
 
 OrbyGlasses combines state-of-the-art computer vision with real-time audio guidance to help blind and visually impaired people navigate safely and independently.
 
+## Video
+
+
+[![OrbyGlasses Demo](test_videos/main.MP4)](test_videos/main.MP4)
+
+**Demo Video:** See `test_videos/main.MP4` for a complete demonstration of OrbyGlasses features including object detection, depth estimation, stair detection, and audio guidance.
+
 ## Features
 
 ### Core Navigation
@@ -64,16 +71,18 @@ You can test OrbyGlasses with sample videos:
 ```
 
 **Test Videos Location:** `test_videos/`
-- Add your test videos here for testing object detection, depth estimation, and SLAM
-- Supported formats: `.mp4`, `.mov`, `.avi`
+- **Main Demo Video:** `test_videos/main.MP4` - Complete demonstration of OrbyGlasses features
+- Test videos (`.mov` files) available for testing object detection, depth estimation, and SLAM
+- Supported formats: `.mp4`, `.MP4`, `.mov`, `.avi`
 - Recommended: 640x480 or 1280x720 resolution, 30fps
+- Example: `./run_orby.sh --video test_videos/Screen\ Recording\ 2025-11-03\ at\ 1.01.11\ PM.mov`
 
 ### Documentation Images
 
 **Images Location:** `images/`
 - Screenshots and diagrams for documentation
 - UI screenshots, feature visualizations, system architecture diagrams
-- Add images here and reference them in documentation
+- Add images here and reference them in documentation using: `![Description](images/your_image.png)`
 
 ## Requirements
 

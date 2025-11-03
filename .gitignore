@@ -25,7 +25,9 @@ data/test_videos/*.mp4
 data/test_videos/*.avi
 
 # Note: Root-level images/ and test_videos/ folders are tracked (for documentation and testing)
-# Only ignore large video files in test_videos/ if needed (add *.mp4, *.avi here)
+# Main demo video (main.MP4) is tracked, but large .mov screen recordings may be excluded
+# To exclude large .mov files, uncomment the line below:
+# test_videos/*.mov
 
 # IDE
 .vscode/
