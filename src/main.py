@@ -318,6 +318,7 @@ class OrbyGlasses:
         self.frame_width = self.config.get('camera.width', 640)
         self.frame_height = self.config.get('camera.height', 480)
         self.video_source = video_source  # Store video source override
+        self.need_frame_resize = False  # Flag to track if frames need resizing
 
         self.logger.info(f"Camera resolution: {self.frame_width}x{self.frame_height}")
 
@@ -428,11 +429,29 @@ class OrbyGlasses:
                 # For video files, use the actual dimensions (don't resize)
                 actual_width = int(self.camera.get(cv2.CAP_PROP_FRAME_WIDTH))
                 actual_height = int(self.camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                # Update frame dimensions to match video's original size
-                self.frame_width = actual_width
-                self.frame_height = actual_height
+                
+                # Auto-downscale high-resolution videos for better performance
+                max_width = self.config.get('camera.max_video_width', 1280)  # Default 1280px max width
+                max_height = self.config.get('camera.max_video_height', 720)  # Default 720px max height
+                
+                if actual_width > max_width or actual_height > max_height:
+                    # Calculate scale to fit within max dimensions while maintaining aspect ratio
+                    width_scale = max_width / actual_width if actual_width > max_width else 1.0
+                    height_scale = max_height / actual_height if actual_height > max_height else 1.0
+                    scale = min(width_scale, height_scale)
+                    
+                    self.frame_width = int(actual_width * scale)
+                    self.frame_height = int(actual_height * scale)
+                    self.need_frame_resize = True  # Mark that frames need resizing
+                    self.logger.info(f"Video downscaled from {actual_width}x{actual_height} to {self.frame_width}x{self.frame_height} for performance")
+                else:
+                    # Use original resolution if within limits
+                    self.frame_width = actual_width
+                    self.frame_height = actual_height
+                    self.need_frame_resize = False
+                    self.logger.info(f"Using video's original resolution: {actual_width}x{actual_height}")
+                
                 # Note: SLAM dimensions will be updated dynamically in _process_pyslam_frame
-                self.logger.info(f"Using video's original resolution: {actual_width}x{actual_height}")
 
             # Set FPS (only for cameras, videos have fixed FPS)
             if is_camera_index:
@@ -1032,6 +1051,10 @@ class OrbyGlasses:
                 if not ret:
                     self.logger.warning("Failed to capture frame")
                     break
+
+                # Resize frame if needed (for high-resolution videos)
+                if self.need_frame_resize and frame is not None:
+                    frame = cv2.resize(frame, (self.frame_width, self.frame_height), interpolation=cv2.INTER_LINEAR)
 
                 # Don't flip - use video as-is (mirroring was causing confusion)
 
