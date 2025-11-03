@@ -544,8 +544,22 @@ class LivePySLAM:
         if hasattr(self.slam, 'tracking'):
             tracking = self.slam.tracking
             if hasattr(tracking, 'idxs_ref') and hasattr(tracking, 'idxs_cur'):
-                self.last_idxs_ref = tracking.idxs_ref
-                self.last_idxs_cur = tracking.idxs_cur
+                idxs_ref = tracking.idxs_ref
+                idxs_cur = tracking.idxs_cur
+                if idxs_ref is not None and idxs_cur is not None:
+                    # Store a copy to avoid reference issues
+                    if isinstance(idxs_ref, np.ndarray):
+                        self.last_idxs_ref = idxs_ref.copy()
+                    else:
+                        self.last_idxs_ref = np.array(idxs_ref) if idxs_ref is not None else None
+                    if isinstance(idxs_cur, np.ndarray):
+                        self.last_idxs_cur = idxs_cur.copy()
+                    else:
+                        self.last_idxs_cur = np.array(idxs_cur) if idxs_cur is not None else None
+                    
+                    # Debug: log matches found
+                    if self.viz_mode == 'feature_matching' and len(self.last_idxs_ref) > 0:
+                        self.logger.info(f"Stored {len(self.last_idxs_ref)} matched indices for feature matching")
         
         # Get current pose
         if hasattr(self.slam, 'tracking') and hasattr(self.slam.tracking, 'cur_pose'):
@@ -796,28 +810,36 @@ class LivePySLAM:
             matched_indices = []
             
             # Method 1: Try stored indices first (captured right after tracking)
+            # These are the most reliable as they're captured right after tracking
             if hasattr(self, 'last_idxs_ref') and hasattr(self, 'last_idxs_cur'):
                 idxs_ref = self.last_idxs_ref
                 idxs_cur = self.last_idxs_cur
-                if idxs_ref is not None and idxs_cur is not None and len(idxs_ref) > 0 and len(idxs_cur) > 0:
-                    # Use stored indices
-                    pass
-                else:
-                    # Fallback to current tracking indices
-                    if hasattr(tracking, 'idxs_ref') and hasattr(tracking, 'idxs_cur'):
-                        idxs_ref = tracking.idxs_ref
-                        idxs_cur = tracking.idxs_cur
+                if idxs_ref is not None and idxs_cur is not None:
+                    # Check if they're valid arrays
+                    if isinstance(idxs_ref, np.ndarray) and isinstance(idxs_cur, np.ndarray):
+                        if len(idxs_ref) > 0 and len(idxs_cur) > 0:
+                            # Use stored indices
+                            self.logger.debug(f"Using stored indices: {len(idxs_ref)} matches")
+                        else:
+                            # Empty arrays, try current tracking
+                            idxs_ref = None
+                            idxs_cur = None
                     else:
+                        # Not arrays, try current tracking
                         idxs_ref = None
                         idxs_cur = None
-            else:
-                # Fallback to current tracking indices
+                else:
+                    # None values, try current tracking
+                    idxs_ref = None
+                    idxs_cur = None
+            
+            # Fallback to current tracking indices if stored ones aren't available
+            if idxs_ref is None or idxs_cur is None:
                 if hasattr(tracking, 'idxs_ref') and hasattr(tracking, 'idxs_cur'):
                     idxs_ref = tracking.idxs_ref
                     idxs_cur = tracking.idxs_cur
-                else:
-                    idxs_ref = None
-                    idxs_cur = None
+                    if idxs_ref is not None and idxs_cur is not None:
+                        self.logger.debug(f"Using current tracking indices: {len(idxs_ref) if isinstance(idxs_ref, np.ndarray) or hasattr(idxs_ref, '__len__') else 0} matches")
             
             # Process matched indices
             if idxs_ref is not None and idxs_cur is not None:
@@ -904,23 +926,23 @@ class LivePySLAM:
                 matched_kps_cur_sizes = kps_cur_sizes[[idx[1] for idx in matched_indices]]
             
             # Ensure images are RGB (draw_feature_matches expects RGB)
-            # Convert from BGR to RGB if needed
-            if len(img_ref.shape) == 3 and img_ref.shape[2] == 3:
-                # Check if it's BGR (OpenCV default) or RGB
-                # If it's grayscale, convert to RGB
-                if len(img_ref.shape) == 2:
-                    img_ref = cv2.cvtColor(img_ref, cv2.COLOR_GRAY2RGB)
-                elif hasattr(f_ref, 'img') and f_ref.img is not None:
-                    # pySLAM frames are RGB, but check anyway
-                    if img_ref.dtype != np.uint8:
-                        img_ref = (img_ref * 255).astype(np.uint8) if img_ref.max() <= 1.0 else img_ref.astype(np.uint8)
+            # pySLAM stores images as RGB, but convert to ensure consistency
+            if len(img_ref.shape) == 2:
+                img_ref = cv2.cvtColor(img_ref, cv2.COLOR_GRAY2RGB)
+            elif len(img_ref.shape) == 3 and img_ref.shape[2] == 3:
+                # Assume it's RGB (pySLAM default), but ensure dtype
+                if img_ref.dtype != np.uint8:
+                    img_ref = (img_ref * 255).astype(np.uint8) if img_ref.max() <= 1.0 else img_ref.astype(np.uint8)
+                # Convert BGR to RGB if needed (OpenCV uses BGR)
+                # Check by comparing with known RGB characteristics - safer to assume RGB from pySLAM
+                # But if it looks like BGR (blue channel strong), convert
+                # For now, trust pySLAM provides RGB
             
-            if len(img_cur.shape) == 3 and img_cur.shape[2] == 3:
-                if len(img_cur.shape) == 2:
-                    img_cur = cv2.cvtColor(img_cur, cv2.COLOR_GRAY2RGB)
-                elif hasattr(f_cur, 'img') and f_cur.img is not None:
-                    if img_cur.dtype != np.uint8:
-                        img_cur = (img_cur * 255).astype(np.uint8) if img_cur.max() <= 1.0 else img_cur.astype(np.uint8)
+            if len(img_cur.shape) == 2:
+                img_cur = cv2.cvtColor(img_cur, cv2.COLOR_GRAY2RGB)
+            elif len(img_cur.shape) == 3 and img_cur.shape[2] == 3:
+                if img_cur.dtype != np.uint8:
+                    img_cur = (img_cur * 255).astype(np.uint8) if img_cur.max() <= 1.0 else img_cur.astype(np.uint8)
             
             # Draw matches - draw_feature_matches expects arrays of keypoint coordinates
             # This will show colored lines connecting matched features and green circles for keypoint sizes
