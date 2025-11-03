@@ -135,7 +135,7 @@ class LivePySLAM:
 
         # Memory management settings
         self.max_trajectory_length = config.get('slam.max_trajectory_length', 1000)  # Keep last 1000 poses
-        self.max_map_points_local = config.get('slam.max_map_points', 5000)  # Limit local map points
+        self.max_map_points_local = config.get('slam.max_map_points', 10000)  # More points for visualization
         self.cleanup_interval = config.get('slam.cleanup_interval', 500)  # Cleanup every N frames
         self.last_cleanup_frame = 0
 

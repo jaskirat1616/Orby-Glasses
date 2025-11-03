@@ -192,9 +192,9 @@ slam:
   min_tracked_points: 10  # Balanced minimum
   max_frames_between_keyframes: 15  # Efficient keyframe selection
   # Memory management (prevent leaks)
-  max_trajectory_length: 500  # Reduced for speed (1000 default)
-  max_map_points: 3000  # Reduced for faster BA (5000 default)
-  cleanup_interval: 700  # More frequent cleanup (500 default)
+  max_trajectory_length: 1000  # Keep longer trajectory for visualization
+  max_map_points: 10000  # More points for dense visualization (was 3000)
+  cleanup_interval: 500  # Default cleanup interval
   # Dense reconstruction settings (post-processing only)
   # To use: Run SLAM, save map (press 's' in Pangolin), then run: ./dense_reconstruction.sh
   dense_reconstruction:
