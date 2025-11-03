@@ -124,6 +124,7 @@ mapping3d:
   voxel_size: 0.15
 models:
   depth:
+    enabled: false  # Disabled for testing/performance
     device: mps
     half_precision: true
     max_resolution: 256

@@ -455,13 +455,19 @@ class DetectionPipeline:
         elif depth_device == 'cuda' and not torch.cuda.is_available():
             depth_device = 'cpu'
         
-        # Initialize Depth Anything V2 estimator for object depth (always needed)
+        # Initialize Depth Anything V2 estimator for object depth (conditionally)
         # pySLAM provides camera pose, but we need depth estimator for object distances
-        self.depth_estimator = DepthEstimator(
-            model_path=config.get('models.depth.path', 'depth-anything/Depth-Anything-V2-Small-hf'),
-            device=depth_device,
-            max_resolution=config.get('models.depth.max_resolution', 384)
-        )
+        depth_enabled = config.get('models.depth.enabled', True)  # Default enabled
+        if depth_enabled:
+            self.depth_estimator = DepthEstimator(
+                model_path=config.get('models.depth.path', 'depth-anything/Depth-Anything-V2-Small-hf'),
+                device=depth_device,
+                max_resolution=config.get('models.depth.max_resolution', 384)
+            )
+            logging.info("✓ Depth estimator initialized")
+        else:
+            self.depth_estimator = None
+            logging.info("⚠️ Depth estimator DISABLED (models.depth.enabled: false)")
 
         self.min_safe_distance = config.get('safety.min_safe_distance', 1.5)
 
