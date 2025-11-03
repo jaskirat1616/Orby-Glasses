@@ -8,11 +8,53 @@
 
 OrbyGlasses combines state-of-the-art computer vision with real-time audio guidance to help blind and visually impaired people navigate safely and independently.
 
-## Graphics Video
+## Visual Examples
 
-[![OrbyGlasses Graphics](test_videos/main.MP4)](test_videos/main.MP4)
+### Screenshots
 
-**Graphics Video:** See `test_videos/main.MP4` for a visual overview of OrbyGlasses features and capabilities.
+![OrbyGlasses Screenshot 1](images/IMG_5355.JPG)
+
+*Screenshot showing OrbyGlasses interface with object detection and navigation features*
+
+![OrbyGlasses Screenshot 2](images/IMG_6023.JPG)
+
+*Screenshot demonstrating SLAM tracking and depth estimation*
+
+### Graphics Video
+
+![OrbyGlasses Graphics Video](images/main_graphics.gif)
+
+*Graphics video showing OrbyGlasses features and capabilities*
+
+> **Full Video:** [Download `test_videos/main.MP4`](test_videos/main.MP4) for full quality version
+
+### Test Videos
+
+Watch OrbyGlasses in action with these test videos:
+
+**Test Video 1: Object Detection & Navigation**
+
+![Object Detection & Navigation](images/Screen%20Recording%202025-11-03%20at%201.01.11%20PM.gif)
+
+*Screen recording demonstrating real-time object detection and navigation features*
+
+> **Full Video:** [Download Test Video 1](test_videos/Screen%20Recording%202025-11-03%20at%201.01.11%20PM.mov)
+
+**Test Video 2: SLAM Tracking**
+
+![SLAM Tracking](images/Screen%20Recording%202025-11-03%20at%202.25.38%20PM.gif)
+
+*Screen recording showing SLAM tracking and map building*
+
+> **Full Video:** [Download Test Video 2](test_videos/Screen%20Recording%202025-11-03%20at%202.25.38%20PM.mov)
+
+**Test Video 3: Depth Estimation & Audio**
+
+![Depth Estimation & Audio](images/Screen%20Recording%202025-11-03%20at%202.26.02%20PM.gif)
+
+*Screen recording of depth estimation and audio guidance system*
+
+> **Full Video:** [Download Test Video 3](test_videos/Screen%20Recording%202025-11-03%20at%202.26.02%20PM.mov)
 
 ## Features
 
@@ -154,8 +196,10 @@ Camera (640x480 @ 30fps)
 ```
 
 **Visual Examples:**
-- See `images/` folder for screenshots, architecture diagrams, and feature visualizations
-- See `test_videos/` folder for sample videos for testing
+- Screenshots are displayed above in the README
+- Test videos are linked above for viewing/downloading
+- See `images/` folder for more screenshots and diagrams
+- See `test_videos/` folder for all test videos
 
 ## Usage Examples
 

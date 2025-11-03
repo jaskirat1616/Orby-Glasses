@@ -25,9 +25,9 @@ data/test_videos/*.mp4
 data/test_videos/*.avi
 
 # Note: Root-level images/ and test_videos/ folders are tracked (for documentation and testing)
-# Main demo video (main.MP4) is tracked, but large .mov screen recordings may be excluded
-# To exclude large .mov files, uncomment the line below:
-# test_videos/*.mov
+# Large .mov files (>100MB) are excluded (GitHub file size limit)
+# GIFs are created from videos for inline display in README
+test_videos/*.mov
 
 # IDE
 .vscode/
