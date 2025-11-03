@@ -456,6 +456,21 @@ class LivePySLAM:
                 environment_type=DatasetEnvironmentType.INDOOR,
                 config=camera_config
             )
+            
+            # CRITICAL: After SLAM is created, patch tracking constants again to ensure they're applied
+            # The tracking instance might have been created and cached the values
+            if self.viz_mode == 'feature_matching':
+                try:
+                    import pyslam.slam.tracking as tracking_module
+                    # Patch again after SLAM creation to ensure they're applied
+                    setattr(tracking_module, 'kNumMinInliersPoseOptimizationTrackLocalMap', 10)
+                    setattr(tracking_module, 'kNumMinInliersPoseOptimizationTrackFrame', 8)
+                    # Also patch directly in the tracking instance if it exists
+                    if hasattr(self.slam, 'tracking') and self.slam.tracking is not None:
+                        # The constants are module-level, but verify they're being used correctly
+                        self.logger.info("✓ Re-patched tracking constants after SLAM creation")
+                except Exception as e:
+                    self.logger.warning(f"Could not re-patch tracking constants: {e}")
 
             # Initialize Rerun visualization (like main_slam.py)
             self.use_rerun = self.config.get('slam.use_rerun', True)
