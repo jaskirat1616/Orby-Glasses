@@ -173,15 +173,17 @@ class OrbyGlasses:
         elif self.viz_mode == 'basic':
             # Basic mode: Use whatever config says (default SLAM)
             pass  # Don't override config
-        elif self.viz_mode == 'feature_matching':
-            # Feature matching mode: Use SLAM, overlay feature matching on main window only
-            # SLAM is needed to get feature matching data
+        el        if self.viz_mode == 'feature_matching':
+            # Feature matching mode: Use SLAM with minimal features for speed
+            # Disable heavy features like local mapping, loop closure, BA
             if 'slam' not in self.config.config:
                 self.config.config['slam'] = {}
             if 'visual_odometry' not in self.config.config:
                 self.config.config['visual_odometry'] = {}
             self.config.config['slam']['enabled'] = True
             self.config.config['visual_odometry']['enabled'] = False
+            # Disable heavy SLAM features for speed
+            self.config.config['slam']['loop_closure'] = False
             # Only show main window with feature matching overlay
 
         # Initialize minimal logger for performance

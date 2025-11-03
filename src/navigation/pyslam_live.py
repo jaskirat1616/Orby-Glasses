@@ -111,6 +111,10 @@ class LivePySLAM:
         # Suppress local_mapping verbose logs for performance
         logging.getLogger('local_mapping_logger').setLevel(logging.WARNING)  # Disable INFO logs from local mapping
         
+        # Suppress kf_info logs for feature matching mode (too verbose)
+        if self.viz_mode == 'feature_matching':
+            logging.getLogger('kf_info_logger').setLevel(logging.WARNING)
+        
         # Camera parameters
         self.width = config.get('camera.width', 640)
         self.height = config.get('camera.height', 480)
@@ -263,9 +267,15 @@ class LivePySLAM:
             Parameters.kLocalBAWindow = 6  # Reduced from 20 for speed (default 20, was 12)
             
             # Keyframe management - more aggressive for speed
-            Parameters.kNumMinPointsForNewKf = 10  # Reduced from 12 for speed (default 15)
-            Parameters.kThNewKfRefRatioMonocular = 0.80  # Lower = more keyframes (default 0.9, was 0.85)
-            Parameters.kMaxNumOfKeyframesInLocalMap = 40  # Reduced from 60 for speed (default 80)
+            if self.viz_mode == 'feature_matching':
+                # For feature matching mode, minimize keyframes (we don't need map building)
+                Parameters.kNumMinPointsForNewKf = 1000  # Very high = almost no keyframes
+                Parameters.kThNewKfRefRatioMonocular = 0.99  # Very high = fewer keyframes
+                Parameters.kMaxNumOfKeyframesInLocalMap = 5  # Minimal local map
+            else:
+                Parameters.kNumMinPointsForNewKf = 10  # Reduced from 12 for speed (default 15)
+                Parameters.kThNewKfRefRatioMonocular = 0.80  # Lower = more keyframes (default 0.9, was 0.85)
+                Parameters.kMaxNumOfKeyframesInLocalMap = 40  # Reduced from 60 for speed (default 80)
             Parameters.kNumBestCovisibilityKeyFrames = 10  # Keep default
             
             # Pose optimization - slightly stricter for accuracy
@@ -279,6 +289,17 @@ class LivePySLAM:
             
             # Disable large BA for real-time performance
             Parameters.kUseLargeWindowBA = False  # Disable large BA for real-time
+            
+            # For feature matching mode, disable heavy features for maximum speed
+            if self.viz_mode == 'feature_matching':
+                # Disable local mapping for feature matching (we only need tracking)
+                # This will make it much faster - no map building, no BA, no keyframe management overhead
+                Parameters.kUseLocalMapping = False
+                Parameters.kUseLoopClosure = False
+                Parameters.kUseLocalBA = False  # Disable local bundle adjustment
+                Parameters.kNumMinPointsForNewKf = 1000  # Very high = fewer keyframes (almost no keyframes)
+                self.logger.info("⚡ FEATURE MATCHING MODE: Local mapping disabled for maximum speed")
+                self.logger.info("   → Only feature tracking enabled (no map building)")
             
             self.logger.info("🎯 SPEED + ACCURACY OPTIMIZED:")
             self.logger.info(f"   • ORB2 detector/descriptor (ORB-SLAM2 optimized)")
@@ -1007,6 +1028,7 @@ class LivePySLAM:
         """
         Draw feature matches with thin lines and smaller circles.
         Maintains original image resolution.
+        Optimized for performance with vectorized operations where possible.
         """
         # Combine images horizontally
         h1, w1 = img1.shape[:2]
@@ -1035,18 +1057,21 @@ class LivePySLAM:
         if kps2_sizes is None:
             kps2_sizes = np.ones(N, dtype=np.int32) * default_size
         
-        # Ensure sizes are small (1-3 pixels)
+        # Ensure sizes are small (1-3 pixels) - vectorized
         kps1_sizes = np.clip(kps1_sizes, 1, 3).astype(np.int32)
         kps2_sizes = np.clip(kps2_sizes, 1, 3).astype(np.int32)
         
+        # Pre-compute rounded points for performance
+        pts1 = np.rint(kps1).astype(np.int32)
+        pts2 = np.rint(kps2).astype(np.int32)
+        
         # Draw matches with thin lines (thickness=1) and small circles
-        for i, (pt1, pt2) in enumerate(zip(kps1, kps2)):
-            p1 = np.rint(pt1).astype(int)
-            p2 = np.rint(pt2).astype(int)
-            a, b = p1.ravel()
-            c, d = p2.ravel()
+        # Use efficient loop with pre-computed values
+        for i in range(N):
+            a, b = pts1[i]
+            c, d = pts2[i]
             
-            # Random color for each match
+            # Random color for each match (cached per match)
             color = tuple(np.random.randint(0, 255, 3).tolist())
             
             # Draw thin line (thickness=1)
