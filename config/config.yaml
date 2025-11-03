@@ -185,9 +185,9 @@ safety:
   max_obstacle_alerts: 3
   min_safe_distance: 1.5
 slam:
-  enabled: true
+  enabled: false
   feature_type: ORB2  # ORB-SLAM2 optimized features (now built!)
-  orb_features: 1200  # Reduced for high-resolution videos (optimal for ~1280x720)
+  orb_features: 1400  # Reduced for high-resolution videos (optimal for ~1280x720)
   loop_closure: false  # Disabled for speed (was causing relocalization overhead)
   use_pyslam: true
   use_rerun: false  # Disabled for 20-30% performance boost
@@ -230,10 +230,10 @@ trajectory_prediction:
   time_step: 0.5
   visualize: false
 visual_odometry:
-  bundle_adjustment: false
-  enabled: false
+  bundle_adjustment: true
+  enabled: true
   fast_threshold: 12
-  feature_type: ORB
+  feature_type: ORB2
   keyframe_threshold: 30
   loop_closure: true
   max_depth: 10.0
@@ -244,8 +244,8 @@ visual_odometry:
   min_parallax: 0.5
   min_tracked_features: 10
   motion_model: true
-  num_features: 3000
-  orb_features: 3000
+  num_features: 2000  # Increased for better accuracy
+  orb_features: 2000
   pose_smoothing: 0.7
   reprojection_threshold: 3.0
   save_maps: true
