@@ -143,9 +143,24 @@ class PySLAMVisualOdometry:
             # Create camera
             self.camera = PinholeCamera(camera_config)
             
-            # Create feature tracker - use ORB (OpenCV) instead of ORB2 (ORB-SLAM2) if not available
-            if self.feature_type == 'ORB':
-                feature_tracker_config = FeatureTrackerConfigs.ORB  # Use OpenCV ORB
+            # Create feature tracker - prefer ORB2 (ORB-SLAM2) if available
+            use_orb2 = self.feature_type == 'ORB2'
+            
+            if use_orb2:
+                try:
+                    # Add ORB2 library path
+                    orb2_lib_path = os.path.join(os.path.dirname(__file__), '..', '..', 'third_party', 'pyslam', 'thirdparty', 'orbslam2_features', 'lib')
+                    orb2_lib_path = os.path.abspath(orb2_lib_path)
+                    if os.path.exists(orb2_lib_path) and orb2_lib_path not in sys.path:
+                        sys.path.insert(0, orb2_lib_path)
+                    
+                    # Try importing ORB2
+                    from orbslam2_features import ORBextractor
+                    self.logger.info("✓ VO: ORB2 C++ extension available!")
+                    feature_tracker_config = FeatureTrackerConfigs.ORB2
+                except ImportError as e:
+                    self.logger.warning(f"VO: ORB2 not available ({e}), falling back to ORB")
+                    feature_tracker_config = FeatureTrackerConfigs.ORB
             elif self.feature_type == 'SIFT':
                 feature_tracker_config = FeatureTrackerConfigs.SIFT
             else:
