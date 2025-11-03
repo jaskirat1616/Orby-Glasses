@@ -185,20 +185,44 @@ class LivePySLAM:
             # Create camera - PinholeCamera should be available from imports
             self.camera = PinholeCamera(camera_config)
 
-            # Create feature tracker config - use ORB (ORB2 C++ not built)
-            # ORB2 requires building orbslam2_features C++ extension
-            feature_tracker_config = FeatureTrackerConfigs.ORB.copy()
-            feature_tracker_config["num_features"] = self.config.get('slam.orb_features', 1000)
+            # Check if ORB2 is available and preferred
+            use_orb2 = self.config.get('slam.feature_type', 'ORB').upper() == 'ORB2'
+            
+            # Try to import ORB2 to verify it's built
+            if use_orb2:
+                try:
+                    # Add ORB2 library path (need to reconstruct pyslam_path here)
+                    orb2_lib_path = os.path.join(os.path.dirname(__file__), '..', '..', 'third_party', 'pyslam', 'thirdparty', 'orbslam2_features', 'lib')
+                    orb2_lib_path = os.path.abspath(orb2_lib_path)
+                    if os.path.exists(orb2_lib_path) and orb2_lib_path not in sys.path:
+                        sys.path.insert(0, orb2_lib_path)
+                    
+                    # Try importing ORB2
+                    from orbslam2_features import ORBextractor
+                    self.logger.info("✓ ORB2 C++ extension available!")
+                    feature_tracker_config = FeatureTrackerConfigs.ORB2.copy()
+                except ImportError as e:
+                    self.logger.warning(f"⚠️  ORB2 not available ({e}), falling back to ORB")
+                    use_orb2 = False
+                    feature_tracker_config = FeatureTrackerConfigs.ORB.copy()
+            else:
+                feature_tracker_config = FeatureTrackerConfigs.ORB.copy()
+            
+            feature_tracker_config["num_features"] = self.config.get('slam.orb_features', 800)
             
             # Balanced pyramid levels for efficient detection
-            feature_tracker_config["num_levels"] = 8  # Standard levels
-            feature_tracker_config["scale_factor"] = 1.2  # Standard scale
-
-            self.logger.info(f"📊 ORB configured for optimal performance:")
+            if use_orb2:
+                # ORB2 uses fixed 8 levels and 1.2 scale (ORB-SLAM2 defaults)
+                self.logger.info(f"📊 ORB2 configured (ORB-SLAM2 optimized):")
+            else:
+                feature_tracker_config["num_levels"] = 8  # Standard levels
+                feature_tracker_config["scale_factor"] = 1.2  # Standard scale
+                self.logger.info(f"📊 ORB configured:")
+            
             self.logger.info(f"   • {feature_tracker_config['num_features']} features target")
-            self.logger.info(f"   • {feature_tracker_config['num_levels']} pyramid levels")
-            self.logger.info(f"   • Scale factor: {feature_tracker_config['scale_factor']}")
-            self.logger.info(f"   → Using OpenCV ORB detector/descriptor")
+            self.logger.info(f"   • {feature_tracker_config.get('num_levels', 8)} pyramid levels")
+            self.logger.info(f"   • Scale factor: {feature_tracker_config.get('scale_factor', 1.2)}")
+            self.logger.info(f"   → Using {'ORB-SLAM2 optimized' if use_orb2 else 'OpenCV'} detector/descriptor")
 
             # Relocalization parameters - AGGRESSIVE tuning for real-world success
             # Research shows ORB-SLAM uses min 10 inliers, we're being even more lenient

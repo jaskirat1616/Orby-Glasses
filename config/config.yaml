@@ -182,7 +182,7 @@ safety:
   min_safe_distance: 1.5
 slam:
   enabled: true
-  feature_type: ORB
+  feature_type: ORB2  # ORB-SLAM2 optimized features (now built!)
   orb_features: 800  # Further reduced for real-time speed
   loop_closure: false  # Disabled for speed (was causing relocalization overhead)
   use_pyslam: true
@@ -204,7 +204,7 @@ slam:
     voxel_length: 0.04  # meters - 4cm for fast real-time (0.015 too detailed)
     depth_trunc: 4.0  # meters - max depth for indoor scenes
 stair_detection:
-  enabled: true  # Critical safety feature - detect stairs and curbs
+  enabled: false  # Critical safety feature - detect stairs and curbs
   min_drop_height: 0.15  # Minimum drop to detect (meters) - 15cm
   stair_height_range: [0.15, 0.25]  # Typical stair height range (meters)
   detection_distance: 2.5  # Detect hazards up to this distance (meters)
