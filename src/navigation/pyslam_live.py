@@ -126,6 +126,10 @@ class LivePySLAM:
         self.current_pose = np.eye(4)
         self.trajectory = []
         self.map_points = []
+        
+        # Store matched indices for feature matching visualization
+        self.last_idxs_ref = None
+        self.last_idxs_cur = None
 
         # Crash recovery state
         self.crash_count = 0
@@ -535,6 +539,14 @@ class LivePySLAM:
                 # Log and continue with OK state
                 self.logger.debug(f"Could not parse tracking state: {e}")
         
+        # CRITICAL: Store matched indices right after tracking for feature matching visualization
+        # The indices might be reset later, so capture them now
+        if hasattr(self.slam, 'tracking'):
+            tracking = self.slam.tracking
+            if hasattr(tracking, 'idxs_ref') and hasattr(tracking, 'idxs_cur'):
+                self.last_idxs_ref = tracking.idxs_ref
+                self.last_idxs_cur = tracking.idxs_cur
+        
         # Get current pose
         if hasattr(self.slam, 'tracking') and hasattr(self.slam.tracking, 'cur_pose'):
             self.current_pose = self.slam.tracking.cur_pose
@@ -783,26 +795,51 @@ class LivePySLAM:
             # Try to get matched indices from multiple sources
             matched_indices = []
             
-            # Method 1: Direct matched indices from tracking
-            if hasattr(tracking, 'idxs_ref') and hasattr(tracking, 'idxs_cur'):
-                idxs_ref = tracking.idxs_ref
-                idxs_cur = tracking.idxs_cur
-                if idxs_ref is not None and idxs_cur is not None:
-                    # Convert to numpy arrays if needed
-                    if not isinstance(idxs_ref, np.ndarray):
-                        idxs_ref = np.array(idxs_ref)
-                    if not isinstance(idxs_cur, np.ndarray):
-                        idxs_cur = np.array(idxs_cur)
-                    
-                    if len(idxs_ref) > 0 and len(idxs_cur) > 0 and len(idxs_ref) == len(idxs_cur):
-                        # Ensure indices are valid
-                        valid_matches = []
-                        for idx_ref, idx_cur in zip(idxs_ref, idxs_cur):
-                            idx_ref = int(idx_ref)
-                            idx_cur = int(idx_cur)
-                            if 0 <= idx_ref < len(kps_ref_pts) and 0 <= idx_cur < len(kps_cur_pts):
-                                valid_matches.append((idx_ref, idx_cur))
-                        matched_indices = valid_matches
+            # Method 1: Try stored indices first (captured right after tracking)
+            if hasattr(self, 'last_idxs_ref') and hasattr(self, 'last_idxs_cur'):
+                idxs_ref = self.last_idxs_ref
+                idxs_cur = self.last_idxs_cur
+                if idxs_ref is not None and idxs_cur is not None and len(idxs_ref) > 0 and len(idxs_cur) > 0:
+                    # Use stored indices
+                    pass
+                else:
+                    # Fallback to current tracking indices
+                    if hasattr(tracking, 'idxs_ref') and hasattr(tracking, 'idxs_cur'):
+                        idxs_ref = tracking.idxs_ref
+                        idxs_cur = tracking.idxs_cur
+                    else:
+                        idxs_ref = None
+                        idxs_cur = None
+            else:
+                # Fallback to current tracking indices
+                if hasattr(tracking, 'idxs_ref') and hasattr(tracking, 'idxs_cur'):
+                    idxs_ref = tracking.idxs_ref
+                    idxs_cur = tracking.idxs_cur
+                else:
+                    idxs_ref = None
+                    idxs_cur = None
+            
+            # Process matched indices
+            if idxs_ref is not None and idxs_cur is not None:
+                # Convert to numpy arrays if needed
+                if not isinstance(idxs_ref, np.ndarray):
+                    idxs_ref = np.array(idxs_ref)
+                if not isinstance(idxs_cur, np.ndarray):
+                    idxs_cur = np.array(idxs_cur)
+                
+                if len(idxs_ref) > 0 and len(idxs_cur) > 0 and len(idxs_ref) == len(idxs_cur):
+                    # Ensure indices are valid
+                    valid_matches = []
+                    for idx_ref, idx_cur in zip(idxs_ref, idxs_cur):
+                        idx_ref = int(idx_ref)
+                        idx_cur = int(idx_cur)
+                        if 0 <= idx_ref < len(kps_ref_pts) and 0 <= idx_cur < len(kps_cur_pts):
+                            valid_matches.append((idx_ref, idx_cur))
+                    matched_indices = valid_matches
+                    if len(matched_indices) > 0:
+                        self.logger.debug(f"Found {len(matched_indices)} valid matches from {len(idxs_ref)} indices")
+                else:
+                    self.logger.debug(f"Mismatch in idxs lengths: ref={len(idxs_ref) if isinstance(idxs_ref, np.ndarray) or (idxs_ref is not None and hasattr(idxs_ref, '__len__')) else 0}, cur={len(idxs_cur) if isinstance(idxs_cur, np.ndarray) or (idxs_cur is not None and hasattr(idxs_cur, '__len__')) else 0}")
             
             # Method 2: Try to get matches from frame itself (if available)
             # Sometimes matches are stored in the frame objects
