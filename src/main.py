@@ -319,6 +319,8 @@ class OrbyGlasses:
         self.frame_height = self.config.get('camera.height', 480)
         self.video_source = video_source  # Store video source override
         self.need_frame_resize = False  # Flag to track if frames need resizing
+        self.target_fps = 30  # Default target FPS
+        self.video_fps_skip_rate = 1  # Skip rate for frame processing
 
         self.logger.info(f"Camera resolution: {self.frame_width}x{self.frame_height}")
 
@@ -458,9 +460,17 @@ class OrbyGlasses:
                 fps = self.config.get('camera.fps', 30)
                 self.camera.set(cv2.CAP_PROP_FPS, fps)
             else:
-                # For video files, get the actual FPS
+                # For video files, get the actual FPS and optionally cap it
                 actual_fps = self.camera.get(cv2.CAP_PROP_FPS)
-                self.logger.info(f"Video properties: {self.frame_width}x{self.frame_height} @ {actual_fps} FPS")
+                max_video_fps = self.config.get('camera.max_video_fps', 30)  # Cap high FPS videos
+                if actual_fps > max_video_fps:
+                    self.logger.info(f"Video FPS {actual_fps:.1f} exceeds max, will process at {max_video_fps} FPS (skipping frames)")
+                    self.target_fps = max_video_fps
+                    self.video_fps_skip_rate = actual_fps / max_video_fps  # e.g., 60/30 = 2 (skip every other frame)
+                else:
+                    self.target_fps = actual_fps
+                    self.video_fps_skip_rate = 1  # No skipping
+                self.logger.info(f"Video properties: {self.frame_width}x{self.frame_height} @ {actual_fps:.1f} FPS (target: {self.target_fps:.1f} FPS)")
 
             self.logger.info(f"{source_type.capitalize()} initialized successfully")
             return True
@@ -1058,8 +1068,14 @@ class OrbyGlasses:
 
                 # Don't flip - use video as-is (mirroring was causing confusion)
 
-                self.logger.debug("Frame read successfully. Processing frame.")
                 self.frame_count += 1
+                
+                # Skip frames to reduce FPS for high-speed videos
+                if self.video_fps_skip_rate > 1:
+                    if self.frame_count % int(self.video_fps_skip_rate) != 0:
+                        continue  # Skip this frame
+
+                self.logger.debug("Frame read successfully. Processing frame.")
 
                 # Process frame
                 result = self.process_frame(frame)

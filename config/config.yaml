@@ -27,6 +27,7 @@ camera:
   cy: 240.0
   max_video_width: 640   # Auto-downscale videos > this width
   max_video_height: 480  # Auto-downscale videos > this height
+  max_video_fps: 30      # Cap video FPS (skip frames if higher)
 conversation:
   activation_phrase: hey orby
   check_interval: 0.5
