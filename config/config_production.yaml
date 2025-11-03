@@ -1,0 +1,299 @@
+# OrbyGlasses Production Configuration
+# This configuration enables all critical features for blind user navigation
+# Use this config for production deployment: ./run_orby.sh --config config/config_production.yaml
+
+adaptive_system:
+  battery_monitoring: true
+  battery_saver_threshold: 20
+  emergency_mode_enabled: true
+  time_based_adjustments: true
+
+audio:
+  adaptive_beaconing_enabled: true  # Enable for better spatial awareness
+  beacon_obstacle_frequency: 880
+  beacon_safe_frequency: 440
+  clear_path_beacon: 330
+  door_beacon: 660
+  echolocation_enabled: false  # Optional: can enable for advanced users
+  spatial_audio: true
+  stairs_beacon: 1320
+  tts_engine: pyttsx3
+  tts_rate: 190
+  tts_volume: 1.0
+  warning_pulse_rate: 0.12
+
+camera:
+  fps: 30
+  height: 480
+  source: 0  # Default camera (change to 1 for USB camera)
+  width: 640
+  fx: 525.0
+  fy: 525.0
+  cx: 320.0
+  cy: 240.0
+  max_video_width: 640   # Higher resolution for better accuracy
+  max_video_height: 480
+  max_video_fps: 30
+  maintain_aspect_ratio: true
+
+# CRITICAL: Voice control enabled for blind users (hands-free operation)
+conversation:
+  activation_phrase: hey orby
+  check_interval: 0.5
+  command_phrases:
+  - what's around me
+  - is the path clear
+  - where am I
+  - save location
+  - take me to
+  - help
+  - stop navigation
+  - start navigation
+  - save this location as
+  enabled: true  # ENABLED for production - voice control is essential
+  max_tokens: 100
+  model: gemma3:4b
+  simple_commands: true
+  temperature: 0.6
+  voice_input: true
+
+echolocation:
+  duration: 0.1
+  room_dimensions:
+  - 10
+  - 10
+  - 3
+  sample_rate: 16000
+
+# Haptic feedback (optional but recommended)
+haptic:
+  device_type: generic
+  enabled: true  # Enable for additional tactile feedback
+  intensity: 0.7
+  num_motors: 10
+  patterns:
+    all_clear:
+    - 0
+    - 0
+    - 0
+    - 0
+    - 0
+    - 0
+    - 0
+    - 0
+    - 0
+    - 0
+    danger_ahead:
+    - 0
+    - 0
+    - 0
+    - 0
+    - 1
+    - 1
+    - 0
+    - 0
+    - 0
+    - 0
+    danger_left:
+    - 1
+    - 0
+    - 0
+    - 0
+    - 0
+    - 0
+    - 0
+    - 0
+    - 0
+    - 0
+    danger_right:
+    - 0
+    - 0
+    - 0
+    - 0
+    - 0
+    - 0
+    - 0
+    - 0
+    - 0
+    - 1
+
+# CRITICAL: Indoor navigation enabled for location tracking
+indoor_navigation:
+  enabled: true  # ENABLED for production - allows navigation to saved locations
+  path_planning: true
+  save_locations: true
+
+logging:
+  level: INFO  # More detailed logging for production debugging
+  log_file: data/logs/orbyglass.log
+  save_detections: false
+  save_frames: false
+
+mapping3d:
+  enabled: false  # Optional: can enable for 3D mapping visualization
+  fx: 500
+  fy: 500
+  max_depth: 6.0
+  skip_bbox: true
+  subsample_step: 8
+  update_interval: 0.3
+  voxel_size: 0.15
+
+models:
+  # CRITICAL: Depth estimation enabled for accurate distance measurement
+  depth:
+    enabled: true  # ENABLED for production - essential for distance measurement
+    device: mps
+    half_precision: true
+    max_resolution: 320  # Higher resolution for better accuracy
+    path: depth-anything/Depth-Anything-V2-Small-hf
+  
+  llm:
+    max_tokens: 150
+    primary: moondream:latest
+    scene_analysis_interval: 15
+    temperature: 0.4
+    vision: moondream:latest
+    vlm_enabled: false  # Optional: can enable for advanced scene understanding
+  
+  yolo:
+    confidence: 0.55
+    device: mps
+    half_precision: true
+    iou_threshold: 0.5
+    path: models/yolo/yolo11n.pt
+
+movement_visualizer:
+  canvas_size:
+  - 700
+  - 700
+  enabled: false  # Optional visualization
+  show_stats: true
+  trail_length: 200
+
+occupancy_grid_3d:
+  enabled: false  # Optional: can enable for 3D occupancy mapping
+  grid_size:
+  - 10.0
+  - 10.0
+  - 3.0
+  max_range: 5.0
+  resolution: 0.1
+  visualize: false
+
+performance:
+  audio_update_interval: 1.5  # Faster audio updates for better responsiveness
+  cache_depth_maps: true  # Cache enabled since depth is enabled
+  danger_audio_interval: 0.3  # Faster danger warnings (critical for safety)
+  depth_skip_frames: 1  # Process depth every 2nd frame for performance
+  enable_multithreading: true
+  frame_skip: 0
+  max_detections: 5
+  stats_interval: 50
+
+point_cloud_viewer:
+  enabled: false  # Optional visualization
+  max_depth: 5.0
+  max_points: 100000
+  min_depth: 0.1
+  subsample: 3
+
+prediction:
+  enabled: false  # Optional: RL-based path prediction
+  model_path: models/rl/ppo_navigation.zip
+  save_interval: 1000
+  training_steps: 10000
+
+safety:
+  caution_distance: 2.5
+  danger_distance: 1.0
+  emergency_stop_key: q
+  max_obstacle_alerts: 3
+  min_safe_distance: 1.5
+
+# CRITICAL: SLAM enabled for indoor positioning and navigation
+slam:
+  enabled: true  # ENABLED for production - essential for position tracking
+  feature_type: ORB2
+  orb_features: 2000  # Higher for better tracking accuracy
+  loop_closure: true  # Enable loop closure for relocalization
+  use_pyslam: true
+  use_rerun: false  # Disable for performance (saves 20-30% CPU)
+  tracking_quality_threshold: 0.7  # Higher threshold for better quality
+  min_tracked_points: 10  # Standard threshold
+  max_frames_between_keyframes: 15  # More frequent keyframes for better map
+  # Memory management
+  max_trajectory_length: 1000  # Keep more history for better navigation
+  max_map_points: 5000  # More map points for better accuracy
+  cleanup_interval: 500  # Less frequent cleanup
+  # Dense reconstruction (optional, can enable for post-processing)
+  dense_reconstruction:
+    enabled: false  # Disabled for real-time performance
+    type: TSDF
+    extract_mesh: true
+    voxel_length: 0.04
+    depth_trunc: 4.0
+
+# CRITICAL: Stair detection enabled for safety (prevents falls)
+stair_detection:
+  enabled: true  # ENABLED for production - critical safety feature
+  min_drop_height: 0.15  # Detect drops >15cm
+  stair_height_range: [0.15, 0.25]
+  detection_distance: 2.5  # Detect hazards up to 2.5m ahead
+  ground_roi_bottom: 0.7
+  ground_roi_top: 0.4
+  gradient_threshold: 0.3
+  edge_confidence: 0.6
+  warning_distance_danger: 1.0
+  warning_distance_caution: 2.0
+
+social_navigation:
+  enabled: true
+  region: us
+  voice_announce: true
+
+trajectory_prediction:
+  collision_warning: true
+  enabled: false  # Optional: can enable for advanced collision prediction
+  max_history: 10
+  prediction_horizon: 3
+  time_step: 0.5
+  visualize: false
+
+visual_odometry:
+  bundle_adjustment: true
+  enabled: false  # SLAM is used instead
+  fast_threshold: 12
+  feature_type: ORB2
+  keyframe_threshold: 30
+  loop_closure: false
+  max_depth: 10.0
+  max_position_jump: 0.5
+  max_rotation_jump: 0.5
+  min_depth: 0.1
+
+# Visualization modes
+visualization_mode:
+  # Options: 'full_slam', 'vo', 'features', 'basic', 'feature_matching'
+  # Recommended for production: 'basic' (no visualization overhead)
+  mode: 'basic'  # Production mode - no visualization overhead
+  min_matches: 5
+  min_parallax: 0.5
+  min_tracked_features: 10
+  motion_model: true
+  num_features: 2000
+  orb_features: 2000
+  pose_smoothing: 0.7
+  reprojection_threshold: 3.0
+  save_maps: true
+  temporal_consistency_check: true
+  trajectory_length: 1000
+  use_pyslam_vo: true
+  use_rerun: false
+  visualization_scale: 50
+  visualize: false  # Disabled for production
+
+visualization:
+  advanced_nav_panel: false  # Disabled for production (headless mode ready)
+  use_fast_depth: true
+

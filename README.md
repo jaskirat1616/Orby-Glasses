@@ -31,12 +31,25 @@ OrbyGlasses combines state-of-the-art computer vision with real-time audio guida
 
 ## Quick Start
 
-```bash
-# Full version with SLAM and indoor navigation
-./run_orby.sh
+### Production Mode (Recommended for Blind Users)
 
-# Simple version (faster, no indoor tracking)
-./run_simple.sh
+```bash
+# Use production config with all critical features enabled
+./run_orby.sh --config config/config_production.yaml
+```
+
+**Production config includes:**
+- ✅ Depth estimation (distance measurement)
+- ✅ Stair/curb detection (safety)
+- ✅ SLAM (position tracking)
+- ✅ Voice control (hands-free operation)
+- ✅ Indoor navigation (path planning)
+
+### Development Mode (Fast, Features Disabled)
+
+```bash
+# Development config (many features disabled for speed)
+./run_orby.sh
 ```
 
 Press **SPACEBAR** or **Q** to stop.
@@ -181,7 +194,21 @@ OrbyGlasses uses a **priority-based audio system**:
 
 ## Configuration
 
-Edit `config/config.yaml` to customize:
+### Production vs Development
+
+**Production Config** (`config/config_production.yaml`):
+- All critical features enabled for blind user navigation
+- Optimized for safety and functionality
+- Use this for actual navigation assistance
+
+**Development Config** (`config/config.yaml`):
+- Many features disabled for performance
+- Optimized for development/debugging
+- Faster, but less functional
+
+### Customizing Configuration
+
+Edit `config/config.yaml` (development) or `config/config_production.yaml` (production) to customize:
 
 ```yaml
 camera:
@@ -247,31 +274,67 @@ slam:
 
 ## Current Status
 
+### Production Configuration
+
+**For blind users, use the production config** (`config/config_production.yaml`) which includes all critical features:
+
+- ✅ **Depth Estimation** - Enabled for accurate distance measurement
+- ✅ **Stair Detection** - Enabled for fall prevention
+- ✅ **SLAM** - Enabled for indoor position tracking
+- ✅ **Voice Control** - Enabled for hands-free operation
+- ✅ **Indoor Navigation** - Enabled for path planning to saved locations
+
+**Default config** (`config/config.yaml`) is optimized for development/debugging with many features disabled for performance.
+
 ### What Works ✅
-- ✅ Real-time object detection (80 classes)
-- ✅ Accurate distance measurement (0-10m)
-- ✅ Stair and curb detection (**NEW!**)
-- ✅ Voice control with wake word (**NEW!**)
-- ✅ Indoor position tracking (SLAM)
-- ✅ Map save/load (**NEW!**)
-- ✅ Turn-by-turn navigation
+
+**Core Features:**
+- ✅ Real-time object detection (80 COCO classes)
+- ✅ Depth estimation (0-10m range, monocular)
+- ✅ Stair and curb detection (prevents falls)
+- ✅ Voice control with wake word ("Hey Orby")
+- ✅ Indoor position tracking (pySLAM)
+- ✅ Map save/load functionality
+- ✅ Turn-by-turn navigation (A* path planning)
 - ✅ Priority-based audio warnings
-- ✅ Emergency stop
-- ✅ Crash recovery (**NEW!**)
+- ✅ Emergency stop (keyboard or voice)
+- ✅ Crash recovery (auto-disables loop closure on crashes)
+
+**Technical:**
+- ✅ pySLAM integration (real-time SLAM)
+- ✅ Loop closure and relocalization
+- ✅ Map persistence
+- ✅ Memory management (prevents leaks)
 
 ### Known Limitations ⚠️
-- Audio latency: 1500-2000ms (target: <500ms)
-- Monocular depth has ±25-40% error
-- No glass door detection
-- No head-level hazard detection
-- macOS only (Linux/Windows planned)
+
+**Audio:**
+- ⚠️ Audio latency: 1500-2000ms (target: <500ms for danger warnings)
+- ⚠️ macOS TTS engine limitations
+
+**Accuracy:**
+- ⚠️ Monocular depth has ±25-40% error (inherent limitation)
+- ⚠️ No glass door detection (transparent surfaces)
+- ⚠️ No head-level hazard detection (focuses on ground-level)
+
+**Platform:**
+- ⚠️ macOS only (Linux/Windows support planned)
 
 ### In Development 🚧
+
+**Priority 1:**
 - Reduced audio latency (<500ms)
+- Redundant audio (beeps + speech for urgent warnings)
+
+**Priority 2:**
 - Stereo spatial audio positioning
 - Haptic feedback integration
+- Head-level hazard detection
+
+**Future:**
 - Mobile app (iOS/Android)
 - Multi-language support
+- Glass door detection
 
 ## Troubleshooting
 
@@ -338,17 +401,36 @@ python tools/quick_validate.py
 We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ### Priority Areas
-1. **Audio latency reduction** - Critical for safety
-2. **Stair detection improvements** - Increase accuracy
-3. **Testing coverage** - Increase to 70%+
-4. **Documentation** - API docs, tutorials
+1. **Audio latency reduction** - Critical for safety (<500ms target)
+2. **Stair detection improvements** - Increase accuracy (>90% target)
+3. **Testing coverage** - Increase to 70%+ (currently ~30%)
+4. **Accessibility features** - Screen reader support, voice-only setup
+5. **Documentation** - API docs, tutorials, developer guide
 
 ### Development Setup
 ```bash
+# Install development dependencies
 pip install -r requirements-dev.txt
+
+# Set up pre-commit hooks
 pre-commit install
+
+# Run tests
 pytest
+
+# Run with coverage
+pytest --cov=src --cov-report=html
 ```
+
+### Developer Documentation
+
+See [docs/DEVELOPER.md](docs/DEVELOPER.md) for:
+- Architecture overview
+- pySLAM integration details
+- SLAM tuning and relocalization
+- Dense reconstruction
+- Performance optimization
+- Testing guidelines
 
 ## Community & Support
 
@@ -408,4 +490,4 @@ If you use OrbyGlasses in research or publications, please cite:
 **Built with ❤️ for accessibility**
 
 For detailed setup instructions, see [SETUP.md](SETUP.md)
-For architecture details, see [DEVELOPER.md](DEVELOPER.md)
+For architecture details, see [docs/DEVELOPER.md](docs/DEVELOPER.md)
