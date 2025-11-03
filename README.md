@@ -18,33 +18,33 @@ OrbyGlasses combines state-of-the-art computer vision with real-time audio guida
 
 > **Full Video:** [Download `test_videos/main.MP4`](test_videos/main.MP4) for full quality version
 
-### Test Videos
+### Example Usage
 
-Watch OrbyGlasses in action with these test videos:
+Watch OrbyGlasses in action with these example usage videos:
 
-**Test Video 1: Object Detection & Navigation**
+**Example 1: Object Detection & Navigation**
 
 ![Object Detection & Navigation](images/Screen%20Recording%202025-11-03%20at%201.01.11%20PM.gif)
 
 *Screen recording demonstrating real-time object detection and navigation features*
 
-> **Full Video:** [Download Test Video 1](test_videos/Screen%20Recording%202025-11-03%20at%201.01.11%20PM.mov)
+> **Full Video:** [Download Example 1](test_videos/Screen%20Recording%202025-11-03%20at%201.01.11%20PM.mov)
 
-**Test Video 2: SLAM Tracking**
+**Example 2: SLAM Tracking**
 
 ![SLAM Tracking](images/Screen%20Recording%202025-11-03%20at%202.25.38%20PM.gif)
 
 *Screen recording showing SLAM tracking and map building*
 
-> **Full Video:** [Download Test Video 2](test_videos/Screen%20Recording%202025-11-03%20at%202.25.38%20PM.mov)
+> **Full Video:** [Download Example 2](test_videos/Screen%20Recording%202025-11-03%20at%202.25.38%20PM.mov)
 
-**Test Video 3: Depth Estimation & Audio**
+**Example 3: Depth Estimation & Audio**
 
 ![Depth Estimation & Audio](images/Screen%20Recording%202025-11-03%20at%202.26.02%20PM.gif)
 
 *Screen recording of depth estimation and audio guidance system*
 
-> **Full Video:** [Download Test Video 3](test_videos/Screen%20Recording%202025-11-03%20at%202.26.02%20PM.mov)
+> **Full Video:** [Download Example 3](test_videos/Screen%20Recording%202025-11-03%20at%202.26.02%20PM.mov)
 
 ## Features
 
@@ -92,18 +92,18 @@ Watch OrbyGlasses in action with these test videos:
 
 Press **SPACEBAR** or **Q** to stop.
 
-### Testing with Videos
+### Running with Example Videos
 
-You can test OrbyGlasses with sample videos:
+You can run OrbyGlasses with example usage videos:
 
 ```bash
-# Run with a test video
-./run_orby.sh --video test_videos/your_test_video.mp4 --config config/config_production.yaml
+# Run with an example video
+./run_orby.sh --video test_videos/your_example_video.mp4 --config config/config_production.yaml
 ```
 
-**Test Videos Location:** `test_videos/`
+**Example Videos Location:** `test_videos/`
 - **Graphics Video:** `test_videos/main.MP4` - Visual overview of OrbyGlasses features
-- **Test Videos:** `.mov` files available for testing object detection, depth estimation, and SLAM
+- **Example Usage Videos:** `.mov` files demonstrating object detection, depth estimation, and SLAM
 - Supported formats: `.mp4`, `.MP4`, `.mov`, `.avi`
 - Recommended: 640x480 or 1280x720 resolution, 30fps
 - Example: `./run_orby.sh --video test_videos/Screen\ Recording\ 2025-11-03\ at\ 1.01.11\ PM.mov`
@@ -191,9 +191,9 @@ Camera (640x480 @ 30fps)
 
 **Visual Examples:**
 - Screenshots are displayed above in the README
-- Test videos are linked above for viewing/downloading
+- Example usage videos are linked above for viewing/downloading
 - See `images/` folder for more screenshots and diagrams
-- See `test_videos/` folder for all test videos
+- See `test_videos/` folder for all example usage videos
 
 ## Usage Examples
 
