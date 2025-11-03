@@ -224,7 +224,8 @@ class LivePySLAM:
             # For feature matching mode, use more features to help with relocalization
             if self.viz_mode == 'feature_matching':
                 # More features = more matches = better relocalization
-                default_features = 1500  # More than default for better matching
+                # Use even more features to ensure enough points for relocalization
+                default_features = 2000  # Maximum features for better matching and relocalization
             else:
                 default_features = self.config.get('slam.orb_features', 2000)
             feature_tracker_config["num_features"] = default_features
@@ -255,14 +256,15 @@ class LivePySLAM:
             # Relocalization parameters - AGGRESSIVE tuning for real-world success
             # Research shows ORB-SLAM uses min 10 inliers, we're being even more lenient
             if self.viz_mode == 'feature_matching':
-                # For feature matching mode, be more lenient with relocalization (fewer points needed)
-                Parameters.kRelocalizationMinKpsMatches = 6  # Even lower for feature matching mode
-                Parameters.kRelocalizationPoseOpt1MinMatches = 5  # Lower threshold
-                Parameters.kRelocalizationDoPoseOpt2NumInliers = 15  # Lower success threshold
-                Parameters.kRelocalizationFeatureMatchRatioTest = 0.90  # More relaxed
-                Parameters.kRelocalizationFeatureMatchRatioTestLarge = 0.98  # Very relaxed
-                Parameters.kRelocalizationMaxReprojectionDistanceMapSearchCoarse = 20  # Larger search window
-                Parameters.kRelocalizationMaxReprojectionDistanceMapSearchFine = 8  # Larger fine search
+                # For feature matching mode, be VERY lenient with relocalization (fewer points needed)
+                # Make relocalization work even with sparse scenes
+                Parameters.kRelocalizationMinKpsMatches = 4  # Very low - attempt with just 4 matches
+                Parameters.kRelocalizationPoseOpt1MinMatches = 3  # Very low threshold
+                Parameters.kRelocalizationDoPoseOpt2NumInliers = 10  # Very low success threshold (was 15)
+                Parameters.kRelocalizationFeatureMatchRatioTest = 0.95  # Very relaxed (was 0.90)
+                Parameters.kRelocalizationFeatureMatchRatioTestLarge = 0.99  # Extremely relaxed (was 0.98)
+                Parameters.kRelocalizationMaxReprojectionDistanceMapSearchCoarse = 25  # Even larger search window (was 20)
+                Parameters.kRelocalizationMaxReprojectionDistanceMapSearchFine = 10  # Larger fine search (was 8)
             else:
                 Parameters.kRelocalizationMinKpsMatches = 8  # Reduced from 15 (min matches to try)
                 Parameters.kRelocalizationPoseOpt1MinMatches = 6  # Reduced from 10 (first opt threshold)
@@ -304,18 +306,18 @@ class LivePySLAM:
             
             # Pose optimization - balance accuracy with relocalization needs
             if self.viz_mode == 'feature_matching':
-                # For feature matching mode, balance accuracy with relocalization (need enough points)
-                Parameters.kMaxOutliersRatioInPoseOptimization = 0.85  # Slightly less strict (default 0.9)
-                Parameters.kMinNumMatchedFeaturesSearchFrameByProjection = 20  # Keep default (don't be too strict)
+                # For feature matching mode, be more lenient to get more matches for relocalization
+                Parameters.kMaxOutliersRatioInPoseOptimization = 0.90  # Use default (was 0.85) - more lenient
+                Parameters.kMinNumMatchedFeaturesSearchFrameByProjection = 15  # Lower than default 20 - more lenient
             else:
                 Parameters.kMaxOutliersRatioInPoseOptimization = 0.85  # Lower = stricter (default 0.9)
                 Parameters.kMinNumMatchedFeaturesSearchFrameByProjection = 25  # Higher = stricter (default 20)
             
             # Feature matching - balance accuracy with relocalization needs
             if self.viz_mode == 'feature_matching':
-                # Good accuracy but not too strict (need enough matches for relocalization)
-                Parameters.kFeatureMatchDefaultRatioTest = 0.72  # Slightly stricter but not too much
-                Parameters.kMaxReprojectionDistanceFrame = 6  # Not too tight (default 7)
+                # More lenient matching to get more matches for relocalization
+                Parameters.kFeatureMatchDefaultRatioTest = 0.75  # More relaxed (was 0.72) - need more matches
+                Parameters.kMaxReprojectionDistanceFrame = 7  # Use default (was 6) - more tolerance
             else:
                 Parameters.kFeatureMatchDefaultRatioTest = 0.75  # Slightly stricter (default 0.7)
                 Parameters.kMaxReprojectionDistanceFrame = 6  # Tighter (default 7)
