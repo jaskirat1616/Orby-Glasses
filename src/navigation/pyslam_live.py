@@ -13,11 +13,10 @@ import time
 import threading
 from typing import Dict, Optional, List, Tuple
 from collections import deque
-# Disable 3D visualization for now due to tkinter issues
-# import matplotlib
-# import matplotlib.pyplot as plt
-# from mpl_toolkits.mplot3d import Axes3D
-# import matplotlib.animation as animation
+# Import matplotlib for graphs (only graphs, no 3D)
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend to avoid tkinter issues
+from matplotlib import pyplot as plt
 
 # Add pySLAM path to sys.path
 pyslam_path = os.path.join(os.path.dirname(__file__), '..', '..', 'third_party', 'pyslam')
@@ -564,13 +563,12 @@ class LivePySLAM:
         # Get map points
         self.map_points = self.get_map_points()
         
-        # Update visualization - SKIP 2D plots for performance (shows in Pangolin 3D viewer only)
-        # Commented out for performance - uncomment if you want trajectory/error plots
-        # if self.plot_drawer:
-        #     try:
-        #         self.plot_drawer.draw(self.frame_count)
-        #     except Exception as e:
-        #         self.logger.warning(f"Plot visualization error: {e}")
+        # Update visualization - Draw 2D graphs (trajectory/error plots)
+        if self.plot_drawer:
+            try:
+                self.plot_drawer.draw(self.frame_count)
+            except Exception as e:
+                self.logger.warning(f"Plot visualization error: {e}")
 
         # Update 3D viewer - CRITICAL: This shows the 3D point cloud window
         if hasattr(self, 'viewer3d') and self.viewer3d:
@@ -600,18 +598,18 @@ class LivePySLAM:
                 # Use pySLAM's own tracking visualization
                 img_draw = self.slam.tracking.draw_img
                 if img_draw is not None:
-                    cv2.imshow("pySLAM - Camera", img_draw)
+                    cv2.imshow("SLAM Camera", img_draw)
                 else:
-                    cv2.imshow("pySLAM - Camera", frame)
+                    cv2.imshow("SLAM Camera", frame)
             elif hasattr(self.slam, 'map') and hasattr(self.slam.map, 'draw_feature_trails'):
                 img_draw = self.slam.map.draw_feature_trails(frame)
                 cv2.imshow("pySLAM - Camera", img_draw)
             else:
                 # Fallback to basic camera view
-                cv2.imshow("pySLAM - Camera", frame)
+                cv2.imshow("SLAM Camera", frame)
         except Exception as e:
             self.logger.warning(f"Camera window error: {e}")
-            cv2.imshow("pySLAM - Camera", frame)
+            cv2.imshow("SLAM Camera", frame)
 
         # Process OpenCV events to update windows (minimal - main loop handles this)
         # cv2.waitKey(1)  # Removed - handled in main loop
