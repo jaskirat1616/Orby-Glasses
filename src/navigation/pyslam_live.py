@@ -51,6 +51,19 @@ try:
     import pyslam
     from pyslam.config import Config
     from pyslam.config_parameters import Parameters
+    
+    # CRITICAL: Patch tracking constants BEFORE importing Slam
+    # This must happen before Slam imports tracking.py, or the constants won't be patched correctly
+    # We'll patch them here, and then re-patch in _initialize_pyslam if needed
+    try:
+        import pyslam.slam.tracking as tracking_module
+        # Store original values
+        _original_kNumMinInliersPoseOptimizationTrackLocalMap = getattr(tracking_module, 'kNumMinInliersPoseOptimizationTrackLocalMap', 20)
+        _original_kNumMinInliersPoseOptimizationTrackFrame = getattr(tracking_module, 'kNumMinInliersPoseOptimizationTrackFrame', 10)
+        # Patch will be applied per-mode in _initialize_pyslam
+    except:
+        pass
+    
     from pyslam.slam.slam import Slam
     from pyslam.slam.slam_commons import SlamState
     from pyslam.slam.camera import PinholeCamera
@@ -247,33 +260,36 @@ class LivePySLAM:
 
             # CRITICAL FIX: Patch tracking.py constants BEFORE creating SLAM
             # These must be patched before SLAM is initialized or they won't take effect
+            # The constants are module-level and used directly in tracking.py (line 809)
             if self.viz_mode == 'feature_matching':
                 try:
                     # Import tracking module and patch the constants that cause tracking failures
-                    # CRITICAL: Do this BEFORE importing Slam or creating SLAM instance
-                    # The constants are module-level, so we need to patch them directly
+                    # CRITICAL: These constants are module-level variables used directly in tracking.py
                     import pyslam.slam.tracking as tracking_module
                     
                     # Lower the threshold that causes "failure in tracking local map" (line 809 in tracking.py)
                     # Default is 20, but we need to allow tracking with fewer matched points
-                    original_local_map = getattr(tracking_module, 'kNumMinInliersPoseOptimizationTrackLocalMap', 20)
-                    original_frame = getattr(tracking_module, 'kNumMinInliersPoseOptimizationTrackFrame', 10)
+                    # The code uses: self.num_matched_map_points < kNumMinInliersPoseOptimizationTrackLocalMap
+                    original_local_map = tracking_module.kNumMinInliersPoseOptimizationTrackLocalMap
+                    original_frame = tracking_module.kNumMinInliersPoseOptimizationTrackFrame
                     
-                    # Patch the constants
-                    setattr(tracking_module, 'kNumMinInliersPoseOptimizationTrackLocalMap', 10)
-                    setattr(tracking_module, 'kNumMinInliersPoseOptimizationTrackFrame', 8)
+                    # Directly assign to patch the module-level constants
+                    tracking_module.kNumMinInliersPoseOptimizationTrackLocalMap = 10  # Lower from 20
+                    tracking_module.kNumMinInliersPoseOptimizationTrackFrame = 8  # Lower from 10
                     
                     # Verify the patch worked by reading back
-                    new_local_map = getattr(tracking_module, 'kNumMinInliersPoseOptimizationTrackLocalMap', None)
-                    new_frame = getattr(tracking_module, 'kNumMinInliersPoseOptimizationTrackFrame', None)
+                    new_local_map = tracking_module.kNumMinInliersPoseOptimizationTrackLocalMap
+                    new_frame = tracking_module.kNumMinInliersPoseOptimizationTrackFrame
                     
                     if new_local_map == 10 and new_frame == 8:
                         self.logger.info("✓ CRITICAL: Successfully lowered tracking failure thresholds")
                         self.logger.info(f"   → kNumMinInliersPoseOptimizationTrackLocalMap: {new_local_map} (was {original_local_map})")
                         self.logger.info(f"   → kNumMinInliersPoseOptimizationTrackFrame: {new_frame} (was {original_frame})")
+                        self.logger.info("   → Tracking will now succeed with 10+ matched points (was 20+)")
                     else:
                         self.logger.error(f"✗ FAILED to patch! LocalMap: {new_local_map}, Frame: {new_frame}")
                         self.logger.error(f"   Expected: LocalMap=10, Frame=8")
+                        self.logger.error(f"   Original: LocalMap={original_local_map}, Frame={original_frame}")
                 except Exception as e:
                     self.logger.error(f"CRITICAL: Could not patch tracking thresholds: {e}")
                     import traceback
