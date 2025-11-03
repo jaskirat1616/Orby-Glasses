@@ -999,6 +999,70 @@ class LivePySLAM:
             self.logger.warning(f"Could not create feature matching image: {e}")
             self.logger.debug(f"Traceback: {traceback.format_exc()}")
             return None
+    
+    def _draw_feature_matches_thin(self, img1: np.ndarray, img2: np.ndarray, 
+                                    kps1: np.ndarray, kps2: np.ndarray,
+                                    kps1_sizes: Optional[np.ndarray] = None,
+                                    kps2_sizes: Optional[np.ndarray] = None) -> np.ndarray:
+        """
+        Draw feature matches with thin lines and smaller circles.
+        Maintains original image resolution.
+        """
+        # Combine images horizontally
+        h1, w1 = img1.shape[:2]
+        h2, w2 = img2.shape[:2]
+        
+        # Ensure both images have same height
+        if h1 != h2:
+            if h1 > h2:
+                img2 = cv2.resize(img2, (w2, h1), interpolation=cv2.INTER_LINEAR)
+                h2 = h1
+            else:
+                img1 = cv2.resize(img1, (w1, h2), interpolation=cv2.INTER_LINEAR)
+                h1 = h2
+        
+        # Combine horizontally
+        img3 = np.hstack([img1, img2])
+        
+        N = len(kps1)
+        if N == 0:
+            return img3
+        
+        # Default small sizes
+        default_size = 2
+        if kps1_sizes is None:
+            kps1_sizes = np.ones(N, dtype=np.int32) * default_size
+        if kps2_sizes is None:
+            kps2_sizes = np.ones(N, dtype=np.int32) * default_size
+        
+        # Ensure sizes are small (1-3 pixels)
+        kps1_sizes = np.clip(kps1_sizes, 1, 3).astype(np.int32)
+        kps2_sizes = np.clip(kps2_sizes, 1, 3).astype(np.int32)
+        
+        # Draw matches with thin lines (thickness=1) and small circles
+        for i, (pt1, pt2) in enumerate(zip(kps1, kps2)):
+            p1 = np.rint(pt1).astype(int)
+            p2 = np.rint(pt2).astype(int)
+            a, b = p1.ravel()
+            c, d = p2.ravel()
+            
+            # Random color for each match
+            color = tuple(np.random.randint(0, 255, 3).tolist())
+            
+            # Draw thin line (thickness=1)
+            cv2.line(img3, (a, b), (c + w1, d), color, thickness=1, lineType=cv2.LINE_AA)
+            
+            # Draw small center dot (radius=1)
+            cv2.circle(img3, (a, b), 1, color, -1, lineType=cv2.LINE_AA)
+            cv2.circle(img3, (c + w1, d), 1, color, -1, lineType=cv2.LINE_AA)
+            
+            # Draw small green circle for keypoint size (very small, 1-2 pixels)
+            size1 = max(1, min(2, int(kps1_sizes[i])))
+            size2 = max(1, min(2, int(kps2_sizes[i])))
+            cv2.circle(img3, (a, b), size1, (0, 255, 0), thickness=1, lineType=cv2.LINE_AA)
+            cv2.circle(img3, (c + w1, d), size2, (0, 255, 0), thickness=1, lineType=cv2.LINE_AA)
+        
+        return img3
 
     def reset(self):
         """Reset the SLAM system."""
