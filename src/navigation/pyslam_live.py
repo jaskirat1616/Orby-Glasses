@@ -221,7 +221,13 @@ class LivePySLAM:
             else:
                 feature_tracker_config = FeatureTrackerConfigs.ORB.copy()
             
-            feature_tracker_config["num_features"] = self.config.get('slam.orb_features', 2000)
+            # For feature matching mode, use more features to help with relocalization
+            if self.viz_mode == 'feature_matching':
+                # More features = more matches = better relocalization
+                default_features = 1500  # More than default for better matching
+            else:
+                default_features = self.config.get('slam.orb_features', 2000)
+            feature_tracker_config["num_features"] = default_features
 
             # Balanced pyramid levels for efficient detection
             if use_orb2:
@@ -240,13 +246,23 @@ class LivePySLAM:
 
             # Relocalization parameters - AGGRESSIVE tuning for real-world success
             # Research shows ORB-SLAM uses min 10 inliers, we're being even more lenient
-            Parameters.kRelocalizationMinKpsMatches = 8  # Reduced from 15 (min matches to try)
-            Parameters.kRelocalizationPoseOpt1MinMatches = 6  # Reduced from 10 (first opt threshold)
-            Parameters.kRelocalizationDoPoseOpt2NumInliers = 20  # CRITICAL: Reduced from 50 (final success threshold)
-            Parameters.kRelocalizationFeatureMatchRatioTest = 0.85  # Relaxed from 0.75 (Lowe's ratio)
-            Parameters.kRelocalizationFeatureMatchRatioTestLarge = 0.95  # Relaxed from 0.9 (for search)
-            Parameters.kRelocalizationMaxReprojectionDistanceMapSearchCoarse = 15  # Increased from 10 pixels
-            Parameters.kRelocalizationMaxReprojectionDistanceMapSearchFine = 5  # Increased from 3 pixels
+            if self.viz_mode == 'feature_matching':
+                # For feature matching mode, be more lenient with relocalization (fewer points needed)
+                Parameters.kRelocalizationMinKpsMatches = 6  # Even lower for feature matching mode
+                Parameters.kRelocalizationPoseOpt1MinMatches = 5  # Lower threshold
+                Parameters.kRelocalizationDoPoseOpt2NumInliers = 15  # Lower success threshold
+                Parameters.kRelocalizationFeatureMatchRatioTest = 0.90  # More relaxed
+                Parameters.kRelocalizationFeatureMatchRatioTestLarge = 0.98  # Very relaxed
+                Parameters.kRelocalizationMaxReprojectionDistanceMapSearchCoarse = 20  # Larger search window
+                Parameters.kRelocalizationMaxReprojectionDistanceMapSearchFine = 8  # Larger fine search
+            else:
+                Parameters.kRelocalizationMinKpsMatches = 8  # Reduced from 15 (min matches to try)
+                Parameters.kRelocalizationPoseOpt1MinMatches = 6  # Reduced from 10 (first opt threshold)
+                Parameters.kRelocalizationDoPoseOpt2NumInliers = 20  # CRITICAL: Reduced from 50 (final success threshold)
+                Parameters.kRelocalizationFeatureMatchRatioTest = 0.85  # Relaxed from 0.75 (Lowe's ratio)
+                Parameters.kRelocalizationFeatureMatchRatioTestLarge = 0.95  # Relaxed from 0.9 (for search)
+                Parameters.kRelocalizationMaxReprojectionDistanceMapSearchCoarse = 15  # Increased from 10 pixels
+                Parameters.kRelocalizationMaxReprojectionDistanceMapSearchFine = 5  # Increased from 3 pixels
 
             # Optimize parameters for real-time performance (matching main_slam.py defaults)
             # Use main_slam.py defaults for stability - no custom tuning needed
@@ -278,13 +294,23 @@ class LivePySLAM:
                 Parameters.kMaxNumOfKeyframesInLocalMap = 40  # Reduced from 60 for speed (default 80)
             Parameters.kNumBestCovisibilityKeyFrames = 10  # Keep default
             
-            # Pose optimization - slightly stricter for accuracy
-            Parameters.kMaxOutliersRatioInPoseOptimization = 0.85  # Lower = stricter (default 0.9)
-            Parameters.kMinNumMatchedFeaturesSearchFrameByProjection = 25  # Higher = stricter (default 20)
+            # Pose optimization - balance accuracy with relocalization needs
+            if self.viz_mode == 'feature_matching':
+                # For feature matching mode, balance accuracy with relocalization (need enough points)
+                Parameters.kMaxOutliersRatioInPoseOptimization = 0.85  # Slightly less strict (default 0.9)
+                Parameters.kMinNumMatchedFeaturesSearchFrameByProjection = 20  # Keep default (don't be too strict)
+            else:
+                Parameters.kMaxOutliersRatioInPoseOptimization = 0.85  # Lower = stricter (default 0.9)
+                Parameters.kMinNumMatchedFeaturesSearchFrameByProjection = 25  # Higher = stricter (default 20)
             
-            # Feature matching - tighter for accuracy
-            Parameters.kFeatureMatchDefaultRatioTest = 0.75  # Slightly stricter (default 0.7)
-            Parameters.kMaxReprojectionDistanceFrame = 6  # Tighter (default 7)
+            # Feature matching - balance accuracy with relocalization needs
+            if self.viz_mode == 'feature_matching':
+                # Good accuracy but not too strict (need enough matches for relocalization)
+                Parameters.kFeatureMatchDefaultRatioTest = 0.72  # Slightly stricter but not too much
+                Parameters.kMaxReprojectionDistanceFrame = 6  # Not too tight (default 7)
+            else:
+                Parameters.kFeatureMatchDefaultRatioTest = 0.75  # Slightly stricter (default 0.7)
+                Parameters.kMaxReprojectionDistanceFrame = 6  # Tighter (default 7)
             Parameters.kMaxReprojectionDistanceMap = 3  # Keep default
             
             # Disable large BA for real-time performance
@@ -293,9 +319,11 @@ class LivePySLAM:
             # For feature matching mode, minimize keyframes to reduce overhead
             # (Already set above in keyframe management section)
             if self.viz_mode == 'feature_matching':
-                self.logger.info("⚡ FEATURE MATCHING MODE: Minimized keyframes for maximum speed")
+                self.logger.info("⚡ FEATURE MATCHING MODE: Optimized for speed and relocalization")
+                self.logger.info(f"   → {default_features} ORB features (more for better matching)")
                 self.logger.info("   → Minimal local map (5 keyframes max)")
                 self.logger.info("   → Very high keyframe threshold (almost no keyframes)")
+                self.logger.info("   → Lenient relocalization (works with fewer points)")
                 self.logger.info("   → Focus on feature tracking only (no map building overhead)")
             
             self.logger.info("🎯 SPEED + ACCURACY OPTIMIZED:")
@@ -866,17 +894,17 @@ class LivePySLAM:
             kps_ref_pts = np.array(kps_ref) if not isinstance(kps_ref, np.ndarray) else kps_ref
             
             # Get keypoint sizes if available (for green circles)
-            # Scale down sizes to make circles smaller (keypoint sizes are often too large)
+            # Scale down sizes but keep them visible (keypoint sizes are often too large)
             kps_cur_sizes = None
             kps_ref_sizes = None
             if hasattr(f_cur, 'sizes') and f_cur.sizes is not None:
                 sizes = np.array(f_cur.sizes) if not isinstance(f_cur.sizes, np.ndarray) else f_cur.sizes
-                # Scale down sizes: use 0.15x the original size, cap at 4 pixels (smaller circles)
-                kps_cur_sizes = np.clip(sizes * 0.15, 1, 4).astype(np.int32)
+                # Scale down sizes: use 0.25x the original size, cap at 6 pixels (bigger circles)
+                kps_cur_sizes = np.clip(sizes * 0.25, 2, 6).astype(np.int32)
             if hasattr(f_ref, 'sizes') and f_ref.sizes is not None:
                 sizes = np.array(f_ref.sizes) if not isinstance(f_ref.sizes, np.ndarray) else f_ref.sizes
-                # Scale down sizes: use 0.15x the original size, cap at 4 pixels (smaller circles)
-                kps_ref_sizes = np.clip(sizes * 0.15, 1, 4).astype(np.int32)
+                # Scale down sizes: use 0.25x the original size, cap at 6 pixels (bigger circles)
+                kps_ref_sizes = np.clip(sizes * 0.25, 2, 6).astype(np.int32)
 
             # Try to get matched indices from multiple sources
             matched_indices = []
@@ -1047,40 +1075,52 @@ class LivePySLAM:
         if N == 0:
             return img3
         
-        # Default small sizes
-        default_size = 2
+        # Default sizes (bigger for visibility)
+        default_size = 3
         if kps1_sizes is None:
             kps1_sizes = np.ones(N, dtype=np.int32) * default_size
         if kps2_sizes is None:
             kps2_sizes = np.ones(N, dtype=np.int32) * default_size
         
-        # Ensure sizes are small (1-3 pixels) - vectorized
-        kps1_sizes = np.clip(kps1_sizes, 1, 3).astype(np.int32)
-        kps2_sizes = np.clip(kps2_sizes, 1, 3).astype(np.int32)
+        # Ensure sizes are visible (2-5 pixels) - vectorized
+        kps1_sizes = np.clip(kps1_sizes, 2, 5).astype(np.int32)
+        kps2_sizes = np.clip(kps2_sizes, 2, 5).astype(np.int32)
         
         # Pre-compute rounded points for performance
         pts1 = np.rint(kps1).astype(np.int32)
         pts2 = np.rint(kps2).astype(np.int32)
         
-        # Draw matches with thin lines (thickness=1) and small circles
+        # Use a limited color palette for better visibility (not too many colors)
+        # Colors: blue, cyan, yellow, magenta, orange, green
+        color_palette = [
+            (255, 0, 0),      # Blue
+            (255, 255, 0),   # Cyan
+            (0, 255, 255),   # Yellow
+            (255, 0, 255),   # Magenta
+            (0, 165, 255),   # Orange
+            (0, 255, 0),     # Green
+        ]
+        num_colors = len(color_palette)
+        
+        # Draw matches with thin lines (thickness=1) and visible circles
         # Use efficient loop with pre-computed values
         for i in range(N):
             a, b = pts1[i]
             c, d = pts2[i]
             
-            # Random color for each match (cached per match)
-            color = tuple(np.random.randint(0, 255, 3).tolist())
+            # Use color from palette (cycle through colors)
+            color = color_palette[i % num_colors]
             
             # Draw thin line (thickness=1)
             cv2.line(img3, (a, b), (c + w1, d), color, thickness=1, lineType=cv2.LINE_AA)
             
-            # Draw small center dot (radius=1)
-            cv2.circle(img3, (a, b), 1, color, -1, lineType=cv2.LINE_AA)
-            cv2.circle(img3, (c + w1, d), 1, color, -1, lineType=cv2.LINE_AA)
+            # Draw center dot (radius=2 for visibility)
+            cv2.circle(img3, (a, b), 2, color, -1, lineType=cv2.LINE_AA)
+            cv2.circle(img3, (c + w1, d), 2, color, -1, lineType=cv2.LINE_AA)
             
-            # Draw small green circle for keypoint size (very small, 1-2 pixels)
-            size1 = max(1, min(2, int(kps1_sizes[i])))
-            size2 = max(1, min(2, int(kps2_sizes[i])))
+            # Draw green circle for keypoint size (bigger, 2-4 pixels)
+            size1 = max(2, min(4, int(kps1_sizes[i])))
+            size2 = max(2, min(4, int(kps2_sizes[i])))
             cv2.circle(img3, (a, b), size1, (0, 255, 0), thickness=1, lineType=cv2.LINE_AA)
             cv2.circle(img3, (c + w1, d), size2, (0, 255, 0), thickness=1, lineType=cv2.LINE_AA)
         
