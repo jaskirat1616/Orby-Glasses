@@ -310,6 +310,21 @@ class LivePySLAM:
                 Parameters.kMaxOutliersRatioInPoseOptimization = 0.90  # Use default - more lenient
                 Parameters.kMinNumMatchedFeaturesSearchFrameByProjection = 8  # Very low - allow tracking with few points
                 Parameters.kMinNumMatchedFeaturesSearchReferenceFrame = 8  # Very low - allow reference frame tracking with few points
+                
+                # CRITICAL: Lower minimum inliers for local map tracking (this is the main failure point)
+                # The default is 20, but we need to allow tracking with fewer matched points
+                # This is checked in track_local_map() and causes "failure in tracking local map"
+                try:
+                    # These are module-level constants in tracking.py, we need to set them via Parameters
+                    # But they might be accessed directly, so we'll try to set them if they exist
+                    import pyslam.slam.tracking as tracking_module
+                    if hasattr(tracking_module, 'kNumMinInliersPoseOptimizationTrackLocalMap'):
+                        tracking_module.kNumMinInliersPoseOptimizationTrackLocalMap = 10  # Lower from 20
+                    if hasattr(tracking_module, 'kNumMinInliersPoseOptimizationTrackFrame'):
+                        tracking_module.kNumMinInliersPoseOptimizationTrackFrame = 8  # Lower from 10
+                except:
+                    # If we can't modify the constants, we'll need to patch them differently
+                    pass
             else:
                 Parameters.kMaxOutliersRatioInPoseOptimization = 0.85  # Lower = stricter (default 0.9)
                 Parameters.kMinNumMatchedFeaturesSearchFrameByProjection = 25  # Higher = stricter (default 20)
@@ -326,6 +341,23 @@ class LivePySLAM:
             
             # Disable large BA for real-time performance
             Parameters.kUseLargeWindowBA = False  # Disable large BA for real-time
+            
+            # CRITICAL FIX: Lower minimum inliers for tracking to prevent failures
+            # These constants are in tracking.py and cause "failure in tracking local map" when too few points
+            if self.viz_mode == 'feature_matching':
+                try:
+                    # Import tracking module and patch the constants that cause tracking failures
+                    import pyslam.slam.tracking as tracking_module
+                    # Lower the threshold that causes "failure in tracking local map" (line 809 in tracking.py)
+                    # Default is 20, but we had 18 matched points and it failed
+                    tracking_module.kNumMinInliersPoseOptimizationTrackLocalMap = 10  # Lower from 20 to 10
+                    # Also lower the frame tracking threshold
+                    tracking_module.kNumMinInliersPoseOptimizationTrackFrame = 8  # Lower from 10 to 8
+                    self.logger.info("✓ Lowered tracking failure thresholds for feature matching mode")
+                    self.logger.info("   → kNumMinInliersPoseOptimizationTrackLocalMap: 10 (was 20)")
+                    self.logger.info("   → kNumMinInliersPoseOptimizationTrackFrame: 8 (was 10)")
+                except Exception as e:
+                    self.logger.warning(f"Could not patch tracking thresholds: {e}")
             
             # For feature matching mode, minimize keyframes to reduce overhead
             # (Already set above in keyframe management section)
