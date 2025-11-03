@@ -1600,8 +1600,12 @@ class OrbyGlasses:
                 if display:
                     # In feature_matching mode, show feature matching as main content
                     if self.viz_mode == 'feature_matching' and self.slam:
+                        # Get feature matching visualization
                         feature_match_img = self.slam.get_feature_matching_image()
                         if feature_match_img is not None and feature_match_img.size > 0:
+                            # Debug: Log that we got the image
+                            if self.frame_count % 30 == 0:  # Log every 30 frames
+                                self.logger.info(f"Feature matching image: shape={feature_match_img.shape}, size={feature_match_img.size}")
                             # Convert RGB to BGR if needed (draw_feature_matches returns RGB)
                             if feature_match_img.shape[2] == 3:
                                 # Check if it's RGB (opencv uses BGR)

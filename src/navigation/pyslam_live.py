@@ -476,14 +476,25 @@ class LivePySLAM:
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2RGB)
 
         # Store current frame image for feature matching visualization
-        # pySLAM might not store images in frames, so we cache them
-        self.last_frame_img = rgb_frame.copy() if rgb_frame is not None else None
+        # pySLAM might not store images in frames (Frame.is_store_imgs might be False), so we cache them
+        if rgb_frame is not None:
+            self.last_frame_img = rgb_frame.copy()
         
         # Process frame through pySLAM
         timestamp = time.time()
 
         try:
             self.slam.track(rgb_frame, None, None, self.frame_count, timestamp)
+            
+            # CRITICAL: Enable frame image storage for feature matching visualization
+            # This ensures frames store their images so we can visualize matches
+            try:
+                from pyslam.slam.frame import Frame
+                if not Frame.is_store_imgs:
+                    Frame.is_store_imgs = True
+                    self.logger.debug("Enabled frame image storage for feature matching")
+            except:
+                pass
         except Exception as e:
             # Catch any errors from pySLAM's track() method
             import traceback
@@ -997,6 +1008,9 @@ class LivePySLAM:
                     else:
                         img_cur = img_cur.astype(np.uint8)
             
+            # Debug: Log what we're about to draw
+            self.logger.debug(f"Drawing {len(matched_indices)} matches: ref_kps={len(matched_kps_ref)}, cur_kps={len(matched_kps_cur)}, img_ref_shape={img_ref.shape}, img_cur_shape={img_cur.shape}")
+            
             # Draw matches - draw_feature_matches expects arrays of keypoint coordinates
             # This will show colored lines connecting matched features and green circles for keypoint sizes
             img_matches = draw_feature_matches(
@@ -1008,11 +1022,12 @@ class LivePySLAM:
                 show_kp_sizes=True,  # Show green circles for keypoint sizes (like reference image)
                 lineType=cv2.LINE_AA  # Smooth lines
             )
-
+            
             # draw_feature_matches returns RGB, convert to BGR for OpenCV display
             if len(img_matches.shape) == 3 and img_matches.shape[2] == 3:
                 img_matches = cv2.cvtColor(img_matches, cv2.COLOR_RGB2BGR)
-
+            
+            self.logger.debug(f"Feature matching image created: shape={img_matches.shape}, matches={len(matched_indices)}")
             return img_matches
 
         except Exception as e:
