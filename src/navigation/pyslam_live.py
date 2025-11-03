@@ -476,9 +476,10 @@ class LivePySLAM:
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2RGB)
 
         # Store current frame image for feature matching visualization
-        # pySLAM might not store images in frames (Frame.is_store_imgs might be False), so we cache them
-        if rgb_frame is not None:
-            self.last_frame_img = rgb_frame.copy()
+        # Use view instead of copy for performance (only copy if needed)
+        if rgb_frame is not None and self.viz_mode == 'feature_matching':
+            # Only cache if in feature matching mode to save memory
+            self.last_frame_img = rgb_frame.copy() if rgb_frame is not None else None
         
         # Process frame through pySLAM
         timestamp = time.time()
@@ -488,13 +489,13 @@ class LivePySLAM:
             
             # CRITICAL: Enable frame image storage for feature matching visualization
             # This ensures frames store their images so we can visualize matches
-            try:
-                from pyslam.slam.frame import Frame
-                if not Frame.is_store_imgs:
-                    Frame.is_store_imgs = True
-                    self.logger.debug("Enabled frame image storage for feature matching")
-            except:
-                pass
+            if self.viz_mode == 'feature_matching':
+                try:
+                    from pyslam.slam.frame import Frame
+                    if not Frame.is_store_imgs:
+                        Frame.is_store_imgs = True
+                except:
+                    pass
         except Exception as e:
             # Catch any errors from pySLAM's track() method
             import traceback
@@ -800,11 +801,9 @@ class LivePySLAM:
 
             # Get images - check for None explicitly
             if not hasattr(f_cur, 'img') or f_cur.img is None:
-                self.logger.debug("f_cur.img is None or missing")
                 return None
 
             if not hasattr(f_ref, 'img') or f_ref.img is None:
-                self.logger.debug("f_ref.img is None or missing")
                 return None
 
             # Try to get images from frame objects first
@@ -814,26 +813,19 @@ class LivePySLAM:
             # Fallback: Use cached images if frame images are not available
             if img_cur is None:
                 img_cur = self.last_frame_img
-                if img_cur is not None:
-                    self.logger.debug("Using cached current frame image")
             
             if img_ref is None:
                 img_ref = self.last_ref_frame_img
-                if img_ref is not None:
-                    self.logger.debug("Using cached reference frame image")
             
             # Ensure images are valid numpy arrays with shape
             if img_cur is None or img_ref is None:
-                self.logger.debug(f"Images are None: img_cur={img_cur is None}, img_ref={img_ref is None}")
                 return None
             
             if not hasattr(img_cur, 'shape') or not hasattr(img_ref, 'shape'):
-                self.logger.debug("Images don't have shape attribute")
                 return None
             
             # Ensure images have valid shapes
             if len(img_cur.shape) < 2 or len(img_ref.shape) < 2:
-                self.logger.debug(f"Invalid image shapes: img_cur={img_cur.shape if hasattr(img_cur, 'shape') else 'no shape'}, img_ref={img_ref.shape if hasattr(img_ref, 'shape') else 'no shape'}")
                 return None
 
             # Get keypoints and matches
@@ -856,12 +848,17 @@ class LivePySLAM:
             kps_ref_pts = np.array(kps_ref) if not isinstance(kps_ref, np.ndarray) else kps_ref
             
             # Get keypoint sizes if available (for green circles)
+            # Scale down sizes to make circles smaller (keypoint sizes are often too large)
             kps_cur_sizes = None
             kps_ref_sizes = None
             if hasattr(f_cur, 'sizes') and f_cur.sizes is not None:
-                kps_cur_sizes = np.array(f_cur.sizes) if not isinstance(f_cur.sizes, np.ndarray) else f_cur.sizes
+                sizes = np.array(f_cur.sizes) if not isinstance(f_cur.sizes, np.ndarray) else f_cur.sizes
+                # Scale down sizes: use 0.3x the original size, cap at 8 pixels
+                kps_cur_sizes = np.clip(sizes * 0.3, 2, 8).astype(np.int32)
             if hasattr(f_ref, 'sizes') and f_ref.sizes is not None:
-                kps_ref_sizes = np.array(f_ref.sizes) if not isinstance(f_ref.sizes, np.ndarray) else f_ref.sizes
+                sizes = np.array(f_ref.sizes) if not isinstance(f_ref.sizes, np.ndarray) else f_ref.sizes
+                # Scale down sizes: use 0.3x the original size, cap at 8 pixels
+                kps_ref_sizes = np.clip(sizes * 0.3, 2, 8).astype(np.int32)
 
             # Try to get matched indices from multiple sources
             matched_indices = []
@@ -874,10 +871,7 @@ class LivePySLAM:
                 if idxs_ref is not None and idxs_cur is not None:
                     # Check if they're valid arrays
                     if isinstance(idxs_ref, np.ndarray) and isinstance(idxs_cur, np.ndarray):
-                        if len(idxs_ref) > 0 and len(idxs_cur) > 0:
-                            # Use stored indices
-                            self.logger.debug(f"Using stored indices: {len(idxs_ref)} matches")
-                        else:
+                        if len(idxs_ref) == 0 or len(idxs_cur) == 0:
                             # Empty arrays, try current tracking
                             idxs_ref = None
                             idxs_cur = None
@@ -895,8 +889,6 @@ class LivePySLAM:
                 if hasattr(tracking, 'idxs_ref') and hasattr(tracking, 'idxs_cur'):
                     idxs_ref = tracking.idxs_ref
                     idxs_cur = tracking.idxs_cur
-                    if idxs_ref is not None and idxs_cur is not None:
-                        self.logger.debug(f"Using current tracking indices: {len(idxs_ref) if isinstance(idxs_ref, np.ndarray) or hasattr(idxs_ref, '__len__') else 0} matches")
             
             # Process matched indices
             if idxs_ref is not None and idxs_cur is not None:
@@ -908,17 +900,13 @@ class LivePySLAM:
                 
                 if len(idxs_ref) > 0 and len(idxs_cur) > 0 and len(idxs_ref) == len(idxs_cur):
                     # Ensure indices are valid
-                    valid_matches = []
-                    for idx_ref, idx_cur in zip(idxs_ref, idxs_cur):
-                        idx_ref = int(idx_ref)
-                        idx_cur = int(idx_cur)
-                        if 0 <= idx_ref < len(kps_ref_pts) and 0 <= idx_cur < len(kps_cur_pts):
-                            valid_matches.append((idx_ref, idx_cur))
+                    # Vectorized validation for better performance
+                    idxs_ref_int = idxs_ref.astype(np.int32)
+                    idxs_cur_int = idxs_cur.astype(np.int32)
+                    valid_mask = (idxs_ref_int >= 0) & (idxs_ref_int < len(kps_ref_pts)) & \
+                                 (idxs_cur_int >= 0) & (idxs_cur_int < len(kps_cur_pts))
+                    valid_matches = list(zip(idxs_ref_int[valid_mask], idxs_cur_int[valid_mask]))
                     matched_indices = valid_matches
-                    if len(matched_indices) > 0:
-                        self.logger.debug(f"Found {len(matched_indices)} valid matches from {len(idxs_ref)} indices")
-                else:
-                    self.logger.debug(f"Mismatch in idxs lengths: ref={len(idxs_ref) if isinstance(idxs_ref, np.ndarray) or (idxs_ref is not None and hasattr(idxs_ref, '__len__')) else 0}, cur={len(idxs_cur) if isinstance(idxs_cur, np.ndarray) or (idxs_cur is not None and hasattr(idxs_cur, '__len__')) else 0}")
             
             # Method 2: Try to get matches from frame itself (if available)
             # Sometimes matches are stored in the frame objects
@@ -983,33 +971,16 @@ class LivePySLAM:
                 matched_kps_cur_sizes = kps_cur_sizes[[idx[1] for idx in matched_indices]]
             
             # Ensure images are RGB (draw_feature_matches expects RGB)
-            # pySLAM stores images as RGB, but convert to ensure consistency
-            # Convert grayscale to RGB if needed
+            # Optimize: only convert if needed
             if len(img_ref.shape) == 2:
                 img_ref = cv2.cvtColor(img_ref, cv2.COLOR_GRAY2RGB)
-            elif len(img_ref.shape) == 3 and img_ref.shape[2] == 3:
-                # Ensure dtype is uint8
-                if img_ref.dtype != np.uint8:
-                    if img_ref.max() <= 1.0:
-                        img_ref = (img_ref * 255).astype(np.uint8)
-                    else:
-                        img_ref = img_ref.astype(np.uint8)
-                # pySLAM provides RGB, but if we got it from cache (BGR), convert
-                # For now, assume pySLAM frames are RGB, cached frames might be BGR
-                # We'll convert BGR to RGB if needed based on the image source
-                # Actually, cached frames are from rgb_frame which is RGB, so we're good
+            elif img_ref.shape[2] == 3 and img_ref.dtype != np.uint8:
+                img_ref = (img_ref * 255).astype(np.uint8) if img_ref.max() <= 1.0 else img_ref.astype(np.uint8)
             
             if len(img_cur.shape) == 2:
                 img_cur = cv2.cvtColor(img_cur, cv2.COLOR_GRAY2RGB)
-            elif len(img_cur.shape) == 3 and img_cur.shape[2] == 3:
-                if img_cur.dtype != np.uint8:
-                    if img_cur.max() <= 1.0:
-                        img_cur = (img_cur * 255).astype(np.uint8)
-                    else:
-                        img_cur = img_cur.astype(np.uint8)
-            
-            # Debug: Log what we're about to draw
-            self.logger.debug(f"Drawing {len(matched_indices)} matches: ref_kps={len(matched_kps_ref)}, cur_kps={len(matched_kps_cur)}, img_ref_shape={img_ref.shape}, img_cur_shape={img_cur.shape}")
+            elif img_cur.shape[2] == 3 and img_cur.dtype != np.uint8:
+                img_cur = (img_cur * 255).astype(np.uint8) if img_cur.max() <= 1.0 else img_cur.astype(np.uint8)
             
             # Draw matches - draw_feature_matches expects arrays of keypoint coordinates
             # This will show colored lines connecting matched features and green circles for keypoint sizes
@@ -1027,7 +998,6 @@ class LivePySLAM:
             if len(img_matches.shape) == 3 and img_matches.shape[2] == 3:
                 img_matches = cv2.cvtColor(img_matches, cv2.COLOR_RGB2BGR)
             
-            self.logger.debug(f"Feature matching image created: shape={img_matches.shape}, matches={len(matched_indices)}")
             return img_matches
 
         except Exception as e:

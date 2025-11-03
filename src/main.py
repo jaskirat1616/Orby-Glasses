@@ -1603,26 +1603,25 @@ class OrbyGlasses:
                         # Get feature matching visualization
                         feature_match_img = self.slam.get_feature_matching_image()
                         if feature_match_img is not None and feature_match_img.size > 0:
-                            # Debug: Log that we got the image
-                            if self.frame_count % 30 == 0:  # Log every 30 frames
-                                self.logger.info(f"Feature matching image: shape={feature_match_img.shape}, size={feature_match_img.size}")
                             # Convert RGB to BGR if needed (draw_feature_matches returns RGB)
-                            if feature_match_img.shape[2] == 3:
-                                # Check if it's RGB (opencv uses BGR)
-                                # draw_feature_matches should return RGB, but we'll check
-                                feature_match_img_bgr = cv2.cvtColor(feature_match_img, cv2.COLOR_RGB2BGR) if len(feature_match_img.shape) == 3 else feature_match_img
+                            if len(feature_match_img.shape) == 3 and feature_match_img.shape[2] == 3:
+                                feature_match_img_bgr = cv2.cvtColor(feature_match_img, cv2.COLOR_RGB2BGR)
                             else:
                                 feature_match_img_bgr = feature_match_img
                             
-                            # Resize to fit display - make it larger for better visibility
+                            # Resize only if needed (optimize for performance)
                             h, w = feature_match_img_bgr.shape[:2]
-                            display_width = 1200  # Wider for side-by-side view
-                            display_height = int(display_width * h / w)
-                            if display_height > 800:
-                                display_height = 800
-                                display_width = int(display_height * w / h)
-                            feature_match_display = cv2.resize(feature_match_img_bgr, (display_width, display_height),
-                                                              interpolation=cv2.INTER_LINEAR)
+                            # Use fixed display size for consistency and performance
+                            display_width = 1280  # Standard width for side-by-side view
+                            display_height = 720  # Standard height
+                            
+                            # Only resize if image is different from target size
+                            if w != display_width or h != display_height:
+                                feature_match_display = cv2.resize(feature_match_img_bgr, (display_width, display_height),
+                                                                  interpolation=cv2.INTER_LINEAR)
+                            else:
+                                feature_match_display = feature_match_img_bgr
+                            
                             cv2.imshow('OrbyGlasses', feature_match_display)
                         else:
                             # Fallback to regular view if no feature matching available
