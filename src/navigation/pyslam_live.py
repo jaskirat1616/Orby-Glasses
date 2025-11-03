@@ -605,14 +605,6 @@ class LivePySLAM:
             except Exception as e:
                 self.logger.debug(f"Rerun logging error: {e}")
 
-        # Draw dense map (same as main_slam.py line 366)
-        if hasattr(self, 'viewer3d') and self.viewer3d:
-            try:
-                if hasattr(self.viewer3d, 'draw_dense_map'):
-                    self.viewer3d.draw_dense_map(self.slam)
-            except Exception as e:
-                self.logger.debug(f"Dense map visualization error: {e}")
-
         # Periodic memory cleanup to prevent leaks
         if self.frame_count - self.last_cleanup_frame >= self.cleanup_interval:
             self._perform_memory_cleanup()
