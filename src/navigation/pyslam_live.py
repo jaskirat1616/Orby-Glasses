@@ -446,14 +446,24 @@ class LivePySLAM:
         frame_h, frame_w = frame.shape[0:2]
         if frame_h != self.height or frame_w != self.width:
             self.logger.debug(f"Updating SLAM dimensions from {self.width}x{self.height} to {frame_w}x{frame_h}")
+            old_width, old_height = self.width, self.height
             self.width = frame_w
             self.height = frame_h
             self.cx = self.width / 2
             self.cy = self.height / 2
+            
+            # Scale focal length proportionally to maintain field of view
+            width_scale = self.width / old_width if old_width > 0 else 1.0
+            height_scale = self.height / old_height if old_height > 0 else 1.0
+            self.fx *= width_scale
+            self.fy *= height_scale
+            
             # Update camera calibration if it exists
             if hasattr(self, 'camera') and self.camera:
                 self.camera.width = self.width
                 self.camera.height = self.height
+                self.camera.fx = self.fx
+                self.camera.fy = self.fy
                 self.camera.cx = self.cx
                 self.camera.cy = self.cy
 
