@@ -853,12 +853,12 @@ class LivePySLAM:
             kps_ref_sizes = None
             if hasattr(f_cur, 'sizes') and f_cur.sizes is not None:
                 sizes = np.array(f_cur.sizes) if not isinstance(f_cur.sizes, np.ndarray) else f_cur.sizes
-                # Scale down sizes: use 0.3x the original size, cap at 8 pixels
-                kps_cur_sizes = np.clip(sizes * 0.3, 2, 8).astype(np.int32)
+                # Scale down sizes: use 0.15x the original size, cap at 4 pixels (smaller circles)
+                kps_cur_sizes = np.clip(sizes * 0.15, 1, 4).astype(np.int32)
             if hasattr(f_ref, 'sizes') and f_ref.sizes is not None:
                 sizes = np.array(f_ref.sizes) if not isinstance(f_ref.sizes, np.ndarray) else f_ref.sizes
-                # Scale down sizes: use 0.3x the original size, cap at 8 pixels
-                kps_ref_sizes = np.clip(sizes * 0.3, 2, 8).astype(np.int32)
+                # Scale down sizes: use 0.15x the original size, cap at 4 pixels (smaller circles)
+                kps_ref_sizes = np.clip(sizes * 0.15, 1, 4).astype(np.int32)
 
             # Try to get matched indices from multiple sources
             matched_indices = []
@@ -952,11 +952,7 @@ class LivePySLAM:
 
                 return img_matches
 
-            # Import draw function
-            try:
-                from pyslam.utilities.utils_draw import draw_feature_matches
-            except ImportError:
-                return None
+            # No need to import draw_feature_matches - using custom thin drawing function
 
             # Extract matched keypoints using the matched indices
             matched_kps_ref = kps_ref_pts[[idx[0] for idx in matched_indices]]
@@ -982,16 +978,13 @@ class LivePySLAM:
             elif img_cur.shape[2] == 3 and img_cur.dtype != np.uint8:
                 img_cur = (img_cur * 255).astype(np.uint8) if img_cur.max() <= 1.0 else img_cur.astype(np.uint8)
             
-            # Draw matches - draw_feature_matches expects arrays of keypoint coordinates
-            # This will show colored lines connecting matched features and green circles for keypoint sizes
-            img_matches = draw_feature_matches(
+            # Draw matches with custom thin lines and smaller circles
+            # Use a custom drawing function for better control over line thickness and circle sizes
+            img_matches = self._draw_feature_matches_thin(
                 img_ref, img_cur,
                 matched_kps_ref, matched_kps_cur,
                 kps1_sizes=matched_kps_ref_sizes,
-                kps2_sizes=matched_kps_cur_sizes,
-                horizontal=True,
-                show_kp_sizes=True,  # Show green circles for keypoint sizes (like reference image)
-                lineType=cv2.LINE_AA  # Smooth lines
+                kps2_sizes=matched_kps_cur_sizes
             )
             
             # draw_feature_matches returns RGB, convert to BGR for OpenCV display

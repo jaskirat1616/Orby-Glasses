@@ -1609,17 +1609,21 @@ class OrbyGlasses:
                             else:
                                 feature_match_img_bgr = feature_match_img
                             
-                            # Resize only if needed (optimize for performance)
+                            # Maintain original resolution/aspect ratio - don't force resize
+                            # Only resize if image is too large for display (max 1920x1080)
                             h, w = feature_match_img_bgr.shape[:2]
-                            # Use fixed display size for consistency and performance
-                            display_width = 1280  # Standard width for side-by-side view
-                            display_height = 720  # Standard height
+                            max_width = 1920
+                            max_height = 1080
                             
-                            # Only resize if image is different from target size
-                            if w != display_width or h != display_height:
+                            # Scale down only if image exceeds max dimensions, maintaining aspect ratio
+                            if w > max_width or h > max_height:
+                                scale = min(max_width / w, max_height / h)
+                                display_width = int(w * scale)
+                                display_height = int(h * scale)
                                 feature_match_display = cv2.resize(feature_match_img_bgr, (display_width, display_height),
                                                                   interpolation=cv2.INTER_LINEAR)
                             else:
+                                # Use original resolution
                                 feature_match_display = feature_match_img_bgr
                             
                             cv2.imshow('OrbyGlasses', feature_match_display)
