@@ -25,6 +25,8 @@ camera:
   fy: 525.0
   cx: 320.0
   cy: 240.0
+  max_video_width: 640   # Auto-downscale videos > this width
+  max_video_height: 480  # Auto-downscale videos > this height
 conversation:
   activation_phrase: hey orby
   check_interval: 0.5
@@ -38,7 +40,7 @@ conversation:
   - stop navigation
   - start navigation
   - save this location as
-  enabled: true  # Voice control enabled for hands-free operation
+  enabled: false  # Voice control enabled for hands-free operation
   max_tokens: 100
   model: gemma3:4b
   simple_commands: true
@@ -102,7 +104,7 @@ haptic:
     - 0
     - 1
 indoor_navigation:
-  enabled: true
+  enabled: false
   path_planning: true
   save_locations: true
 logging:
@@ -131,7 +133,7 @@ models:
     scene_analysis_interval: 15
     temperature: 0.4
     vision: moondream:latest
-    vlm_enabled: true
+    vlm_enabled: false
   yolo:
     confidence: 0.55
     device: mps
@@ -183,7 +185,7 @@ safety:
 slam:
   enabled: true
   feature_type: ORB2  # ORB-SLAM2 optimized features (now built!)
-  orb_features: 600  # Reduced for high-resolution videos (optimal for ~1280x720)
+  orb_features: 1200  # Reduced for high-resolution videos (optimal for ~1280x720)
   loop_closure: false  # Disabled for speed (was causing relocalization overhead)
   use_pyslam: true
   use_rerun: false  # Disabled for 20-30% performance boost
